@@ -192,6 +192,6 @@ No real customer recordings, no team recordings, no cloned voices. From `eval/NO
 
 ## Team
 
-Atria Institute of Technology: Sulaiman Abdulla Sharif, Mahamad Zaid, Hajira Noorain, K Mahi.
+Atria Institute of Technology: Sulaiman Shariff (team leader), Hajira Noorain, K Mahi, Mahamad Zaid.
 
-Team name: TBD. Team ID: TBD.
+Team name: Purrfect. Team ID: team-8588FC8C5100.
