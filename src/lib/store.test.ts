@@ -158,4 +158,30 @@ describe('backup export/import', () => {
     expect((await b.verify()).ok).toBe(true)
     await expect(b.importRecords([{ nope: 1 }])).rejects.toThrow()
   })
+
+  it('invalid import leaves existing data untouched', async () => {
+    const p = memoryPersistence()
+    const s = await createStore(p)
+    await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 5000, 'credit')])
+    const good = JSON.parse(JSON.stringify(await s.exportRecords())) as unknown[]
+    for (const bad of [{ not: 'array' }, [...good, { nope: 1 }], [...good, null], [...good, { ev: { type: 'entry' }, ts: 'x' }], [{ ev: 'str', ts: 1 }]]) {
+      await expect(s.importRecords(bad as unknown[])).rejects.toThrow('bad backup')
+      expect(balance(s.state, 'c1')).toBe(5000)
+      expect(p.records.length).toBe(2)
+      expect((await s.verify()).ok).toBe(true)
+    }
+  })
+
+  it('two tabs: appends on a stale store pick up the other tab tail (no seq collision)', async () => {
+    const base = memoryPersistence()
+    const shared: typeof base = { ...base, tailRecord: async () => base.records[base.records.length - 1] }
+    const a = await createStore(shared)
+    const b = await createStore(shared) // second tab, same DB
+    await a.applyOps([cust('c1', 'Ramesh')])
+    await b.applyOps([cust('c2', 'Sita')]) // b's in-memory chain is stale
+    await a.applyOps([entry('e1', 'c1', 100, 'credit')])
+    expect(base.records.map((r) => r.seq)).toEqual([0, 1, 2].map((n) => base.records[0].seq + n))
+    expect((await createStore(shared)).state.customers.size).toBe(2)
+    expect((await a.verify()).ok).toBe(true)
+  })
 })

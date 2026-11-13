@@ -25,6 +25,9 @@ export interface KhataStore {
   applyOps(ops: LedgerOp[]): Promise<void>
   /** Local UI actions. */
   voidEntry(eid: string, reason: string): Promise<void>
+  /** Manual edit of any entry (amount, direction, customer, day). Recorded as an amendment, never overwritten. */
+  amendEntry(eid: string, ch: { paise?: number; direction?: 'credit' | 'payment'; cid?: string; day?: string }): Promise<void>
+  addCustomer(name: string): Promise<string>
   setConsent(cid: string, c: { remindersOptIn: boolean; adult: boolean; phone?: string }): Promise<void>
   addAlias(cid: string, alias: string): Promise<void>
   setHousehold(cid: string, householdId: string | null): Promise<void>
@@ -76,9 +79,13 @@ export interface VoiceClient {
   tap(action: 'yes' | 'no' | 'undo'): void
   /** Tap answer to an open question: 'udhaar' / 'jama' / an option's text. */
   answer(text: string): void
+  /** Typed or pasted instruction, handled exactly like speech (bulk lists welcome). */
+  sendText(text: string): void
   /** Send a fresh snapshot after local (non-voice) ledger changes. */
   sendSnapshot(): void
   setHandsFree(on: boolean): void
+  /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
+  bargeIn(): void
 }
 
 // ------------------------------------------------------------------ backup + confirm links (src/lib/backup.ts)
@@ -86,6 +93,8 @@ export interface BackupClient {
   /** Encrypt records with a key derived from the PIN (PBKDF2) and upload; returns backup id. */
   backup(pin: string, records: unknown[]): Promise<{ id: string; bytes: number }>
   restore(id: string, pin: string): Promise<unknown[]>
+  /** Delete the stored cloud backup (id remembered from the last backup) and forget the id. No-op if none. Throws if the server refuses. */
+  deleteBackup(): Promise<void>
   /** Create a customer confirmation link (no customer name/phone leaves the phone). */
   createConfirmLink(e: { eid: string; shopName: string; paise: number; direction: 'credit' | 'payment'; day: string; lang: Lang }): Promise<{ token: string; url: string }>
   /** Poll the customer's answer. */

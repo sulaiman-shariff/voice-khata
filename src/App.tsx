@@ -1,4 +1,4 @@
-import { BellRing, Settings2, ShieldCheck } from 'lucide-react'
+import { BellRing, Keyboard, Plus, Search, Settings2, ShieldCheck, WifiOff } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { balance, daySummary, dues, promises } from '../shared/ledger.js'
@@ -10,8 +10,11 @@ import type { KhataStore, VoiceClient, VoiceStatus } from '@/lib/contracts'
 import { createStore, idbPersistence } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { createVoiceClient, defaultVoiceUrl } from '@/lib/voice'
-import { dayLabel, initials, rs, today } from '@/ui/format'
-import { EntryRow, MicButton, PendingCard, Waterfall } from '@/ui/parts'
+import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
+import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
+import { savedFeedback } from '@/ui/feedback'
+import { DayFeed } from '@/ui/Ledger'
+import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
 import { CustomerSheet, PrivacySheet, SettingsSheet, remindLink } from '@/ui/Sheets'
 import { ui } from '@/ui/strings'
 
@@ -48,17 +51,25 @@ function Home({ store }: { store: KhataStore }) {
   const [sheet, setSheet] = useState<'settings' | 'privacy' | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const [on, setOn] = useState(false)
+  const [entry, setEntry] = useState<EntryMode>(null)
+  const [entryFrom, setEntryFrom] = useState<string | null>(null)
+  const [typing, setTyping] = useState(false)
+  const [q, setQ] = useState('')
+  const [sort, setSort] = useState<'amount' | 'name'>('amount')
   const voice = useRef<VoiceClient | null>(null)
 
   const onOps = useCallback(async (ops: LedgerOp[]) => {
     await store.applyOps(ops)
+    voice.current?.sendSnapshot()
     const e = ops.find((o): o is Extract<LedgerOp, { op: 'entry' }> => o.op === 'entry')
     if (e) {
       setFresh(e.eid)
       const name = store.state.customers.get(e.cid)?.name ?? ''
+      savedFeedback()
       toast(`${t.saved}: ${name} ${rs(e.paise)}`, {
         action: { label: t.undo, onClick: () => void store.voidEntry(e.eid, 'tap undo').then(() => voice.current?.sendSnapshot()) },
-        duration: 6000,
+        actionButtonStyle: UNDO_STYLE,
+        duration: 8000,
       })
     }
   }, [store, t])
@@ -66,7 +77,7 @@ function Home({ store }: { store: KhataStore }) {
   const start = useCallback(async (lang: Lang) => {
     if (voice.current) return
     const v = createVoiceClient(VOICE_URL, {
-      status: setStatus,
+      status: (st) => { setStatus(st); if (st === 'offline' || (st as string) === 'reconnecting') setPending(null) },
       level: setLevel,
       partial: (x) => setHeard(x),
       final: (x) => setHeard(x),
@@ -74,7 +85,7 @@ function Home({ store }: { store: KhataStore }) {
       ops: (ops) => void onOps(ops),
       pending: (p) => {
         setPending(p)
-        if (p) { setCid(null); setSheet(null) } // the question card must be visible
+        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false) } // the question card must be visible
       },
       show: (s) => {
         if (s.view === 'customer') setCid(s.cid)
@@ -82,7 +93,7 @@ function Home({ store }: { store: KhataStore }) {
         else if (s.view === 'summary') setTab('today')
         else if (s.view === 'privacy') setSheet('privacy')
       },
-      remind: (c, text) => remindLink(store, c, text),
+      remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { console.warn('[remind]', e) } },
       metrics: setMetrics,
       error: (msg) => console.warn('[voice]', msg),
     })
@@ -98,6 +109,27 @@ function Home({ store }: { store: KhataStore }) {
     }
   }, [onOps, store])
 
+  const sendTyped = async (text: string) => {
+    if (!voice.current) await start(store.settings.lang!)
+    if (!voice.current) return false
+    voice.current.sendText(text)
+    return true
+  }
+  const openEntry = (eid: string) => { setEntryFrom(cid); setCid(null); setEntry({ kind: 'edit', eid }) }
+  const closeEntry = () => { setEntry(null); if (entryFrom) setCid(entryFrom); setEntryFrom(null) }
+  const onSaved = (eid: string, how: 'new' | 'edit' | 'removed') => {
+    const e = store.state.entries.get(eid)
+    const nm = e ? store.state.customers.get(e.cid)?.name ?? '' : ''
+    if (how === 'removed') { toast(`${t.removed}: ${nm}`); return }
+    savedFeedback()
+    setFresh(eid)
+    toast(`${t.saved}: ${nm} ${e ? rs(e.paise) : ''}`, {
+      action: how === 'new' ? { label: t.undo, onClick: () => void store.voidEntry(eid, 'tap undo').then(() => voice.current?.sendSnapshot()) } : undefined,
+      actionButtonStyle: UNDO_STYLE,
+      duration: 8000,
+    })
+  }
+
   const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setStatus('idle'); setPending(null) }
 
   // keep the screen awake while the khata is listening
@@ -111,57 +143,99 @@ function Home({ store }: { store: KhataStore }) {
   if (!settings.lang) return <Onboarding onPick={(l) => void store.updateSettings({ lang: l }).then(() => start(l))} />
 
   const day = daySummary(state, today())
-  const todays = state.order.map((id) => state.entries.get(id)!).filter((e) => e.day === today() || new Date(e.ts).toDateString() === new Date().toDateString()).reverse()
+  const all = state.order.map((id) => state.entries.get(id)!)
   const due = dues(state)
+  const totalDue = due.reduce((n, d) => n + d.paise, 0)
   const proms = promises(state)
   const name = (c: string) => state.customers.get(c)?.name ?? '—'
+  const lastDay = new Map<string, string>()
+  for (const e of all) if (!e.voided) { const d = e.promise ? dayOfTs(e.ts) : e.day; if (d > (lastDay.get(e.cid) ?? '')) lastDay.set(e.cid, d) }
+  const needle = q.trim().toLowerCase()
+  const shownDues = due
+    .filter((d) => { const c = state.customers.get(d.cid); return !needle || !!c && (c.name.toLowerCase().includes(needle) || c.aliases.some((a) => a.toLowerCase().includes(needle))) })
+    .sort((a, b) => (sort === 'name' ? name(a.cid).localeCompare(name(b.cid), t.loc) : b.paise - a.paise))
   const statusText = !on ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : settings.handsFree ? t.listening : t.hold
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <header className="flex items-center gap-2 px-4 pt-4">
-        <div className="grid size-9 place-items-center rounded-xl bg-primary text-lg font-black text-primary-foreground">₹</div>
+      <header className="flex items-center gap-1.5 px-4 pt-4">
+        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-lg font-black text-primary-foreground">₹</div>
         <div className="min-w-0 flex-1">
           <div className="truncate font-bold leading-tight">{settings.shopName}</div>
           <div className="text-xs text-muted-foreground">Voice Khata · AI</div>
         </div>
-        <button aria-label="my data" onClick={() => setSheet('privacy')} className="grid size-10 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
-        <button aria-label="settings" onClick={() => setSheet('settings')} className="grid size-10 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
+        <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-9 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{LANG_NAME[settings.lang]}</button>
+        <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
+        <button aria-label={t.settings} onClick={() => setSheet('settings')} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
       </header>
 
-      <section className="mx-4 mt-3 grid grid-cols-2 gap-2">
-        <Stat label={`${t.today} · ${t.credit}`} value={rs(day.creditPaise)} className="text-credit" />
-        <Stat label={`${t.today} · ${t.payment}`} value={rs(day.paymentPaise)} className="text-payment" />
+      {on && status === 'offline' && (
+        <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-100 px-3 py-1.5 text-sm text-amber-900">
+          <WifiOff className="size-4 shrink-0" /><span>{t.offlineBanner}</span>
+        </div>
+      )}
+
+      <section className="mx-4 mt-3 grid grid-cols-3 gap-1.5">
+        <Stat label={`${t.today} · ${t.credit}`} value={rsShort(day.creditPaise)} className="text-credit" />
+        <Stat label={`${t.today} · ${t.payment}`} value={rsShort(day.paymentPaise)} className="text-payment" />
+        <Stat label={t.totalDues} value={rsShort(totalDue)} className="text-foreground" tint />
       </section>
 
-      <nav className="mx-4 mt-3 grid grid-cols-2 rounded-2xl bg-muted p-1 text-sm font-semibold">
-        {(['today', 'dues'] as const).map((k) => (
-          <button key={k} onClick={() => setTab(k)} className={cn('rounded-xl py-2', tab === k && 'bg-card shadow-sm')}>
-            {k === 'today' ? t.today : `${t.dues} · ${due.length}`}
-          </button>
-        ))}
-      </nav>
+      <div className="mx-4 mt-3 flex gap-2">
+        <nav className="grid flex-1 grid-cols-2 rounded-2xl bg-muted p-1 text-base font-semibold">
+          {(['today', 'dues'] as const).map((k) => (
+            <button key={k} onClick={() => setTab(k)} className={cn('min-h-10 rounded-xl', tab === k && 'bg-card shadow-sm')}>
+              {k === 'today' ? t.history : `${t.dues} · ${due.length}`}
+            </button>
+          ))}
+        </nav>
+        <button aria-label={t.addEntry} onClick={() => setEntry({ kind: 'new' })} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm active:scale-95"><Plus className="size-6" /></button>
+      </div>
 
-      <main className="flex-1 space-y-2 overflow-y-auto px-4 pt-3 pb-64">
+      <main className="flex-1 space-y-2 overflow-y-auto px-4 pt-2 pb-64">
         {settings.showLatency && metrics && <Waterfall m={metrics} />}
         {tab === 'today' ? (
-          todays.length ? todays.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} fresh={e.eid === fresh} onClick={() => setCid(e.cid)} />)
-            : <div className="rounded-2xl border-2 border-dashed p-6 text-center text-muted-foreground">{t.noEntries}</div>
+          all.length ? <DayFeed entries={all} t={t} name={name} fresh={fresh} onEntry={(eid) => setEntry({ kind: 'edit', eid })} />
+            : (
+              <div className="rounded-2xl border-2 border-dashed p-5 text-center">
+                <div className="text-base text-muted-foreground">{t.noEntries}</div>
+                <div className="mt-4 mb-2 text-sm font-semibold">{t.tryThese}</div>
+                <div className="flex flex-col gap-2">
+                  {[t.ex1, t.ex2, t.ex3].map((x) => (
+                    <button key={x} onClick={() => void sendTyped(x)} className="min-h-12 rounded-2xl bg-card px-4 py-2 text-lg font-medium shadow-sm ring-1 ring-primary/30 active:scale-[.98]">“{x}”</button>
+                  ))}
+                </div>
+              </div>
+            )
         ) : (
           <>
-            {due.map((d) => (
-              <button key={d.cid} onClick={() => setCid(d.cid)} className="flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5">
-                <span className="grid size-10 place-items-center rounded-full bg-primary/10 font-bold text-primary">{initials(name(d.cid))}</span>
-                <span className="min-w-0 flex-1 truncate font-semibold">{name(d.cid)}</span>
-                {state.customers.get(d.cid)?.remindersOptIn && <BellRing className="size-4 text-muted-foreground" />}
+            <div className="flex items-center gap-2">
+              <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl bg-card px-3 ring-1 ring-black/10">
+                <Search className="size-4 shrink-0 text-muted-foreground" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} aria-label={t.search} className="min-w-0 flex-1 bg-transparent text-base outline-none" />
+              </label>
+              <div className="grid grid-cols-2 rounded-xl bg-muted p-0.5 text-sm font-semibold">
+                <button onClick={() => setSort('amount')} className={cn('min-h-10 rounded-lg px-2.5', sort === 'amount' && 'bg-card shadow-sm')}>₹ {t.sortBig}</button>
+                <button onClick={() => setSort('name')} className={cn('min-h-10 rounded-lg px-2.5', sort === 'name' && 'bg-card shadow-sm')}>A–Z</button>
+              </div>
+            </div>
+            {shownDues.map((d) => (
+              <button key={d.cid} onClick={() => setCid(d.cid)} className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5 active:bg-muted/60">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary">{initials(name(d.cid))}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-lg font-semibold leading-snug">{name(d.cid)}</span>
+                  {lastDay.get(d.cid) && <span className="block text-sm text-muted-foreground">{ago(lastDay.get(d.cid)!, t)}</span>}
+                </span>
+                {state.customers.get(d.cid)?.remindersOptIn && <BellRing className="size-4 shrink-0 text-muted-foreground" aria-label={t.reminders} />}
                 <span className="num text-2xl font-bold text-credit">{rs(d.paise)}</span>
               </button>
             ))}
+            {q && shownDues.length === 0 && <div className="py-6 text-center text-muted-foreground">{t.noMatch}</div>}
             {proms.length > 0 && <div className="pt-3 text-sm font-semibold text-muted-foreground">{t.promise}</div>}
             {proms.map((p) => (
-              <button key={p.eid} onClick={() => setCid(p.cid)} className="flex w-full items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-left ring-1 ring-amber-200">
-                <span className="min-w-0 flex-1 truncate font-semibold">{name(p.cid)}</span>
-                <span className="text-sm text-amber-800">{dayLabel(p.day)}</span>
+              <button key={p.eid} onClick={() => setCid(p.cid)} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-left ring-1 ring-amber-200">
+                <span className="min-w-0 flex-1 truncate text-lg font-semibold">{name(p.cid)}</span>
+                <span className={cn('text-sm', p.day < today() ? 'font-semibold text-destructive' : 'text-amber-800')}>{t.due} {relDay(p.day, t)}</span>
                 <span className="num text-xl font-bold text-amber-800">{rs(p.paise)}</span>
                 <span className="num text-xs text-muted-foreground">/ {rs(balance(state, p.cid))}</span>
               </button>
@@ -184,24 +258,30 @@ function Home({ store }: { store: KhataStore }) {
             </div>
           )}
           <div className="flex flex-col items-center">
-            <MicButton
-              status={status} level={level} on={on}
-              onPress={() => {
-                if (!on) void start(settings.lang!)
-                else if (!settings.handsFree) voice.current?.pttDown()
-                else if (status === 'speaking') voice.current?.pttDown() // tap to cut the reply short
-              }}
-              onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
-            />
+            <div className="flex items-center justify-center gap-5">
+              <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-black/10 active:scale-95"><Keyboard className="size-6" /></button>
+              <MicButton
+                status={status} level={level} on={on}
+                onPress={() => {
+                  if (!on) void start(settings.lang!)
+                  else if (!settings.handsFree) voice.current?.pttDown()
+                  else if (status === 'speaking') (voice.current as unknown as { bargeIn?: () => void })?.bargeIn?.() // tap to cut the reply short
+                }}
+                onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
+              />
+              <span className="size-14" aria-hidden />
+            </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
               <span>{statusText}</span>
-              {on && <button onClick={stop} className="rounded-full px-2 py-0.5 text-xs ring-1 ring-black/10">{t.stop}</button>}
+              {on && <button onClick={stop} className="min-h-9 rounded-full px-3 text-sm ring-1 ring-black/10">{t.stop}</button>}
             </div>
           </div>
         </div>
       </footer>
 
-      <CustomerSheet store={store} cid={cid} t={t} backup={backup} onClose={() => setCid(null)} onChanged={() => voice.current?.sendSnapshot()} />
+      <CustomerSheet store={store} cid={cid} t={t} backup={backup} onClose={() => setCid(null)} onChanged={() => voice.current?.sendSnapshot()} onEntry={openEntry} />
+      <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
+      <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
         onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.lang) { stop() } }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
@@ -210,11 +290,13 @@ function Home({ store }: { store: KhataStore }) {
   )
 }
 
-function Stat({ label, value, className }: { label: string; value: string; className?: string }) {
+const UNDO_STYLE = { minHeight: 44, minWidth: 64, fontSize: 16, fontWeight: 700 } as const
+
+function Stat({ label, value, className, tint }: { label: string; value: string; className?: string; tint?: boolean }) {
   return (
-    <div className="rounded-2xl bg-card px-3 py-2.5 shadow-sm ring-1 ring-black/5">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className={cn('num text-2xl font-extrabold', className)}>{value}</div>
+    <div className={cn('min-w-0 rounded-2xl bg-card px-2.5 py-2 shadow-sm ring-1 ring-black/5', tint && 'bg-primary/5 ring-primary/20')}>
+      <div className="truncate text-[11px] text-muted-foreground">{label}</div>
+      <div className={cn('num truncate text-xl font-extrabold', className)}>{value}</div>
     </div>
   )
 }

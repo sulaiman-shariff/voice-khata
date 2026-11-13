@@ -1,9 +1,9 @@
-import { Check, Mic, MicOff, Sparkles, WifiOff, X } from 'lucide-react'
+import { Check, Mic, Pencil, MicOff, Sparkles, WifiOff, X } from 'lucide-react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
 import { cn } from '@/lib/utils'
 import type { VoiceStatus } from '@/lib/contracts'
-import { rs, time } from './format'
+import { relDay, rs, time } from './format'
 import type { UiStrings } from './strings'
 
 export function DirChip({ dir, promise, t }: { dir: 'credit' | 'payment'; promise?: boolean; t: UiStrings }) {
@@ -19,16 +19,18 @@ export function EntryRow({ e, name, t, onClick, fresh }: { e: Entry; name: strin
   return (
     <button
       onClick={onClick}
-      className={cn('flex w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5', fresh && 'stamp', e.voided && 'opacity-45')}
+      className={cn('flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5 active:bg-muted/60', fresh && 'stamp', e.voided && 'opacity-50')}
     >
       <div className="min-w-0 flex-1">
-        <div className={cn('truncate text-base font-semibold', e.voided && 'line-through')}>{name}</div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className={cn('truncate text-lg font-semibold leading-snug', e.voided && 'line-through')}>{name}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
           <DirChip dir={e.direction} promise={e.promise} t={t} />
-          <span>{time(e.ts)}</span>
+          {e.promise ? <span className="text-amber-800">{t.due} {relDay(e.day, t)}</span> : <span className="num">{time(e.ts)}</span>}
+          {e.amended && !e.voided && <span className="flex items-center gap-0.5 text-xs"><Pencil className="size-3" />{t.edited}</span>}
+          {e.voided && <span className="text-xs">{t.removed}</span>}
           {e.source?.path === 'llm' && <Sparkles className="size-3" aria-label="AI read" />}
-          {e.status === 'confirmed' && <Check className="size-3.5 text-payment" />}
-          {e.status === 'disputed' && <X className="size-3.5 text-destructive" />}
+          {e.status === 'confirmed' && <Check className="size-3.5 text-payment" aria-label={t.confirmed} />}
+          {e.status === 'disputed' && <X className="size-3.5 text-destructive" aria-label={t.disputed} />}
         </div>
       </div>
       <div className={cn('num text-2xl font-bold', e.voided ? 'line-through' : e.promise ? 'text-amber-700' : e.direction === 'credit' ? 'text-credit' : 'text-payment')}>
@@ -41,6 +43,45 @@ export function EntryRow({ e, name, t, onClick, fresh }: { e: Entry; name: strin
 /** The agent's open question, with tap answers so a noisy shop never blocks. */
 export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; onAnswer: (a: string) => void }) {
   const big = p.paise !== undefined && p.kind !== 'delete'
+  const kind = p.kind as string
+  if (kind === 'batch') {
+    return (
+      <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
+        <div className="flex items-center gap-2">
+          <span className="num text-sm text-muted-foreground">× {p.options?.length ?? 0}</span>
+          <button onClick={() => onAnswer('udhaar')} className={cn('min-h-9 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'credit' ? 'bg-credit text-white ring-credit' : 'ring-black/15')}>{t.credit}</button>
+          <button onClick={() => onAnswer('jama')} className={cn('min-h-9 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'payment' ? 'bg-payment text-white ring-payment' : 'ring-black/15')}>{t.payment}</button>
+        </div>
+        <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-lg font-semibold">
+          {(p.options ?? []).map((o, i) => <li key={i} className="num truncate">{o}</li>)}
+        </ul>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
+          <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+        </div>
+      </div>
+    )
+  }
+  if (kind === 'modify') {
+    return (
+      <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className={cn('truncate text-lg font-semibold', p.remove && 'line-through')}>{p.name ?? '?'}</div>
+            <div className="flex items-center gap-1.5">
+              {p.direction && <DirChip dir={p.direction} t={t} />}
+              {p.remove && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">{t.removeEntry}</span>}
+            </div>
+          </div>
+          {p.paise !== undefined && <div className={cn('num text-4xl font-extrabold', p.remove && 'line-through opacity-60')}>{rs(p.paise)}</div>}
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
+          <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
       {p.kind === 'delete' ? (

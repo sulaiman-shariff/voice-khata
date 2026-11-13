@@ -375,10 +375,84 @@ export const say = (lang: Lang): Replies => REPLIES[lang]
  */
 const BANNED = [
   /\bloan\b/i, /\blend\b/i, /\binterest\b/i, /\bcredit (score|limit|rating)\b/i, /\bpenalt/i, /\blegal action\b/i,
-  /\bdefault(er)?\b/i, /\bblacklist/i, /\bshame/i, /\btrust(worthy)?\b/i, /\brisky?\b/i, /\bimmediately\b/i,
+  /\bdefault(er)?\b/i, /\bblacklist/i, /\bshame\b/i, /\btrust(worthy)?\b/i, /\brisky?\b/i, /\bimmediately\b/i,
   /ब्याज/, /कर्ज़ा? दे/, /जुर्माना/, /कानूनी/, /बेईमान/, /तुरंत चुकाओ/, /ಬಡ್ಡಿ/, /வட்டி/, /వడ్డీ/,
 ]
 export function guardReply(text: string): string | null {
   if (!text || text.length > 400) return null
   return BANNED.some((re) => re.test(text)) ? null : text
 }
+
+/** Replies for lists and for changing older entries. */
+export interface MoreReplies {
+  /** "Ramesh 200, Suresh 300, Geeta 150: all on credit?" */
+  batchAsk: (items: { name: string; amt: number }[], dir: Dir) => string
+  /** read back a change to an older entry before applying it */
+  removeAsk: (name: string, amt: number, dir: Dir) => string
+  removed: (name: string, amt: number) => string
+  changeAsk: (name: string, amt: number, dir: Dir) => string
+}
+const list = (items: { name: string; amt: number }[]) => items.map((i) => `${i.name} ${r(i.amt)}`).join(', ')
+const MORE: Record<Lang, MoreReplies> = {
+  hi: {
+    batchAsk: (i, d) => `${list(i)}, सब ${d === 'credit' ? 'उधार' : 'जमा'}?`,
+    removeAsk: (n, a, d) => `${n} की ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} वाली एंट्री हटाऊँ?`,
+    removed: (n, a) => `ठीक है, ${n} की ${r(a)} रुपये वाली एंट्री हटा दी।`,
+    changeAsk: (n, a, d) => `बदल कर ${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} कर दूँ?`,
+  },
+  en: {
+    batchAsk: (i, d) => `${list(i)}. All ${d === 'credit' ? 'on credit' : 'paid'}?`,
+    removeAsk: (n, a, d) => `Remove ${n}'s ${r(a)} rupees ${d === 'credit' ? 'credit' : 'payment'}?`,
+    removed: (n, a) => `Okay, removed ${n}'s ${r(a)} rupees entry.`,
+    changeAsk: (n, a, d) => `Change it to ${n}, ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}?`,
+  },
+  kn: {
+    batchAsk: (i, d) => `${list(i)}, ಎಲ್ಲಾ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}ನಾ?`,
+    removeAsk: (n, a, d) => `${n} ಅವರ ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'} ಎಂಟ್ರಿ ತೆಗೆಯಲಾ?`,
+    removed: (n, a) => `ಸರಿ, ${n} ಅವರ ${r(a)} ರೂಪಾಯಿ ಎಂಟ್ರಿ ತೆಗೆದಿದ್ದೇನೆ.`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'} ಅಂತ ಬದಲಾಯಿಸಲಾ?`,
+  },
+  ta: {
+    batchAsk: (i, d) => `${list(i)}, எல்லாம் ${d === 'credit' ? 'கடனா' : 'வரவா'}?`,
+    removeAsk: (n, a, d) => `${n} ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'} பதிவை நீக்கவா?`,
+    removed: (n, a) => `சரி, ${n} ${r(a)} ரூபாய் பதிவை நீக்கினேன்.`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'} என்று மாற்றவா?`,
+  },
+  te: {
+    batchAsk: (i, d) => `${list(i)}, అన్నీ ${d === 'credit' ? 'అప్పు' : 'జమ'}నా?`,
+    removeAsk: (n, a, d) => `${n} ${r(a)} రూపాయల ${d === 'credit' ? 'అప్పు' : 'జమ'} ఎంట్రీ తీసేయనా?`,
+    removed: (n, a) => `సరే, ${n} ${r(a)} రూపాయల ఎంట్రీ తీసేశాను.`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'} అని మార్చనా?`,
+  },
+  ml: {
+    batchAsk: (i, d) => `${list(i)}, എല്ലാം ${d === 'credit' ? 'കടം' : 'വരവ്'} ആണോ?`,
+    removeAsk: (n, a, d) => `${n}-ന്റെ ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'} എൻട്രി മാറ്റട്ടെ?`,
+    removed: (n, a) => `ശരി, ${n}-ന്റെ ${r(a)} രൂപ എൻട്രി മാറ്റി.`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'} എന്ന് മാറ്റട്ടെ?`,
+  },
+  mr: {
+    batchAsk: (i, d) => `${list(i)}, सगळे ${d === 'credit' ? 'उधार' : 'जमा'}?`,
+    removeAsk: (n, a, d) => `${n} ची ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} नोंद काढू?`,
+    removed: (n, a) => `ठीक आहे, ${n} ची ${r(a)} रुपयांची नोंद काढली.`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} असे बदलू?`,
+  },
+  bn: {
+    batchAsk: (i, d) => `${list(i)}, সব ${d === 'credit' ? 'বাকি' : 'জমা'}?`,
+    removeAsk: (n, a, d) => `${n}-এর ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'} এন্ট্রি মুছব?`,
+    removed: (n, a) => `ঠিক আছে, ${n}-এর ${r(a)} টাকার এন্ট্রি মুছে দিলাম।`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'} করে দিই?`,
+  },
+  gu: {
+    batchAsk: (i, d) => `${list(i)}, બધું ${d === 'credit' ? 'ઉધાર' : 'જમા'}?`,
+    removeAsk: (n, a, d) => `${n} ની ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'} એન્ટ્રી કાઢું?`,
+    removed: (n, a) => `બરાબર, ${n} ની ${r(a)} રૂપિયાની એન્ટ્રી કાઢી નાખી.`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'} કરી દઉં?`,
+  },
+  pa: {
+    batchAsk: (i, d) => `${list(i)}, ਸਾਰੇ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}?`,
+    removeAsk: (n, a, d) => `${n} ਦੀ ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'} ਵਾਲੀ ਐਂਟਰੀ ਹਟਾਵਾਂ?`,
+    removed: (n, a) => `ਠੀਕ ਹੈ, ${n} ਦੀ ${r(a)} ਰੁਪਏ ਵਾਲੀ ਐਂਟਰੀ ਹਟਾ ਦਿੱਤੀ।`,
+    changeAsk: (n, a, d) => `${n}, ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'} ਕਰ ਦਿਆਂ?`,
+  },
+}
+export const sayMore = (lang: Lang): MoreReplies => MORE[lang]

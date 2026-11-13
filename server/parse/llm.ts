@@ -27,7 +27,7 @@ LEDGER VOCABULARY
 
 AMOUNTS - THE MOST IMPORTANT RULE
 - You are given "Amount candidates": every number our deterministic parser heard, with alternatives for easily confused numbers.
-- Every amount you output MUST be one of the candidate values or one of their listed alternatives. Never compute, round, add up, or invent an amount.
+- Every amount you output MUST be one of the candidate values or one of their listed alternatives, or, only when the shopkeeper points back ("same", "bhi", "utna hi", "wahi"), one of the listed recent-entry amounts. Never compute, round, add up, or invent an amount.
 - If no candidate fits, use intent "unclear" and say why in unsure_reason.
 - Amounts are rupees. "dedh sau" = 150, "dhai hazaar" = 2500, "saadhe teen sau" = 350, "paune do sau" = 175 (already resolved for you in candidates).
 
@@ -37,9 +37,16 @@ NAMES
 - If an entry has no name but continues the previous clause, reuse the previous clause's name.
 - If you cannot tell who the entry is for, set name null.
 
+CONVERSATION CONTEXT
+- You get the last few turns of the conversation and a numbered list of recent entries (#1 is the newest).
+- Use them to resolve references: "uska / his / him / usko" = the customer just talked about; "aur 100 / another 100 / 100 more" = one more entry for that customer, same direction unless stated; "Suresh ka bhi / same for Suresh / Suresh too" = the same amount and direction for Suresh.
+- When you copy an amount from a recent entry or the conversation, that amount is allowed even though it was not spoken in this utterance.
+- Lists ("Ramesh 200, Suresh 300, Geeta 150 udhaar") are several entries; a direction said once for the list applies to all of them.
+
 INTENTS
 - "entries": one or more ledger lines (several customers or several amounts can appear in one utterance).
-- "correct": fixing the last entry ("nahi, 430", "galat, jama tha", "Ramesh nahi Suresh"). Fill only the corrected fields.
+- "correct": fixing the most recent entry (#1) ("nahi, 430", "galat, jama tha", "Ramesh nahi Suresh"). Fill only the corrected fields.
+- "modify": changing or removing an OLDER entry, or any entry identified by customer/amount/day ("Ramesh ka kal wala 340 asal mein 430 tha", "change Suresh's 200 to 250", "Geeta wali entry hata do", "Ramesh ka 300 Suresh ke naam karo"). Set modify.ref to the entry number from the recent-entries list, and only the changed fields (amount, direction, name) or remove true. If you cannot tell which entry is meant, use intent "unclear".
 - "undo": remove the last entry ("hata do", "cancel", "galti se").
 - "query": asking a balance ("Ramesh ka total?", "kitna baaki hai Ramesh pe").
 - "summary": today's or this month's totals ("aaj ka hisaab").
@@ -64,7 +71,7 @@ export const TOOL: Anthropic.Tool = {
     additionalProperties: false,
     required: ['intent', 'sure'],
     properties: {
-      intent: { type: 'string', enum: ['entries', 'correct', 'undo', 'query', 'summary', 'remind', 'privacy', 'chitchat', 'unclear'] },
+      intent: { type: 'string', enum: ['entries', 'correct', 'modify', 'undo', 'query', 'summary', 'remind', 'privacy', 'chitchat', 'unclear'] },
       entries: {
         type: 'array',
         items: {
@@ -90,6 +97,18 @@ export const TOOL: Anthropic.Tool = {
           name: NULLABLE_STR,
         },
       },
+      modify: {
+        type: ['object', 'null'],
+        additionalProperties: false,
+        required: ['ref'],
+        properties: {
+          ref: { type: 'integer', description: 'entry number from the recent-entries list' },
+          amount: { type: ['number', 'null'] },
+          direction: DIR,
+          name: NULLABLE_STR,
+          remove: { type: 'boolean' },
+        },
+      },
       query_name: NULLABLE_STR,
       period: { anyOf: [{ type: 'string', enum: ['today', 'month'] }, { type: 'null' }] },
       sure: { type: 'boolean' },
@@ -99,9 +118,10 @@ export const TOOL: Anthropic.Tool = {
 }
 
 export interface LlmReading {
-  intent: 'entries' | 'correct' | 'undo' | 'query' | 'summary' | 'remind' | 'privacy' | 'chitchat' | 'unclear'
+  intent: 'entries' | 'correct' | 'modify' | 'undo' | 'query' | 'summary' | 'remind' | 'privacy' | 'chitchat' | 'unclear'
   entries: { name: string | null; amount: number; direction: 'credit' | 'payment' | null; day_offset: number; promise: boolean }[]
   correction: { amount: number | null; direction: 'credit' | 'payment' | null; name: string | null } | null
+  modify: { ref: number; amount: number | null; direction: 'credit' | 'payment' | null; name: string | null; remove: boolean } | null
   query_name: string | null
   period: 'today' | 'month' | null
   sure: boolean
@@ -112,6 +132,12 @@ export interface LlmContext {
   lang: string
   customers: string[] // display names + aliases (capped by caller)
   lastEntry?: string // e.g. "Ramesh credit 340 today"
+  /** "#1 Ramesh credit 340 today 10:31" ... newest first */
+  recent?: string[]
+  /** last few turns: "Shopkeeper: ..." / "Agent: ..." */
+  history?: string[]
+  /** amounts (rupees) of recent entries: may be copied by reference */
+  contextAmounts?: number[]
 }
 
 function describeCandidates(spans: AmountSpan[]): string {
@@ -134,8 +160,10 @@ export async function readWithLlm(
   const user = [
     `Language: ${ctx.lang}`,
     `Known customers: ${ctx.customers.length ? ctx.customers.slice(0, 80).join(', ') : 'none yet'}`,
-    `Last entry: ${ctx.lastEntry ?? 'none'}`,
+    `Recent conversation:\n${ctx.history?.length ? ctx.history.join('\n') : '(start of session)'}`,
+    `Recent entries (newest first):\n${ctx.recent?.length ? ctx.recent.join('\n') : 'none'}`,
     `Amount candidates: ${describeCandidates(spans)}`,
+    `Recent-entry amounts (only for "same"/"bhi"/"wahi"): ${ctx.contextAmounts?.length ? [...new Set(ctx.contextAmounts)].join(', ') : 'none'}`,
     `Utterance: ${transcript}`,
   ].join('\n')
   const t0 = performance.now()
@@ -170,7 +198,7 @@ export async function warmUp(): Promise<void> {
  * that every amount was actually heard. Amounts outside the candidates are dropped and the
  * turn becomes low-confidence, so the agent asks instead of saving.
  */
-export function validate(transcript: string, raw: Partial<LlmReading>): Intent {
+export function validate(transcript: string, raw: Partial<LlmReading>, contextAmounts: number[] = [], recentCount = 0): Intent {
   // the tool schema is not strict (strict decoding doubled latency), so normalise defensively
   const r: LlmReading = {
     intent: raw.intent ?? 'unclear',
@@ -180,8 +208,9 @@ export function validate(transcript: string, raw: Partial<LlmReading>): Intent {
         name: typeof e.name === 'string' && e.name.trim() ? e.name.trim() : null,
         amount: e.amount,
         direction: e.direction === 'credit' || e.direction === 'payment' ? e.direction : null,
-        day_offset: Number.isInteger(e.day_offset) ? e.day_offset : 0,
-        promise: e.promise === true,
+        day_offset: Number.isInteger(e.day_offset) ? Math.max(-30, Math.min(30, e.day_offset)) : 0,
+        // only a payment can be promised, and only for a later day
+        promise: e.promise === true && e.direction === 'payment' && Number.isInteger(e.day_offset) && e.day_offset >= 1,
       })),
     correction: raw.correction
       ? {
@@ -190,14 +219,38 @@ export function validate(transcript: string, raw: Partial<LlmReading>): Intent {
         name: raw.correction.name || null,
       }
       : null,
+    modify: raw.modify && Number.isInteger(raw.modify.ref)
+      ? {
+        ref: raw.modify.ref,
+        amount: typeof raw.modify.amount === 'number' ? raw.modify.amount : null,
+        direction: raw.modify.direction === 'credit' || raw.modify.direction === 'payment' ? raw.modify.direction : null,
+        name: raw.modify.name || null,
+        remove: raw.modify.remove === true,
+      }
+      : null,
     query_name: raw.query_name || null,
     period: raw.period === 'month' ? 'month' : raw.period === 'today' ? 'today' : null,
     sure: raw.sure !== false,
     unsure_reason: raw.unsure_reason || null,
   }
   const spans = parseAmounts(transcript)
-  const heard = (v: number) => spans.find((s) => s.value === v || s.alternatives.includes(v))
+  const spoken = (v: number) => spans.find((s) => s.value === v || s.alternatives.includes(v))
+  // an amount copied from a recent entry ("Suresh ka bhi same") is allowed, flagged as such
+  const heard = (v: number): AmountSpan | undefined =>
+    spoken(v) ?? (contextAmounts.includes(v) ? { value: v, start: -1, end: -1, text: String(v), hasCurrency: false, flags: ['from-context'], alternatives: [] } as AmountSpan : undefined)
   switch (r.intent) {
+    case 'modify': {
+      const m = r.modify
+      if (!m || m.ref < 1 || m.ref > recentCount) return { type: 'unknown' }
+      const span = m.amount != null ? heard(m.amount) : undefined
+      if (m.amount != null && !span) return { type: 'unknown' }
+      if (!m.remove && m.amount == null && !m.direction && !m.name) return { type: 'unknown' }
+      return {
+        type: 'modify', ref: m.ref, remove: m.remove || undefined,
+        amount: span && m.amount != null ? { ...span, value: m.amount } : undefined,
+        direction: m.direction ?? undefined, name: m.name ?? undefined,
+      }
+    }
     case 'undo':
       return { type: 'undo' }
     case 'privacy':
@@ -229,14 +282,15 @@ export function validate(transcript: string, raw: Partial<LlmReading>): Intent {
         if (!e.name) reasons.push('no-name')
         if (!e.direction) reasons.push('no-direction-cue')
         if (e.amount !== span.value) reasons.push('confusable')
-        for (const f of span.flags) if (f !== 'fractional_rupee' && !reasons.includes(f)) reasons.push(f)
+        for (const f of span.flags) if (f !== 'fractional_rupee' && f !== 'from-context' && !reasons.includes(f)) reasons.push(f)
+        if (span.flags.includes('from-context')) reasons.push('from-context')
         entries.push({
           name: e.name,
           amount: { ...span, value: e.amount },
           direction: e.direction,
           dayOffset: e.day_offset,
           promise: e.promise,
-          confidence: reasons.length > 1 ? 'low' : 'high',
+          confidence: reasons.filter((x) => x !== 'from-context').length > 1 ? 'low' : 'high',
           reasons,
         })
       }

@@ -19,7 +19,29 @@ const server = http.createServer((_req, res) => {
 const wss = new WebSocketServer({ server, maxPayload: 1 << 20 })
 let warmed = false
 
-wss.on('connection', (ws) => {
+/** Browsers always send Origin: only our own pages may open a session (scripts without Origin are the eval harness). */
+const ALLOWED_ORIGIN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const perIp = new Map<string, number>()
+const MAX_PER_IP = 6
+
+wss.on('connection', (ws, req) => {
+  const origin = req.headers.origin
+  if (origin && !ALLOWED_ORIGIN.test(origin)) {
+    ws.close(1008, 'origin not allowed')
+    return
+  }
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+  const n = (perIp.get(ip) ?? 0) + 1
+  if (n > MAX_PER_IP) {
+    ws.close(1013, 'too many sessions')
+    return
+  }
+  perIp.set(ip, n)
+  ws.on('close', () => {
+    const left = (perIp.get(ip) ?? 1) - 1
+    if (left <= 0) perIp.delete(ip)
+    else perIp.set(ip, left)
+  })
   const key = process.env.GNANI_API_KEY ?? ''
   if (!warmed) {
     warmed = true
@@ -35,6 +57,7 @@ wss.on('connection', (ws) => {
         onPartial: cb.onPartial,
         onFinal: (t) => cb.onFinal?.(t),
         onError: cb.onError,
+        onClose: cb.onClose,
       }),
     speak: (text, locale, onAudio, signal) => tts.speak(text, locale, onAudio, signal),
     llm: async (text, ctx) => (await readWithLlm(text, ctx)).reading,
@@ -54,7 +77,12 @@ wss.on('connection', (ws) => {
     } catch {
       return
     }
-    session.onClient(msg)
+    if (!validMsg(msg)) return
+    try {
+      session.onClient(msg)
+    } catch (e) {
+      send({ type: 'error', message: `bad message: ${String(e).slice(0, 120)}` })
+    }
   })
   ws.on('close', () => {
     session.close()
@@ -63,3 +91,33 @@ wss.on('connection', (ws) => {
 })
 
 export default server
+
+const LANGS = new Set(['hi', 'en', 'kn', 'ta', 'te', 'ml', 'mr', 'bn', 'gu', 'pa'])
+/** Shape check before anything reaches the session: one bad frame must not take down the instance. */
+function validMsg(m: unknown): m is ClientMsg {
+  if (!m || typeof m !== 'object') return false
+  const x = m as Record<string, unknown>
+  switch (x.type) {
+    case 'hello': {
+      const s = x.snapshot as Record<string, unknown> | undefined
+      return typeof x.lang === 'string' && LANGS.has(x.lang) && !!s && Array.isArray(s.customers) && s.customers.length <= 5000 &&
+        typeof s.today === 'object' && typeof s.month === 'object'
+    }
+    case 'snapshot': {
+      const s = x.snapshot as Record<string, unknown> | undefined
+      return !!s && Array.isArray(s.customers) && s.customers.length <= 5000 && typeof s.today === 'object' && typeof s.month === 'object'
+    }
+    case 'answer':
+    case 'text':
+      return typeof x.text === 'string'
+    case 'tap':
+      return x.action === 'yes' || x.action === 'no' || x.action === 'undo'
+    case 'ptt_start':
+    case 'ptt_end':
+    case 'playback_done':
+    case 'barge':
+      return true
+    default:
+      return false
+  }
+}

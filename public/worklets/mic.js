@@ -9,6 +9,11 @@ class MicProcessor extends AudioWorkletProcessor {
     this.ratio = sampleRate / TARGET_RATE
     this.pos = 0
     this.prev = 0
+    // boxcar low-pass over one decimation window, applied before decimating (anti-alias)
+    this.win = Math.max(1, Math.round(this.ratio))
+    this.hist = new Float32Array(this.win)
+    this.hpos = 0
+    this.hsum = 0
     this.buf = new Int16Array(FRAME_SAMPLES)
     this.fill = 0
   }
@@ -42,6 +47,21 @@ class MicProcessor extends AudioWorkletProcessor {
       for (let i = 0; i < ch.length; i++) this.emit(MicProcessor.toInt16(ch[i]))
       return true
     }
+    const n = ch.length
+    if (this.win > 1) {
+      const f = new Float32Array(n)
+      for (let i = 0; i < n; i++) {
+        this.hsum += ch[i] - this.hist[this.hpos]
+        this.hist[this.hpos] = ch[i]
+        this.hpos = (this.hpos + 1) % this.win
+        f[i] = this.hsum / this.win
+      }
+      return this.decimate(f)
+    }
+    return this.decimate(ch)
+  }
+
+  decimate(ch) {
     const n = ch.length
     let pos = this.pos
     while (pos < n - 1) {

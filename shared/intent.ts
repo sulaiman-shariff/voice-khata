@@ -27,6 +27,8 @@ export interface EntryIntent {
 export type Intent =
   | { type: 'entries'; entries: EntryIntent[] }
   | { type: 'correct'; amount?: AmountSpan; direction?: Direction; name?: string }
+  /** Change or remove an earlier entry (not necessarily the last). ref = 1-based index into snapshot.recent. */
+  | { type: 'modify'; ref: number; amount?: AmountSpan; direction?: Direction; name?: string; remove?: boolean }
   | { type: 'undo' }
   | { type: 'yes' }
   | { type: 'no' }
@@ -90,19 +92,24 @@ const CONJ = S('aur', 'और', 'and', 'phir', 'फिर', 'then', 'ಮತ್�
 const NEG = S('nope', 'nah', 'incorrect', 'nahi', 'nahin', 'नहीं', 'नही', 'na', 'ना', 'no', 'not', 'galat', 'गलत', 'wrong', 'ಇಲ್ಲ', 'ಅಲ್ಲ', 'இல்லை',
   'இல்ல', 'కాదు', 'లేదు', 'അല്ല', 'ഇല്ല', 'না', 'ના', 'ਨਹੀਂ')
 const YES = S('haan', 'han', 'ha', 'हाँ', 'हां', 'हा', 'ji', 'जी', 'sahi', 'सही', 'theek', 'ठीक', 'thik', 'yes', 'ok',
-  'okay', 'correct', 'right', 'yeah', 'yea', 'yep', 'yup', 'sure', 'done', 'fine', 'alright', 'exactly', 'perfect', 'haanji', 'हाँजी', 'theek', 'ठीक', 'bilkul', 'बिल्कुल', 'ಹೌದು', 'ಸರಿ', 'ஆமா', 'ஆம்', 'சரி', 'అవును', 'సరే', 'ശരി', 'അതെ',
+  'okay', 'correct', 'right', 'ஆமாம்', 'ஆமாங்க', 'ஆமா', 'சரிங்க', 'ಹೂಂ', 'ಹೌದು', 'ಸರಿ', 'హా', 'ఔను', 'అవును', 'సరే', 'హాఁ', 'ஓகே', 'ಓಕೆ', 'ఓకే', 'ओके', 'हम्म', 'हाँजी', 'जी हाँ', 'ji haan', 'yeah', 'yea', 'yep', 'yup', 'sure', 'done', 'fine', 'alright', 'exactly', 'perfect', 'haanji', 'हाँजी', 'theek', 'ठीक', 'bilkul', 'बिल्कुल', 'ಹೌದು', 'ಸರಿ', 'ஆமா', 'ஆம்', 'சரி', 'అవును', 'సరే', 'ശരി', 'അതെ',
   'হ্যাঁ', 'ঠিক', 'હા', 'ਹਾਂ', 'होय')
 const UNDO = S('undo', 'cancel', 'hata', 'हटा', 'mita', 'मिटा', 'kaat', 'काट', 'delete', 'remove', 'ರದ್ದು', 'அழி',
   'రద్దు', 'वापस')
 const QUERY = S('total', 'kitna', 'kitne', 'कितना', 'कितने', 'कितनी', 'hisaab', 'hisab', 'हिसाब', 'balance', 'how',
-  'much', 'ಎಷ್ಟು', 'எவ்வளவு', 'ఎంత', 'എത്ര', 'কত', 'કેટલા', 'ਕਿੰਨਾ', 'किती')
+  'much', 'எவ்வளோ', 'எவ்ளோ', 'எவ்வளவுங்க', 'ಎಷ್ಟಿದೆ', 'ಎಷ್ಟು', 'ఎంతుంది', 'ఎంత', 'balance', 'kitni', 'kitta', 'எவ்வளவு', 'ఎంత', 'എത്ര', 'কত', 'કેટલા', 'ਕਿੰਨਾ', 'किती')
 const REMIND = S('yaad', 'याद', 'remind', 'reminder', 'ನೆನಪಿಸು', 'நினைவூட்டு', 'గుర్తుచేయి')
 const PRIVACY = S('privacy', 'data', 'डेटा', 'डाटा')
-const ALL = S('sab', 'सब', 'saara', 'सारा', 'all', 'everything', 'poora', 'पूरा')
+const ALL = S('sab', 'सब', 'saara', 'सारा', 'all', 'everything', 'poora', 'पूरा', 'everyone', 'sabka', 'सबका', 'sabko', 'सबको', 'ella', 'ಎಲ್ಲಾ', 'ಎಲ್ಲ', 'எல்லாம்', 'అన్నీ', 'అందరికీ')
+const BOTH = S('dono', 'दोनों', 'donon', 'both', 'teeno', 'तीनों', 'teenon', 'chaaron', 'चारों')
+const BACKREF = S('uska', 'uski', 'uske', 'usko', 'usne', 'उसका', 'उसकी', 'उसके', 'उसको', 'उसने', 'unka', 'unki', 'unke', 'unko', 'उनका',
+  'उनकी', 'उनके', 'उनको', 'iska', 'इसका', 'his', 'her', 'him', 'their', 'them', 'same', 'wahi', 'वही', 'bhi', 'भी', 'too', 'also',
+  'another', 'more', 'aur', 'और', 'phir', 'फिर', 'again', 'ಅವನ', 'ಅವರ', 'ಅವಳ', 'ಅವರಿಗೆ', 'ಇನ್ನೂ', 'அவர்', 'அவருக்கு', 'இன்னும்', 'అతని',
+  'ఆయనకు', 'ఇంకా')
 const MONTH = S('mahine', 'mahina', 'महीने', 'महीना', 'month', 'monthly', 'ತಿಂಗಳ', 'மாத', 'నెల')
 const SUMMARY = S('summary', 'report', 'sales', 'saransh', 'सारांश', 'ಸಾರಾಂಶ', 'சுருக்கம்', 'సారాంశం')
 const WHO = S('kaun', 'कौन', 'who', 'kisko', 'किसको', 'kiska', 'किसका')
-const FILLER = S('bhai', 'भाई', 'bhaiya', 'भैया', 'arre', 'अरे', 'achha', 'अच्छा', 'haan', 'to', 'तो', 'toh', 'ab', 'अब',
+const FILLER = S('hua', 'हुआ', 'hui', 'हुई', 'hue', 'हुए', 'bana', 'बना', 'banta', 'बनता', 'bhai', 'भाई', 'bhaiya', 'भैया', 'arre', 'अरे', 'achha', 'अच्छा', 'haan', 'to', 'तो', 'toh', 'ab', 'अब',
   'please', 'zara', 'ज़रा', 'jara', 'likh', 'लिख', 'likho', 'लिखो', 'lo', 'लो', 'do', 'दो', 'rupaye', 'रुपये', 'रुपए',
   'rs', '₹', 'ಅವರು', 'avaru', 'அவர்', 'ఆయన', 'mein', 'में', 'ka', 'hai', 'है', 'ho', 'kar', 'कर', 'gaya', 'diya',
   'ji', 'जी', 'customer', 'naya', 'नया', 'batao', 'bata', 'बताओ', 'बता', 'bolo', 'बोलो', 'sunao', 'सुनाओ', 'dikhao',
@@ -137,7 +144,7 @@ function stripSuffix(tok: string): { base: string; marker: 'dative' | 'agent' | 
 function stopWord(t: string): boolean {
   return CREDIT.has(t) || PAYMENT.has(t) || GIVE.has(t) || TOOK.has(t) || GAYA.has(t) || CASE.has(t) ||
     DATE_WORDS.has(t) || CONJ.has(t) || NEG.has(t) || YES.has(t) || QUERY.has(t) || FILLER.has(t) ||
-    PAST.has(t) || FUTURE.has(t) || GAVE_3P.has(t) || GAVE_1P.has(t) || UNDO.has(t) || isNumberish(t) || MONTH.has(t) || SUMMARY.has(t) ||
+    PAST.has(t) || FUTURE.has(t) || GAVE_3P.has(t) || GAVE_1P.has(t) || UNDO.has(t) || isNumberish(t) || MONTH.has(t) || SUMMARY.has(t) || BACKREF.has(t) || ALL.has(t) || BOTH.has(t) || CHANGE.has(t) ||
     isNumberWord(t)
 }
 
@@ -324,6 +331,10 @@ export function parseFast(text: string): Intent {
     if (all.some((t) => NEG.has(t)) && all.every((t) => NEG.has(t) || FILLER.has(t) || t === 'hai' || t === 'है'))
       return { type: 'no' }
     if (all.every((t) => YES.has(t) || FILLER.has(t)) && has(YES, all)) return { type: 'yes' }
+    // "jaise ki, haan" / "haan, pehle": a yes at either end with a couple of stray words (noise) is
+    // still a yes, as long as nothing in it says no
+    if (all.length <= 3 && (YES.has(all[0]) || YES.has(all[all.length - 1])) && !all.some((t) => NEG.has(t) || UNDO.has(t)))
+      return { type: 'yes' }
   }
   // privacy / delete-all (delete-all is confirmed by the server before acting)
   if (has(PRIVACY, all) && has(ALL, all) && has(UNDO, all)) return { type: 'delete_all' }
@@ -342,10 +353,17 @@ export function parseFast(text: string): Intent {
     if (nm.length && nm.length <= 3) return { type: 'correct', name: nm.join(' ') }
     return { type: 'no' }
   }
-  // "340 nahi 430" anywhere
+  // "340 nahi 430" / "Ramesh ko 500 nahi 300 udhaar" / "Ramesh 500 udhaar, nahi 300": a slip corrected in the same breath
   const negIdx = all.findIndex((t) => NEG.has(t))
-  if (amounts.length === 2 && negIdx > amounts[0].start && negIdx < amounts[1].start && amounts[0].end === negIdx)
-    return { type: 'correct', amount: amounts[1] }
+  if (amounts.length === 2 && negIdx >= amounts[0].end && negIdx < amounts[1].start &&
+    all.slice(amounts[0].end, amounts[1].start).every((t) => NEG.has(t) || CREDIT.has(t) || PAYMENT.has(t) || FILLER.has(t) || CASE.has(t))) {
+    const before = all.slice(0, amounts[0].start).filter((t) => !stopWord(t))
+    // nobody named before the slip: it fixes the last entry
+    if (!before.length) return { type: 'correct', amount: amounts[1] }
+    // a name was said: this is one new entry with the second amount (keep the direction words, drop the slip)
+    const kept = all.filter((_t, i) => (i < amounts[0].start || i >= amounts[0].end) && i !== negIdx)
+    return parseFast(kept.join(' '))
+  }
   if (has(UNDO, all) && !amounts.length) return { type: 'undo' }
 
   if (!amounts.length) {
@@ -401,7 +419,36 @@ export function parseFast(text: string): Intent {
   // no name AND no direction cue: too weak to be a ledger line (usually talk to a customer)
   const real = entries.filter((e) => e.name || e.direction)
   if (!real.length) return { type: 'unknown' }
+  // A list with one direction word ("Ramesh 200, Suresh 300, Geeta 150 udhaar", "sab udhaar: ..."):
+  // the word covers the whole list. With an explicit "all" it is certain; without, the agent asks once.
+  const dirs = new Set(real.map((e) => e.direction).filter(Boolean))
+  // The word covers the list only when it closes the list ("..., Geeta 150 udhaar") or "sab/all" is said;
+  // "Anil ka 150 udhaar aur Ravi 1200" leaves Ravi unknown.
+  const isAll = has(ALL, all) || has(BOTH, all)
+  const closing = !!real[real.length - 1].direction && real.slice(0, -1).every((e) => !e.direction)
+  if (real.length > 1 && dirs.size === 1 && real.some((e) => !e.direction) && (isAll || closing)) {
+    const dir = [...dirs][0] as Direction
+    for (const e of real) {
+      if (e.direction) continue
+      e.direction = dir
+      e.reasons = e.reasons.filter((r) => r !== 'no-direction-cue')
+      e.reasons.push(isAll ? 'dir-all' : 'dir-shared')
+      if (!e.reasons.some((r) => r !== 'name-inherited' && r !== 'dir-all' && r !== 'dir-shared')) e.confidence = 'high'
+    }
+  }
   return { type: 'entries', entries: real }
+}
+
+const CHANGE = S('badlo', 'बदलो', 'badal', 'बदल', 'change', 'edit', 'modify', 'update', 'wala', 'वाला', 'wali', 'वाली', 'wale', 'वाले',
+  'galat', 'गलत', 'asal', 'असल', 'actually', 'instead', 'entry', 'एंट्री', 'ಬದಲಾಯಿಸು', 'ಬದಲಿಸು', 'மாற்று', 'మార్చు')
+/** The shopkeeper is fixing or removing something already written ("Geeta wali entry hata do"). */
+export function mentionsChange(text: string): boolean {
+  return tokenize(text).some((t) => CHANGE.has(t) || UNDO.has(t) || NEG.has(t))
+}
+
+/** Words that point back at the conversation: "uska", "him", "same", "bhi", "another". */
+export function refersBack(text: string): boolean {
+  return tokenize(text).some((t) => BACKREF.has(t))
 }
 
 // ----------------------------------------------------------------- end of turn

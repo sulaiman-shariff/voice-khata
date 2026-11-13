@@ -10,6 +10,7 @@
  */
 
 export type AmountFlag =
+  | 'from-context' // copied from a recent entry ("same for Suresh"), not spoken in this turn
   | 'elided_scale' // "teen chaalis" read as 340 (scale word not spoken)
   | 'bare_fraction' // "saadhe teen" with no sau/hazaar: 3.5? 350? 3500?
   | 'confusable' // contains a word with a sound-alike number (saath/saat, fifteen/fifty...)

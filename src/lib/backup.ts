@@ -41,7 +41,36 @@ export async function decryptRecords(pin: string, blob: string): Promise<unknown
   }
 }
 
-export function createBackupClient(base = ''): BackupClient {
+export const BACKUP_ID_KEY = 'khata.backupId'
+export interface IdStorage {
+  getItem(k: string): string | null
+  setItem(k: string, v: string): void
+  removeItem(k: string): void
+}
+const defaultStorage = (): IdStorage | null => {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  } catch {
+    return null
+  }
+}
+
+export function createBackupClient(base = '', storage: IdStorage | null = defaultStorage()): BackupClient {
+  const getId = () => {
+    try {
+      return storage?.getItem(BACKUP_ID_KEY) || null
+    } catch {
+      return null
+    }
+  }
+  const setId = (id: string | null) => {
+    try {
+      if (id) storage?.setItem(BACKUP_ID_KEY, id)
+      else storage?.removeItem(BACKUP_ID_KEY)
+    } catch {
+      /* storage blocked: the next backup just creates a new row */
+    }
+  }
   const call = async (path: string, init?: RequestInit) => {
     const res = await fetch(base + path, init)
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
@@ -51,9 +80,24 @@ export function createBackupClient(base = ''): BackupClient {
   return {
     async backup(pin, records) {
       const blob = await encryptRecords(pin, records)
-      const { res, data } = await post('/api/backup', { blob })
+      const known = getId()
+      let { res, data } = await post('/api/backup', known ? { id: known, blob } : { blob })
+      if (res.status === 404 && known) {
+        // the stored row is gone (deleted elsewhere): start a fresh one
+        setId(null)
+        ;({ res, data } = await post('/api/backup', { blob }))
+      }
       if (!res.ok) throw new Error(`Backup failed (${res.status})`)
-      return { id: data.id as string, bytes: blob.length }
+      const id = data.id as string
+      setId(id)
+      return { id, bytes: blob.length }
+    },
+    async deleteBackup() {
+      const id = getId()
+      if (!id) return
+      const { res } = await call(`/api/backup?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`Could not delete backup (${res.status})`)
+      setId(null)
     },
     async restore(id, pin) {
       const { res, data } = await call(`/api/backup?id=${encodeURIComponent(id)}`)

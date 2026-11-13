@@ -1,4 +1,4 @@
-import { Download, Link2, MessageCircle, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react'
+import { Download, MessageCircle, Share2, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { balance } from '../../shared/ledger.js'
 import { LANG_NAME, LANGS, type Lang } from '../../shared/replies.js'
@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { dayLabel, rs } from './format'
-import { EntryRow } from './parts'
+import { Passbook } from './Ledger'
 import type { UiStrings } from './strings'
 
 const NOTES_EN = [
@@ -36,8 +36,8 @@ export function shareWhatsApp(text: string, phone?: string) {
   window.open(`https://wa.me/${to}?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
 }
 
-export function CustomerSheet({ store, cid, t, backup, onClose, onChanged }: {
-  store: KhataStore; cid: string | null; t: UiStrings; backup: BackupClient; onClose: () => void; onChanged: () => void
+export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEntry }: {
+  store: KhataStore; cid: string | null; t: UiStrings; backup: BackupClient; onClose: () => void; onChanged: () => void; onEntry: (eid: string) => void
 }) {
   const s = store.state
   const c = cid ? s.customers.get(cid) : undefined
@@ -56,7 +56,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged }: {
     }
   }, [c?.cid]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!c) return null
-  const entries = s.order.map((id) => s.entries.get(id)!).filter((e) => e.cid === c.cid).reverse()
+  const entries = s.order.map((id) => s.entries.get(id)!).filter((e) => e.cid === c.cid)
   const bal = balance(s, c.cid)
   const consent = (patch: Partial<{ remindersOptIn: boolean; adult: boolean; phone: string }>) =>
     store.setConsent(c.cid, { remindersOptIn: c.remindersOptIn, adult: c.adult, phone: phone || undefined, ...patch }).then(onChanged)
@@ -70,9 +70,16 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged }: {
     shareWhatsApp(`${store.settings.shopName}: ${rs(e.paise)} (${dayLabel(e.day)}). ${url}`, c.phone)
   }
 
+  const shareStatement = () => {
+    const rows = entries.filter((e) => !e.voided && !e.promise).sort((a, b) => b.day.localeCompare(a.day) || b.ts - a.ts).slice(0, 10)
+    const lines = rows.map((e) => `${dayLabel(e.day)}  ${e.direction === 'credit' ? t.credit : t.payment}  ${rs(e.paise)}`)
+    const text = [store.settings.shopName, `${t.stmtHello}: ${c.name}`, '', ...lines, '', `${t.stmtBalance}: ${bal < 0 ? '−' : ''}${rs(bal)}`, '', t.stmtThanks].join('\n')
+    shareWhatsApp(text, c.phone)
+  }
+
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="max-h-[88vh] overflow-y-auto rounded-t-3xl pb-8">
+      <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-3xl pb-8">
         <SheetHeader>
           <SheetTitle className="text-2xl">{c.name}</SheetTitle>
           {c.aliases.length > 0 && <div className="text-sm text-muted-foreground">{c.aliases.join(' · ')}</div>}
@@ -99,23 +106,16 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged }: {
             </label>
           </div>
 
-          <div className="mt-5 mb-2 text-sm font-semibold text-muted-foreground">{t.history}</div>
-          <div className="space-y-2">
-            {entries.map((e) => (
-              <div key={e.eid}>
-                <EntryRow e={e} name={dayLabel(e.day)} t={t} />
-                {!e.voided && !e.promise && e.status === 'unconfirmed' && (
-                  <button onClick={() => void askConfirm(e.eid)} className="mt-1 ml-2 flex items-center gap-1 text-xs text-primary">
-                    <Link2 className="size-3.5" />{t.confirmLink}
-                  </button>
-                )}
-                {e.source && <div className="ml-2 mt-0.5 truncate text-[11px] text-muted-foreground">“{e.source.transcript}”</div>}
-              </div>
-            ))}
+          <div className="mt-5 mb-1 flex items-center justify-between">
+            <span className="text-sm font-semibold text-muted-foreground">{t.history}</span>
+            <button onClick={shareStatement} className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-primary ring-1 ring-primary/30">
+              <Share2 className="size-4" />{t.shareStatement}
+            </button>
           </div>
+          <Passbook entries={entries} t={t} onEntry={onEntry} onConfirm={(eid) => void askConfirm(eid)} />
 
           <button
-            onClick={() => { if (confirm(`${t.forget}: ${c.name}?`)) void store.forgetCustomer(c.cid).then(() => { onChanged(); onClose() }) }}
+            onClick={() => { if (confirm(`${t.forget}: ${c.name}?`)) void store.forgetCustomer(c.cid).then(() => { void dropBackup(backup); onChanged(); onClose() }) }}
             className="mt-6 flex items-center gap-2 text-sm text-destructive"
           >
             <Trash2 className="size-4" />{t.forget}
@@ -226,12 +226,17 @@ export function PrivacySheet({ store, open, t, backup, onClose, onChanged }: {
             <div className="text-xs text-muted-foreground">Encrypted on this phone with your PIN before upload. We cannot read it.</div>
           </div>
 
-          <button onClick={() => { if (confirm(`${t.deleteAll}?`)) void store.deleteAll().then(onChanged) }}
+          <button onClick={() => { if (confirm(`${t.deleteAll}?`)) void store.deleteAll().then(() => { void dropBackup(backup); onChanged() }) }}
             className="flex items-center gap-2 text-destructive"><Trash2 className="size-4" />{t.deleteAll}</button>
         </div>
       </SheetContent>
     </Sheet>
   )
+}
+
+/** Remove the server backup too, so erased data cannot be restored from it. */
+async function dropBackup(b: BackupClient) {
+  try { await (b as unknown as { deleteBackup?: () => Promise<void> }).deleteBackup?.() } catch { /* best effort */ }
 }
 
 export function remindLink(store: KhataStore, cid: string, text: string) {

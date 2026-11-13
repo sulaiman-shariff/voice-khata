@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Voice Khata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="deck.css">
+</head><body>
+
+<!-- 1 TITLE -->
+<section class="slide s1">
+  <div class="kicker">Gnani Voice Hackathon &middot; Problem Statement 2</div>
+  <h1>Voice Khata</h1>
+  <div class="sub">A voice credit ledger (khata) for kirana shops. Just talk; the khata writes itself.</div>
+  <div class="meta">
+    <b>Theme</b><span>Gnani Voice Hackathon, Problem Statement 2 &ldquo;Voice Khata&rdquo;</span>
+    <b>Team</b><span>Team Purrfect &nbsp;&middot;&nbsp; ID <span style="font-variant-numeric:tabular-nums">team-8588FC8C5100</span></span>
+    <b>Members</b><span>Sulaiman Shariff (Team Leader), Hajira Noorain, K Mahi, Mahamad Zaid</span>
+    <b>College</b><span>Atria Institute of Technology</span>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>1</span></div>
+</section>
+
+<!-- 2 PROBLEM -->
+<section class="slide s2">
+  <div class="kicker">Problem + Existing Gap</div>
+  <h2>Credit runs the shop. The record is in memory.</h2>
+  <div class="stats">
+    <div class="stat"><b>&gt;30%</b><span>of revenue comes from customers buying on credit (udhaar)</span></div>
+    <div class="stat"><b>~8 hrs</b><span>per week the owner spends chasing repayments</span></div>
+    <div class="stat"><b>~Half</b><span>of owners keep no written record at all</span></div>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="kicker" style="font-size:22px;margin-bottom:8px">Who is affected, and how</div>
+      <ul>
+        <li>Kirana owners who give goods on credit all day, mid-sale, with busy hands</li>
+        <li>Many Indian languages mixed with English, low text literacy, a noisy shop</li>
+        <li>Wrong or missing entries lead to disputes, lost money and awkward collection</li>
+      </ul>
+      <div class="small">Source: field study of 26 Mumbai stores (LBS).</div>
+    </div>
+    <div>
+      <div class="kicker" style="font-size:22px;margin-bottom:8px">Current solutions and their gaps</div>
+      <ul>
+        <li><b>Khatabook / OkCredit-style apps:</b> typing and tapping. Needs literacy and attention, and breaks the sale.</li>
+        <li><b>Generic voice assistants:</b> mix up <span class="hi">&ldquo;Ramesh ne 200 diye&rdquo;</span> (paid) with <span class="hi">&ldquo;Ramesh ko 200 diye&rdquo;</span> (credit); mishear 60 as 7; miss <span class="hi">&ldquo;dedh sau&rdquo;</span> = 150; often send data to the cloud.</li>
+        <li><b>Other voice-khata attempts:</b> push-to-talk and a confirm card; no live streaming, no noise testing, no spoken corrections.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>2</span></div>
+</section>
+
+<!-- 3 SOLUTION -->
+<section class="slide s3">
+  <div class="kicker">Proposed Solution</div>
+  <h2>Say it while you serve. It is written down.</h2>
+  <div class="row">
+    <div style="flex:1">
+      <div class="bubbles">
+        <div class="b u"><span class="hi">&ldquo;Ramesh ka <b class="cr">340</b> udhaar&rdquo;</span></div>
+        <div class="b a">Ramesh, 340 rupees credit. Saved.</div>
+        <div class="b u"><span class="hi">&ldquo;Suresh ne <b class="pd">200</b> jama kiye&rdquo;</span></div>
+        <div class="b u"><span class="hi">&ldquo;Ramesh ka total?&rdquo;</span></div>
+      </div>
+      <ul>
+        <li>Speak in your own language, in the middle of a sale</li>
+        <li>The agent writes the entry and reads it back in about a second</li>
+        <li>It asks only when it is unsure, and answers balances by voice</li>
+        <li>The ledger stays on your phone, encrypted</li>
+      </ul>
+    </div>
+    <div style="width:700px">
+      <div class="card" style="margin-bottom:24px"><h3>Existing apps</h3>Type, tap, look at the screen. Voice assistants guess and can save a wrong amount.</div>
+      <div class="card" style="border-color:var(--red)"><h3>Voice Khata</h3>Built for ledger talk: knows paid from credit, <span class="hi">&ldquo;dedh sau&rdquo;</span> = 150, and never saves a wrong amount silently. Works with live speech, not push-to-talk.</div>
+    </div>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>3</span></div>
+</section>
+
+<!-- 4 ARCHITECTURE -->
+<section class="slide s4">
+  <div class="kicker">Architecture + Tech Stack</div>
+  <h2 style="margin-bottom:14px;font-size:64px">Input &rarr; Process &rarr; Output</h2>
+  <div class="flow">
+    <div class="zone"><div class="zt">Input</div>
+      <div class="box"><b>Shopkeeper speaks</b>in any mix of languages</div>
+      <div class="box"><b>Phone app (PWA)</b>mic at 16 kHz, streamed live over WebSocket<span class="tag t-fe">Frontend</span></div>
+    </div>
+    <div class="arr">&rarr;</div>
+    <div class="zone"><div class="zt">Process &middot; Vercel server, Mumbai</div>
+      <div class="box gn"><b>Speech to text, live<span class="tag t-gn">Gnani</span></b>Prisma v3.0 streaming, shop customer names as hints</div>
+      <div class="box"><b>Turn detector<span class="tag t-be">Backend</span></b>pause + complete sentence = commit early</div>
+      <div class="box"><b>Fast rule parser<span class="tag t-be">Backend</span></b>Indian number words, ne / ko, confusable numbers</div>
+      <div class="box"><b>Claude Haiku, hard turns only<span class="tag t-ai">AI</span></b>may only pick amounts the parser heard</div>
+      <div class="box" style="margin-bottom:0"><b>Dialogue engine<span class="tag t-be">Backend</span></b>asks when unsure, corrections, lists, edits</div>
+    </div>
+    <div class="arr">&rarr;</div>
+    <div class="zone"><div class="zt">Output</div>
+      <div class="box gn"><b>Voice reply<span class="tag t-gn">Gnani</span></b>Timbre v3.0 speech, interruptible</div>
+      <div class="box"><b>Phone plays reply</b>and shows the entry<span class="tag t-fe">Frontend</span></div>
+      <div class="box"><b>Encrypted ledger on phone<span class="tag t-db">DB</span></b>IndexedDB, AES-GCM, tamper-evident history</div>
+      <div class="box" style="margin-bottom:0;border-style:dashed"><b>Optional backup + confirm links<span class="tag t-db">DB</span></b>Neon Postgres; server sees only ciphertext</div>
+    </div>
+  </div>
+  <div class="stack">
+    <div><b>Frontend</b>React 19, Vite, Tailwind, shadcn, installable PWA</div>
+    <div><b>Backend</b>Node / TypeScript on Vercel Functions</div>
+    <div><b>AI</b>Gnani STT + TTS; Claude Haiku 5.5</div>
+    <div><b>Database</b>IndexedDB + WebCrypto; Neon Postgres</div>
+    <div><b>Quality</b>Vitest, 400+ automated tests</div>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>4</span></div>
+</section>
+
+<!-- 5 FEATURES -->
+<section class="slide s5">
+  <div class="kicker">Key Features</div>
+  <h2 style="margin-bottom:18px;font-size:70px">Five things that make it different</h2>
+  <div class="feat">
+    <div class="f"><div class="n">1</div><div><h3>Speaks your language <span class="tagrow">Gnani STT</span></h3><p>10 Indian languages plus English mixing. Full depth in Hindi, Kannada, Tamil and Telugu.</p></div></div>
+    <div class="f"><div class="n">2</div><div><h3>Never saves a wrong amount silently <span class="tagrow">Unique logic</span></h3><p>Asks only when unsure. Spoken fixes (<span class="hi">&ldquo;nahi, 430&rdquo;</span>), undo, a whole list in one breath with one confirm, and edits to older entries by voice.</p></div></div>
+    <div class="f"><div class="n">3</div><div><h3>Real-time conversation <span class="tagrow">Streaming</span></h3><p>Understands while you speak, replies in about 0.85 s, and you can interrupt it any time.</p></div></div>
+    <div class="f"><div class="n">4</div><div><h3>Private by design</h3><p>Ledger lives only on the phone, encrypted. Delete a customer for good. Tells you it is an AI. No voice cloning. Reminders are opt-in and polite.</p></div></div>
+    <div class="f"><div class="n">5</div><div><h3>Built-in trust</h3><p>Tamper-evident history with what was said for each entry. Customers can confirm an entry through a WhatsApp link. Manual edit as a backup.</p></div></div>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>5</span></div>
+</section>
+
+<!-- 6 IMPACT -->
+<section class="slide s6">
+  <div class="kicker">Impact + Feasibility</div>
+  <h2>Measured on the live app, not just claimed</h2>
+  <div class="results">
+    <div class="res"><b class="pd">59 of 60</b><span>spoken entries recorded exactly in clean audio</span></div>
+    <div class="res"><b>49 of 60</b><span>in loud street noise; it asks instead of guessing</span></div>
+    <div class="res"><b class="cr">0 wrong</b><span>amounts saved silently across all 216 test turns</span></div>
+    <div class="res"><b>~0.85 s</b><span>typical time to reply</span></div>
+  </div>
+  <div class="small" style="margin:-14px 0 20px">Our end-to-end test on the live deployment: 4 languages, 15 scenarios, real noise recordings mixed in. Heavy crowd babble is still hard; it mostly asks again.</div>
+  <div class="three">
+    <div class="card"><h3>Who benefits</h3><ul>
+      <li>Owners of small shops across India</li>
+      <li>Less time chasing dues, fewer disputes</li>
+      <li>Works for people who cannot type comfortably</li></ul></div>
+    <div class="card"><h3>Scalability</h3><ul>
+      <li>Server keeps no state, so it scales out</li>
+      <li>Ledger is on each phone: no central database to grow</li>
+      <li>New language = word list + reply templates</li></ul></div>
+    <div class="card"><h3>Cost + deployment</h3><ul>
+      <li>Per shop: speech minutes + an occasional AI call</li>
+      <li>Most turns need no AI call</li>
+      <li>Prototype runs on Vercel Hobby + Neon free tier</li>
+      <li>Installable app, no app store</li></ul></div>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>6</span></div>
+</section>
+
+<!-- 7 DEMO -->
+<section class="slide s7">
+  <div class="kicker">Demo + Conclusion</div>
+  <h2 style="margin-bottom:26px">Working today. Try it.</h2>
+  <div class="row">
+    <div class="phones">
+      <div><div class="phone"><div class="scr"><img src="3-home-feed.png"></div></div><div class="cap">Entries as you speak, with Undo</div></div>
+      <div><div class="phone"><div class="scr"><img src="6-dues.png"></div></div><div class="cap">Who owes what</div></div>
+      <div><div class="phone"><div class="scr"><img src="7-passbook.png"></div></div><div class="cap">Passbook per customer</div></div>
+    </div>
+    <div class="right">
+      <div class="link">Live app: <a href="https://voice-khata-delta.vercel.app">voice-khata-delta.vercel.app</a></div>
+      <div class="link">Repo: <a href="https://github.com/sulaiman-shariff/voice-khata">github.com/sulaiman-shariff/voice-khata</a><br><small>private; access on request</small></div>
+      <div class="link"><span class="todo">Demo video: &lt;link to be added&gt;</span></div>
+      <div class="concl">A shopkeeper can keep their whole khata by just talking: in their language, in a noisy shop, without a wrong rupee.</div>
+      <div class="kicker" style="font-size:22px;margin-bottom:8px">Why this should be selected</div>
+      <ul class="why">
+        <li>Works live now, not a mock-up</li>
+        <li>Tested honestly in noise: zero wrong saves</li>
+        <li>Privacy first: the ledger stays on the phone</li>
+        <li>Built on Gnani streaming speech, with our own orchestration</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Team Purrfect &middot; team-8588FC8C5100 &middot; Gnani Voice Hackathon PS2</span><span>7</span></div>
+</section>
+</body></html>

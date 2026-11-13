@@ -1,6 +1,7 @@
 import { ensureSchema, json, randomHex, sql } from '../server/db.js'
 
 export const EXPIRY_DAYS = 30
+const MAX_BODY = 4 * 1024
 const TOKEN_RE = /^[0-9a-f]{32}$/
 const LANGS = ['hi', 'en', 'kn', 'ta', 'te', 'ml', 'mr', 'bn', 'gu', 'pa']
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -33,7 +34,10 @@ export async function handle(req: Request): Promise<Response> {
 
     let b: Record<string, unknown>
     try {
-      b = await req.json()
+      if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY) return json({ error: 'too large' }, 413)
+      const text = await req.text()
+      if (text.length > MAX_BODY) return json({ error: 'too large' }, 413)
+      b = JSON.parse(text)
     } catch {
       return json({ error: 'bad json' }, 400)
     }

@@ -37,8 +37,21 @@ describe.skipIf(!hasDb())('neon: confirm links', () => {
     await sql`UPDATE confirm_links SET created_at = now() - interval '31 days' WHERE token = ${token}`
     expect((await confirm(get(`/api/confirm?token=${token}`))).status).toBe(410)
     expect((await confirm(post('/api/confirm', { token, answer: 'confirmed' }))).status).toBe(410)
-    expect((await cleanup(get('/api/cleanup'))).status).toBe(200)
+    process.env.CRON_SECRET = 'test-secret'
+    expect((await cleanup(new Request('http://x/api/cleanup', { headers: { authorization: 'Bearer test-secret' } }))).status).toBe(200)
     expect((await confirm(get(`/api/confirm?token=${token}`))).status).toBe(404)
+  })
+})
+
+describe('cleanup auth', () => {
+  it('refuses when CRON_SECRET is unset or wrong', async () => {
+    const prev = process.env.CRON_SECRET
+    delete process.env.CRON_SECRET
+    expect((await cleanup(get('/api/cleanup'))).status).toBe(401)
+    process.env.CRON_SECRET = 's3'
+    expect((await cleanup(new Request('http://x/api/cleanup', { headers: { authorization: 'Bearer nope' } }))).status).toBe(401)
+    if (prev === undefined) delete process.env.CRON_SECRET
+    else process.env.CRON_SECRET = prev
   })
 })
 
@@ -50,6 +63,14 @@ describe.skipIf(!hasDb())('neon: backups', () => {
     expect((await backup(post('/api/backup', { id, blob: blobOf('BBBB') }))).status).toBe(200)
     expect((await (await backup(get(`/api/backup?id=${id}`))).json()).blob).toBe(blobOf('BBBB'))
     await sql`DELETE FROM backups WHERE id = ${id}`
+  })
+  it('deletes by id (idempotent, validated)', async () => {
+    const { id } = await (await backup(post('/api/backup', { blob: blobOf('AAAA') }))).json()
+    const del = (q: string) => backup(new Request('http://x/api/backup' + q, { method: 'DELETE' }))
+    expect((await del('?id=zz')).status).toBe(400)
+    expect((await del(`?id=${id}`)).status).toBe(200)
+    expect((await backup(get(`/api/backup?id=${id}`))).status).toBe(404)
+    expect((await del(`?id=${id}`)).status).toBe(200)
   })
   it('rejects oversize and malformed', async () => {
     expect((await backup(post('/api/backup', { blob: blobOf('A'.repeat(MAX_BLOB)) }))).status).toBe(413)

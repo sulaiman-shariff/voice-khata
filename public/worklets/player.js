@@ -35,6 +35,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
         break
       }
       case 'duck':
+        if (!this.playing) break // nothing audible to duck; do not carry into the next reply
         this.gainTarget = DUCK_GAIN
         this.gainStep = (1 - DUCK_GAIN) / (0.03 * sampleRate)
         break
@@ -67,6 +68,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
 
     if (!this.playing && this.avail > 0 && (this.avail >= PREBUFFER_SAMPLES || this.ended)) {
       this.playing = true
+      // a reply never starts ducked: duck is only meaningful while the previous reply plays
+      this.gain = 1
+      this.gainTarget = 1
       this.port.postMessage({ type: 'started' })
     }
 
@@ -117,6 +121,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.off = 0
       this.frac = 0
       this.avail = 0
+      this.gain = 1
+      this.gainTarget = 1
       this.port.postMessage({ type: 'drained' })
     }
     return true

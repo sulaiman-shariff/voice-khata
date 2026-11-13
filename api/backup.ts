@@ -25,6 +25,12 @@ export async function handle(req: Request): Promise<Response> {
       if (!rows.length) return json({ error: 'not found' }, 404)
       return json({ blob: rows[0].blob })
     }
+    if (req.method === 'DELETE') {
+      const id = new URL(req.url).searchParams.get('id') ?? ''
+      if (!ID_RE.test(id)) return json({ error: 'bad id' }, 400)
+      await sql`DELETE FROM backups WHERE id = ${id}`
+      return json({ ok: true })
+    }
     if (req.method === 'POST') {
       const len = Number(req.headers.get('content-length') ?? 0)
       if (len > MAX_BLOB + 1024) return json({ error: 'too large' }, 413)

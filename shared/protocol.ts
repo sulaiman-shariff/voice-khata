@@ -23,12 +23,16 @@ export interface SnapEntry {
   paise: number
   direction: Direction
   day: string
+  promise?: boolean
+  ts?: number
 }
 
 export interface Snapshot {
   shopName: string
   customers: SnapCustomer[]
   last: SnapEntry | null
+  /** Recent live entries, newest first (up to 20): lets the agent change any of them, not just the last. */
+  recent?: SnapEntry[]
   today: { creditPaise: number; paymentPaise: number; entries: number }
   month: { creditPaise: number; paymentPaise: number; entries: number }
 }
@@ -57,11 +61,15 @@ export type ClientMsg =
   | { type: 'ptt_end' }
   | { type: 'tap'; action: 'yes' | 'no' | 'undo' }
   | { type: 'answer'; text: string } // tap answer to the open question (option text, udhaar/jama)
+  | { type: 'text'; text: string } // typed (or pasted) instruction: same pipeline as speech
+  | { type: 'barge' } // hands-free: the shopkeeper tapped to cut the reply short (does not switch to push-to-talk)
   | { type: 'playback_done' }
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
-  kind: 'confirm' | 'name' | 'direction' | 'which' | 'confusable' | 'delete'
+  kind: 'confirm' | 'name' | 'direction' | 'which' | 'confusable' | 'delete' | 'batch' | 'modify'
+  /** batch: one line per entry ("Ramesh ₹200"); modify: true when the change removes the entry */
+  remove?: boolean
   name?: string
   paise?: number
   direction?: Direction | null
@@ -96,3 +104,5 @@ export type ServerMsg =
   | { type: 'remind'; cid: string; text: string }
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
+  /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */
+  | { type: 'turn_done' }

@@ -15,6 +15,12 @@ const RECONNECT_AFTER_MS = 270_000
 const BACKOFF_MS = [500, 1000, 2000, 5000]
 const LEVEL_INTERVAL_MS = 33
 const METRICS_WAIT_MS = 2000
+const HARD_SWAP_MS = 290_000 // swap no later than this (server cap is 300 s), whatever is open
+const OLD_SOCKET_GRACE_MS = 3000
+const SPEECH_LEVEL = 0.02
+const PARTIAL_STALE_MS = 4000
+const THINK_TIMEOUT_MS = 25_000
+const RESUME_TIMEOUT_MS = 1000
 
 interface StartOpts {
   lang: Lang
@@ -39,6 +45,16 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let refreshTimer: ReturnType<typeof setTimeout> | null = null
   let swapping = false
+  let swapInFlight = false
+  let adoptedAt = 0
+  const oldSockets = new Set<WebSocket>()
+
+  let pendingOpen = false // last 'pending' msg was non-null: the server holds a question
+  let partialAt: number | null = null // a 'partial' arrived and its 'final' has not
+  let micLevel = 0
+  let turnSaid = false
+  let thinkTimer: ReturnType<typeof setTimeout> | null = null
+  let micDead = false
 
   let pttHeld = false
   let pttTailTimer: ReturnType<typeof setTimeout> | null = null
@@ -52,9 +68,23 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   const isBusy = () => status === 'speaking' || status === 'thinking'
 
   function setStatus(s: VoiceStatus) {
+    if (thinkTimer) clearTimeout(thinkTimer)
+    thinkTimer = null
+    if (s === 'thinking') {
+      // never stay busy forever if the server never answers this turn
+      thinkTimer = setTimeout(() => {
+        thinkTimer = null
+        if (status === 'thinking') setStatus('listening')
+      }, THINK_TIMEOUT_MS)
+    }
     if (status === s) return
     status = s
     ev.status(s)
+  }
+
+  /** The turn produced no spoken reply: stop showing "thinking". */
+  const settleIfSilent = () => {
+    if (status === 'thinking') setStatus('listening')
   }
 
   function sendTo(sock: WebSocket | null, msg: ClientMsg) {
@@ -65,6 +95,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   function hello(sock: WebSocket) {
     if (!opts) return
     sendTo(sock, { type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree })
+    opts.firstRun = false // the disclosure plays once, not on every reconnect
   }
 
   // ------------------------------------------------------------ audio graph
@@ -91,12 +122,13 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   function onMicFrame(e: MessageEvent<{ buf: ArrayBuffer; level: number }>) {
     const { buf, level } = e.data
+    micLevel = level
     const now = performance.now()
     if (now - lastLevelAt >= LEVEL_INTERVAL_MS) {
       lastLevelAt = now
       ev.level(level)
     }
-    if (!ws || ws.readyState !== WebSocket.OPEN || swapping) return // dropped while disconnected
+    if (micDead || !ws || ws.readyState !== WebSocket.OPEN || swapping) return // dropped while disconnected
     if (handsFree || pttHeld) ws.send(buf)
   }
 
@@ -131,10 +163,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   // ------------------------------------------------------------ socket
   function handleMessage(sock: WebSocket, e: MessageEvent) {
-    if (sock !== ws) return
+    const isOld = sock !== ws
+    if (isOld && !oldSockets.has(sock)) return
     if (e.data instanceof ArrayBuffer) {
-      toPlayer({ type: 'pcm', buf: e.data })
-      return
+      if (!isOld) toPlayer({ type: 'pcm', buf: e.data })
+      return // audio from a retired socket would overlap the new one
     }
     if (typeof e.data !== 'string') return
     let m: ServerMsg
@@ -143,14 +176,46 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     } catch {
       return
     }
+    if (isOld) {
+      // in-flight turn on the retired socket: keep its text results, never its audio/state control
+      switch (m.type) {
+        case 'final':
+          ev.final(m.text)
+          break
+        case 'ops':
+          ev.ops(m.ops)
+          break
+        case 'say':
+          turnSaid = true
+          ev.say(m.text)
+          break
+        case 'show':
+          ev.show(m)
+          break
+        case 'remind':
+          ev.remind(m.cid, m.text)
+          break
+        case 'error':
+          ev.error(m.message)
+          settleIfSilent()
+          break
+        case 'turn_done':
+          settleIfSilent()
+          break
+      }
+      return
+    }
     switch (m.type) {
       case 'ready':
         if (status === 'connecting' || status === 'offline') setStatus('listening')
         break
       case 'partial':
+        partialAt = performance.now()
         ev.partial(m.text)
         break
       case 'final':
+        partialAt = null
+        turnSaid = false
         finalAt = performance.now()
         playerStartedAt = null
         ev.final(m.text)
@@ -160,6 +225,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         ev.ops(m.ops)
         break
       case 'say':
+        turnSaid = true
         ev.say(m.text)
         setStatus('speaking')
         break
@@ -177,7 +243,13 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         if (status === 'speaking') setStatus('listening')
         break
       case 'pending':
+        pendingOpen = m.pending !== null
         ev.pending(m.pending)
+        if (!turnSaid) settleIfSilent()
+        break
+      case 'turn_done':
+        partialAt = null
+        settleIfSilent()
         break
       case 'show':
         ev.show(m)
@@ -186,6 +258,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         ev.remind(m.cid, m.text)
         break
       case 'metrics':
+        if (!turnSaid) settleIfSilent()
         pendingMetrics = m.turn
         flushMetrics()
         if (pendingMetrics) {
@@ -195,7 +268,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         break
       case 'error':
         ev.error(m.message)
-        if (status === 'thinking') setStatus('listening')
+        settleIfSilent()
         break
     }
   }
@@ -217,13 +290,29 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     sock.onclose = () => onClosed(sock)
     ws = sock
     backoffIdx = 0
+    adoptedAt = Date.now()
+    // a new socket is a new server Session: no open question, no half-heard turn, no held key
+    if (pendingOpen) {
+      pendingOpen = false
+      ev.pending(null)
+    }
+    partialAt = null
+    releasePtt()
     scheduleRefresh()
+  }
+
+  function releasePtt() {
+    pttHeld = false
+    if (pttTailTimer) clearTimeout(pttTailTimer)
+    pttTailTimer = null
   }
 
   function onClosed(sock: WebSocket) {
     if (sock !== ws || !running) return
     ws = null
     clearRefresh()
+    releasePtt()
+    partialAt = null
     setStatus('offline')
     scheduleReconnect()
   }
@@ -260,21 +349,31 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     refreshTimer = setTimeout(() => void proactiveReconnect(), delay)
   }
 
-  /** Swap to a fresh socket (Vercel caps functions at 300 s). Only when idle. */
-  async function proactiveReconnect() {
+  /**
+   * Swap to a fresh socket (Vercel caps functions at 300 s). Only when idle: not busy, no key held,
+   * no open question and nobody mid-sentence - but never later than HARD_SWAP_MS.
+   * `urgent` (mode change) skips the question/speech checks.
+   */
+  async function proactiveReconnect(urgent = false) {
     refreshTimer = null
-    if (!running || !ws) return
-    if (isBusy() || pttHeld) {
-      scheduleRefresh(2000)
+    if (!running || !ws || swapInFlight) return
+    const age = Date.now() - adoptedAt
+    const hard = age >= HARD_SWAP_MS
+    const partialActive = partialAt !== null && performance.now() - partialAt < PARTIAL_STALE_MS
+    const quiet = urgent || (!pendingOpen && !partialActive && micLevel < SPEECH_LEVEL)
+    if (!hard && (isBusy() || pttHeld || !quiet)) {
+      scheduleRefresh(Math.max(250, Math.min(2000, HARD_SWAP_MS - age)))
       return
     }
+    swapInFlight = true
     try {
       const sock = await openSocket()
       if (!running) {
         sock.close()
         return
       }
-      if (isBusy()) {
+      const nowHard = Date.now() - adoptedAt >= HARD_SWAP_MS
+      if (!nowHard && (isBusy() || pttHeld)) {
         // got busy while connecting: keep the old socket and try later
         sock.close()
         scheduleRefresh(2000)
@@ -285,21 +384,32 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       hello(sock)
       if (old) {
         old.onclose = null
-        old.onmessage = null
+        // keep its handler a few seconds so the final/ops/say of an in-flight turn still arrive
+        oldSockets.add(old)
+        setTimeout(() => {
+          oldSockets.delete(old)
+          old.onmessage = null
+          try {
+            old.close()
+          } catch {
+            /* already closed */
+          }
+        }, OLD_SOCKET_GRACE_MS)
       }
       adopt(sock)
       swapping = false
-      old?.close()
     } catch {
       swapping = false
       scheduleRefresh(5000) // old socket still alive (or its close handler will reconnect)
+    } finally {
+      swapInFlight = false
     }
   }
 
   // ------------------------------------------------------------ public API
   async function start(o: StartOpts): Promise<void> {
     if (running) return
-    opts = o
+    opts = { ...o }
     handsFree = o.handsFree
     running = true
     setStatus('connecting')
@@ -312,7 +422,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       } catch {
         await buildGraph(undefined) // browser refused 16 kHz context or a cross-rate mic connection
       }
-      await ctx?.resume()
+      await resumeCtx()
+      watchMic()
+      document.addEventListener('visibilitychange', onVisibility)
       const sock = await openSocket()
       if (!running) {
         sock.close()
@@ -329,8 +441,53 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     }
   }
 
+  /** Resume the AudioContext without ever hanging on a promise the browser may not settle. */
+  async function resumeCtx(): Promise<void> {
+    const c = ctx
+    if (!c || c.state === 'running') return
+    await Promise.race([c.resume().catch(() => {}), new Promise<void>((r) => setTimeout(r, RESUME_TIMEOUT_MS))])
+  }
+
+  function onVisibility() {
+    if (!running) return
+    if (document.visibilityState === 'visible') void resumeCtx()
+    else if (pttHeld) pttUp() // the key-up may never arrive once the page is hidden
+  }
+
+  function watchMic() {
+    micDead = false
+    if (ctx) {
+      ctx.onstatechange = () => {
+        if (running && ctx && ctx.state !== 'running' && ctx.state !== 'closed') void resumeCtx()
+      }
+    }
+    for (const t of stream?.getTracks() ?? []) {
+      t.onended = () => {
+        if (!running || micDead) return
+        micDead = true
+        releasePtt()
+        ev.error('Microphone stopped (unplugged, or permission taken away). Please reconnect it and restart.')
+        setStatus('offline')
+      }
+    }
+  }
+
   function teardown() {
     running = false
+    document.removeEventListener('visibilitychange', onVisibility)
+    if (thinkTimer) clearTimeout(thinkTimer)
+    thinkTimer = null
+    pendingOpen = false
+    partialAt = null
+    micDead = false
+    for (const o of oldSockets) {
+      o.onmessage = null
+      o.onclose = null
+      o.close()
+    }
+    oldSockets.clear()
+    if (ctx) ctx.onstatechange = null
+    for (const t of stream?.getTracks() ?? []) t.onended = null
     if (reconnectTimer) clearTimeout(reconnectTimer)
     reconnectTimer = null
     clearRefresh()
@@ -340,6 +497,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     metricsTimer = null
     pendingMetrics = null
     pttHeld = false
+    swapInFlight = false
+    swapping = false
     if (ws) {
       ws.onclose = null
       ws.onmessage = null
@@ -389,7 +548,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     // the protocol only carries the mode in hello, so re-hello on a fresh socket
     if (running && ws && !swapping) {
       clearRefresh()
-      void proactiveReconnect()
+      void proactiveReconnect(true)
     }
   }
 
@@ -400,9 +559,16 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     pttUp,
     tap: (action) => send({ type: 'tap', action }),
     answer: (text) => send({ type: 'answer', text }),
+    sendText: (text) => send({ type: 'text', text }),
     sendSnapshot: () => {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
+    bargeIn() {
+      if (!running) return
+      send({ type: 'barge' })
+      toPlayer({ type: 'stop' }) // silence now, do not wait for the server
+      if (status === 'speaking' || status === 'thinking') setStatus('listening')
+    },
   }
 }

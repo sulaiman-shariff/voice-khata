@@ -14,6 +14,8 @@ import type { KhataStore, Settings } from './contracts.js'
 
 export interface Persistence {
   loadRecords(): Promise<ChainRecord[]>
+  /** Last stored record (cheap); lets the store notice another tab appended. Optional. */
+  tailRecord?(): Promise<ChainRecord | undefined>
   appendRecord(r: ChainRecord): Promise<void>
   clearRecords(): Promise<void>
   keys: KeyStore
@@ -109,6 +111,11 @@ export function idbPersistence(): Persistence {
       const all = await run<ChainRecord[]>('records', 'readonly', (s) => s.getAll())
       return all.sort((a, b) => a.seq - b.seq)
     },
+    async tailRecord() {
+      const tx = (await db()).transaction('records', 'readonly')
+      const cur = await req(tx.objectStore('records').openCursor(null, 'prev'))
+      return cur ? (cur.value as ChainRecord) : undefined
+    },
     async appendRecord(r) {
       await run('records', 'readwrite', (s) => s.add(r))
     },
@@ -152,13 +159,33 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
     return run
   }
 
+  /** Cross-tab mutex (Web Locks) where available; otherwise just run. */
+  const withLock = <T>(fn: () => Promise<T>): Promise<T> => {
+    const locks = (globalThis as { navigator?: { locks?: { request<R>(name: string, cb: () => Promise<R>): Promise<R> } } }).navigator?.locks
+    return locks ? locks.request('voice-khata-append', fn) : fn()
+  }
+
+  /** Inside the lock: if another tab appended, pick up its records before sealing on top of the tail. */
+  const syncTail = async () => {
+    if (!p.tailRecord) return
+    const tail = await p.tailRecord()
+    const mine = records[records.length - 1]
+    if ((tail?.seq ?? -1) !== (mine?.seq ?? -1)) {
+      records = await p.loadRecords()
+      state = await rebuild()
+    }
+  }
+
   const append = async (evs: LedgerEvent[]) => {
     for (const ev of evs) {
-      const keyId = keyIdFor(ev, (eid) => state.entries.get(eid)?.cid)
-      const rec = await seal(ev, keyId, p.keys, records[records.length - 1])
-      await p.appendRecord(rec)
-      records.push(rec)
-      apply(state, ev, rec.ts)
+      await withLock(async () => {
+        await syncTail()
+        const keyId = keyIdFor(ev, (eid) => state.entries.get(eid)?.cid)
+        const rec = await seal(ev, keyId, p.keys, records[records.length - 1])
+        await p.appendRecord(rec)
+        records.push(rec)
+        apply(state, ev, rec.ts)
+      })
     }
     notify()
   }
@@ -223,6 +250,19 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
       })
     },
     voidEntry: (eid, reason) => enqueue(() => append([{ type: 'entry_voided', eid, reason }])),
+    amendEntry: (eid, ch) => enqueue(() => {
+      const ev: LedgerEvent = { type: 'entry_amended', eid }
+      if (ch.paise !== undefined) ev.paise = ch.paise
+      if (ch.direction) ev.direction = ch.direction
+      if (ch.cid) ev.cid = ch.cid
+      if (ch.day) ev.day = ch.day
+      return append([ev])
+    }),
+    addCustomer: (name) => enqueue(async () => {
+      const cid = globalThis.crypto.randomUUID()
+      await append([{ type: 'customer_added', cid, name, aliases: [] }])
+      return cid
+    }),
     setConsent: (cid, c) => enqueue(() => append([{ type: 'consent', cid, ...c }])),
     addAlias: (cid, alias) => enqueue(() => append([{ type: 'alias_added', cid, alias }])),
     setHousehold: (cid, householdId) => enqueue(() => append([{ type: 'household_set', cid, householdId }])),
@@ -256,6 +296,8 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
           balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid),
         })),
         last: last ? { eid: last.eid, cid: last.cid, paise: last.paise, direction: last.direction, day: last.day } : null,
+        recent: [...state.order].reverse().map((id) => state.entries.get(id)!).filter((e) => e && !e.voided).slice(0, 20)
+          .map((e) => ({ eid: e.eid, cid: e.cid, paise: e.paise, direction: e.direction, day: e.day, promise: e.promise, ts: e.ts })),
         today: pick(today),
         month: pick(month),
       }
@@ -275,10 +317,16 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
     },
     /** Restore: replace everything with these events, re-sealed into a fresh chain with fresh keys. */
     importRecords(items) {
+      // validate everything first: a bad payload must never touch existing data
+      if (!Array.isArray(items)) return Promise.reject(new Error('bad backup'))
+      for (const it of items as { ev?: { type?: unknown }; ts?: unknown }[]) {
+        if (!it || typeof it !== 'object' || !it.ev || typeof it.ev !== 'object' || typeof it.ev.type !== 'string' || typeof it.ts !== 'number' || !Number.isFinite(it.ts)) {
+          return Promise.reject(new Error('bad backup'))
+        }
+      }
       return enqueue(async () => {
         await wipe()
         for (const it of items as { ev: LedgerEvent; ts: number }[]) {
-          if (!it || typeof it !== 'object' || !it.ev || typeof it.ev.type !== 'string') throw new Error('bad backup')
           const keyId = keyIdFor(it.ev, (eid) => state.entries.get(eid)?.cid)
           const rec = await seal(it.ev, keyId, p.keys, records[records.length - 1], it.ts)
           await p.appendRecord(rec)
