@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LedgerOp, ServerMsg, SnapCustomer, Snapshot } from '../shared/protocol.js'
 import type { LlmReading } from './parse/llm.js'
-import { type SttCallbacks, Session } from './session.js'
+import { MID_LIST_HOLD_MS, type SttCallbacks, Session } from './session.js'
 
 const cust = (cid: string, name: string, balanceRs = 0, extra: Partial<SnapCustomer> = {}): SnapCustomer => ({
   cid, name, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: balanceRs * 100, typicalPaise: null, ...extra,
@@ -350,5 +350,38 @@ describe('English answers to open questions', () => {
     await h.turn("add 500 to Suresh's account")
     await h.turn('received 200 from Suresh')
     expect(h.entries().map((e) => [e.cid, e.paise, e.direction])).toEqual([['s', 50000, 'credit'], ['s', 20000, 'payment']])
+  })
+})
+
+describe('a list the recogniser split at a breath', () => {
+  it('joins "Suresh 200," with the rest of the list into one turn', async () => {
+    const h = harness([cust('s', 'Suresh'), cust('g', 'Geeta'), cust('m', 'Mohan')])
+    h.cb.onFinal!('सुरेश 200,')
+    await new Promise((r) => setTimeout(r, 200))
+    expect(h.out.filter((m) => m.type === 'final')).toHaveLength(0) // held, not handled alone
+    h.cb.onFinal!('गीता 150, मोहन 100 उधार')
+    await h.s.idle()
+    const finals = h.out.filter((m): m is Extract<ServerMsg, { type: 'final' }> => m.type === 'final')
+    expect(finals).toHaveLength(1)
+    expect(finals[0].text).toMatch(/सुरेश 200.*गीता 150.*मोहन 100 उधार/)
+    expect(h.said.join(' ')).not.toMatch(/उधार दिया या जमा/) // never asked about Suresh alone
+    expect(h.said.join(' ')).toMatch(/सुरेश.*गीता.*मोहन/)
+  })
+
+  it('a lone "Ramesh 340" is still handled after the short wait', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.cb.onFinal!('रमेश 340')
+    await new Promise((r) => setTimeout(r, MID_LIST_HOLD_MS + 200))
+    await h.s.idle()
+    expect(h.out.some((m) => m.type === 'final' && m.text === 'रमेश 340')).toBe(true)
+    expect(h.said.join(' ')).toMatch(/उधार|जमा/) // asks which way
+  })
+
+  it('a complete line is never held', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.cb.onFinal!('रमेश का 340 उधार')
+    expect(h.out.some((m) => m.type === 'final' && m.text === 'रमेश का 340 उधार')).toBe(true) // handled at once
+    await h.s.idle()
+    expect(h.said.join(' ')).toMatch(/340/)
   })
 })

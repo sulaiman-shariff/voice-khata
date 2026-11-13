@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type EntryIntent, parseFast } from './intent.js'
+import { type EntryIntent, midList, parseFast } from './intent.js'
 import { phoneticKey } from './names.js'
 
 type Exp = { name: string; amount: number; dir: 'credit' | 'payment' | null; day?: number; promise?: boolean }
@@ -144,4 +144,20 @@ describe('commands', () => {
   it('chit-chat is unknown', () => {
     expect(parseFast('aaj mausam accha hai').type).toBe('unknown')
   })
+})
+
+describe('midList', () => {
+  it.each([
+    ['सुरेश 200,', true],
+    ['Suresh 200 aur', true],
+    ['रमेश का 340 उधार', false],
+    ['रमेश का टोटल क्या है', false],
+    ['नहीं, 430', false],
+    ['haan', false],
+  ])('%s -> %s', (t, want) => expect(midList(t)).toBe(want))
+})
+
+describe('go-ahead replies count as yes', () => {
+  it.each(['बदल दो।', 'हाँ, बदल दो', 'badal do', 'kar do', 'लिख दीजिए', 'change it'])('%s', (t) => expect(parseFast(t).type).toBe('yes'))
+  it.each(['हटा दो', 'नहीं, मत बदलो', 'cancel kar do'])('%s is not a yes', (t) => expect(parseFast(t).type).not.toBe('yes'))
 })

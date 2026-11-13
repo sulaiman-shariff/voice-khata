@@ -275,3 +275,23 @@ describe('review fixes', () => {
     expect(v.entries[0].dayOffset).toBe(30)
   })
 })
+
+describe('lists in noise', () => {
+  it('one yes to the list read-back saves every line, without a second read-back each', async () => {
+    const out: ServerMsg[] = []
+    const s = new Session({
+      openStt: () => ({ send: () => {}, commit: () => {}, setKeyterms: () => {}, close: () => {} }),
+      speak: async () => ({ firstAudioMs: 1, bytes: 0 }),
+      llm: async () => { throw new Error('no llm') },
+      send: (m) => out.push(m), sendAudio: () => {}, now: () => 0, newId: (() => { let i = 0; return () => `id${++i}` })(),
+    })
+    s.onClient({ type: 'hello', lang: 'hi', snapshot: { shopName: 'S', customers: [cust('r', 'Ramesh'), cust('s', 'Suresh')], last: null, recent: [], today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 } }, firstRun: false, ptt: false })
+    const noisy = { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: 4, noisy: true }
+    await s.handleText('Ramesh 200, Suresh 300 udhaar', noisy, 'voice')
+    await s.handleText('haan', noisy, 'voice')
+    await s.idle()
+    const saved = out.flatMap((m) => (m.type === 'ops' ? m.ops : [])).filter((o) => o.op === 'entry')
+    expect(saved).toHaveLength(2)
+    expect(s.pending).toBeNull()
+  })
+})

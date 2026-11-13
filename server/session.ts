@@ -7,7 +7,7 @@
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */
-import { type Direction, type EntryIntent, type Intent, directionAnswer, hasUnplacedWords, mentionsChange, mentionsMoney, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, directionAnswer, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
@@ -42,6 +42,10 @@ export interface SessionDeps {
 
 /** Pause after speech before an early commit, when the words already form a complete turn. */
 export const EARLY_COMMIT_PAUSE_MS = 300
+/** How long a line the recogniser closed mid-list waits for the rest of the list. */
+export const MID_LIST_HOLD_MS = 1400
+/** Longest wait while the shopkeeper is still speaking the rest of the list. */
+export const MID_LIST_MAX_MS = 6000
 const ANOMALY_FACTOR = 5
 /** with no history for the customer, ₹10,000 or more is read back first */
 const BIG_PAISE = 10_000_00
@@ -51,11 +55,16 @@ const TTS_TIMEOUT_MS = 10_000
 const POINTS_BACK = /wal[aei]\b|वाल[ाीे]|badl|बदल|change|galat|गलत|asal|असल|actually|instead|entry|एंट्री|\bkal\b|कल|yesterday|parso|परसों/i
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
 
+type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean }
+const minSnr = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b))
+
 interface Draft {
   heardName: string | null
   cid: string | null
   newName: string | null // set when this entry creates a customer
   nameSure: boolean
+  /** the shopkeeper already said yes to a read-back that named this line (a list question) */
+  confirmed?: boolean
   paise: number
   alt: number | null // confusable alternative, rupees
   direction: Direction | null
@@ -98,6 +107,8 @@ export class Session {
   private commitAt: number | null = null
   private earlyCommit = false
   private lastSpeechAt = 0
+  /** a final that stopped mid-list, waiting to be joined with the next one */
+  private held: { text: string; t: TurnTiming; since: number; timer: ReturnType<typeof setTimeout> } | null = null
   pending: Pending | null = null
   /** last few turns, for the model and for "uska / him / same" */
   private history: string[] = []
@@ -272,11 +283,40 @@ export class Session {
     if (!text.trim()) return
     this.sttRetries = 0
     if (this.isEcho(text)) return // our own reply heard back through the phone speaker
+    let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy }
+    if (this.held) {
+      // the rest of a list the recogniser split at a breath: one turn, as spoken
+      clearTimeout(this.held.timer)
+      text = `${this.held.text.trim().replace(/[।.]$/, '')}, ${text.trim()}`
+      t = { ...t, noisy: t.noisy || this.held.t.noisy, snrDb: minSnr(t.snrDb, this.held.t.snrDb) }
+      this.held = null
+    } else if (commitAt === null && !this.ptt && !this.pending && midList(text)) {
+      const since = this.now()
+      this.held = { text, t, since, timer: setTimeout(() => this.releaseHeld(), MID_LIST_HOLD_MS) }
+      this.held.timer.unref?.()
+      this.deps.send({ type: 'partial', text })
+      return
+    }
+    this.dispatchFinal(text, t)
+  }
+
+  private dispatchFinal(text: string, t: TurnTiming) {
     this.deps.send({ type: 'final', text })
     if (this.speaking?.ducked) this.bargeIn()
-    this.enqueue(() =>
-      this.handleText(text, { speechEnd, commitAt, finalAt, early, snrDb, noisy }, 'voice'),
-    )
+    this.enqueue(() => this.handleText(text, t, 'voice'))
+  }
+
+  /** Nothing more came after a mid-list line: handle it as it is (unless the rest is still being spoken). */
+  private releaseHeld() {
+    const h = this.held
+    if (!h || this.closed) return
+    if (this.energy.inUtterance && this.now() - h.since < MID_LIST_MAX_MS) {
+      h.timer = setTimeout(() => this.releaseHeld(), 300)
+      h.timer.unref?.()
+      return
+    }
+    this.held = null
+    this.dispatchFinal(h.text, h.t)
   }
 
   private isEcho(text: string): boolean {
@@ -677,6 +717,7 @@ export class Session {
   }
 
   private needsConfirm(d: Draft): boolean {
+    if (d.confirmed && d.nameSure) return false
     if (d.noisy || !d.nameSure) return true
     const hard = d.reasons.filter((r) => r !== 'name-inherited' && r !== 'llm' && r !== 'confusable-resolved' && r !== 'from-context' && r !== 'dir-all')
     if (d.confidence === 'low' && hard.length) return true
@@ -843,7 +884,11 @@ export class Session {
       if (!d.reasons.some((r) => r !== 'name-inherited' && r !== 'llm' && r !== 'from-context')) d.confidence = 'high'
     }
     if (intent.type === 'yes') {
-      for (const d of drafts) if (d.reasons.includes('dir-shared')) clear(d)
+      // the list was read back name by name: one yes confirms every line, even in noise
+      for (const d of drafts) {
+        if (d.reasons.includes('dir-shared')) clear(d)
+        d.confirmed = true
+      }
       return this.processDrafts(drafts, { parts: [], ops: [] })
     }
     // a one-word direction answers for the list ("jama"): it replaces the shared guess
@@ -851,6 +896,7 @@ export class Session {
     if (dir) {
       // the list shared one spoken word, so the answer replaces it for every line
       for (const d of drafts) {
+        d.confirmed = true
         d.direction = dir
         clear(d)
       }
@@ -1045,6 +1091,8 @@ export class Session {
 
   close() {
     this.closed = true
+    if (this.held) clearTimeout(this.held.timer)
+    this.held = null
     this.speaking?.ac.abort()
     this.stt?.close()
   }

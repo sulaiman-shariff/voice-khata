@@ -94,6 +94,11 @@ const NEG = S('nope', 'nah', 'incorrect', 'nahi', 'nahin', 'नहीं', 'न�
 const YES = S('haan', 'han', 'ha', 'हाँ', 'हां', 'हा', 'ji', 'जी', 'sahi', 'सही', 'theek', 'ठीक', 'thik', 'yes', 'ok',
   'okay', 'correct', 'right', 'ஆமாம்', 'ஆமாங்க', 'ஆமா', 'சரிங்க', 'ಹೂಂ', 'ಹೌದು', 'ಸರಿ', 'హా', 'ఔను', 'అవును', 'సరే', 'హాఁ', 'ஓகே', 'ಓಕೆ', 'ఓకే', 'ओके', 'हम्म', 'हाँजी', 'जी हाँ', 'ji haan', 'yeah', 'yea', 'yep', 'yup', 'sure', 'done', 'fine', 'alright', 'exactly', 'perfect', 'haanji', 'हाँजी', 'theek', 'ठीक', 'bilkul', 'बिल्कुल', 'ಹೌದು', 'ಸರಿ', 'ஆமா', 'ஆம்', 'சரி', 'అవును', 'సరే', 'ശരി', 'അതെ',
   'হ্যাঁ', 'ঠিক', 'હા', 'ਹਾਂ', 'होय')
+/** verbs that agree to the change or entry just read back, when said with an imperative ("badal do") */
+const GO_AHEAD = S('badal', 'बदल', 'badlo', 'बदलो', 'change', 'kar', 'कर', 'karo', 'करो', 'likh', 'लिख', 'likho', 'लिखो', 'save', 'rakh', 'रख',
+  'ಬದಲಾಯಿಸಿ', 'ಮಾಡಿ', 'மாத்துங்க', 'பண்ணுங்க', 'మార్చండి', 'చేయండి')
+const DO_IMP = S('do', 'दो', 'dijiye', 'दीजिए', 'दीजिये', 'dena', 'देना', 'it', 'karo', 'करो', 'badlo', 'बदलो', 'likho', 'लिखो',
+  'ಬದಲಾಯಿಸಿ', 'ಮಾಡಿ', 'மாத்துங்க', 'பண்ணுங்க', 'మార్చండి', 'చేయండి')
 const UNDO = S('undo', 'cancel', 'hata', 'हटा', 'mita', 'मिटा', 'kaat', 'काट', 'delete', 'remove', 'ರದ್ದು', 'அழி',
   'రద్దు', 'वापस')
 const QUERY = S('total', 'kitna', 'kitne', 'कितना', 'कितने', 'कितनी', 'hisaab', 'hisab', 'हिसाब', 'balance', 'how',
@@ -335,6 +340,10 @@ export function parseFast(text: string): Intent {
     // still a yes, as long as nothing in it says no
     if (all.length <= 3 && (YES.has(all[0]) || YES.has(all[all.length - 1])) && !all.some((t) => NEG.has(t) || UNDO.has(t)))
       return { type: 'yes' }
+    // "badal do" / "kar do" / "likh dijiye": go ahead with what was just read back
+    if (has(GO_AHEAD, all) && has(DO_IMP, all) && !all.some((t) => NEG.has(t) || UNDO.has(t)) &&
+      all.every((t) => GO_AHEAD.has(t) || DO_IMP.has(t) || YES.has(t) || FILLER.has(t)))
+      return { type: 'yes' }
   }
   // privacy / delete-all (delete-all is confirmed by the server before acting)
   if (has(PRIVACY, all) && has(ALL, all) && has(UNDO, all)) return { type: 'delete_all' }
@@ -501,6 +510,18 @@ export function turnComplete(text: string): boolean {
     default:
       return false
   }
+}
+
+/**
+ * A line the recogniser closed in the middle of a spoken list ("Suresh 200," + a breath + "Geeta 150 … udhaar"):
+ * an entry with a name and an amount but no credit/paid word yet, ending on the number or a conjunction.
+ */
+export function midList(text: string): boolean {
+  const toks = tokenize(text)
+  const last = toks[toks.length - 1]
+  if (!last || !(isNumberish(last) || isNumberWord(last) || CONJ.has(last))) return false
+  const intent = parseFast(text)
+  return intent.type === 'entries' && intent.entries.some((e) => e.name && e.amount && !e.direction && !e.promise)
 }
 
 // ----------------------------------------------------------------- answers to follow-up questions
