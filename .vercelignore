@@ -1,0 +1,9 @@
+# only the app and function sources are deployed
+eval/
+.env
+.env.*
+!.env.example
+*.wav
+*.npy
+*.parquet
+*.zip

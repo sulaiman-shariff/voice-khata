@@ -1,0 +1,1377 @@
+{
+ "shopName": "Sharma Kirana",
+ "langs": {
+  "hi": {
+   "locale": "hi-IN",
+   "yes": "हाँ।",
+   "dirCredit": "उधार।",
+   "dirPayment": "जमा।",
+   "no": "नहीं।",
+   "customers": [
+    {
+     "cid": "c_ramesh",
+     "name": "रमेश",
+     "aliases": [
+      "Ramesh"
+     ],
+     "balancePaise": 0
+    },
+    {
+     "cid": "c_suresh",
+     "name": "सुरेश",
+     "aliases": [
+      "Suresh"
+     ],
+     "balancePaise": 50000
+    },
+    {
+     "cid": "c_mohan",
+     "name": "मोहन",
+     "aliases": [
+      "Mohan"
+     ],
+     "balancePaise": 0
+    }
+   ],
+   "scenarios": [
+    {
+     "id": "credit",
+     "kind": "credit",
+     "turns": [
+      {
+       "say": "रमेश का तीन सौ चालीस रुपये उधार लिख दो।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 34000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_marker",
+     "kind": "payment via case marker",
+     "turns": [
+      {
+       "say": "सुरेश ने सौ रुपये दिए।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_verb",
+     "kind": "payment verb",
+     "turns": [
+      {
+       "say": "मोहन ने पाँच सौ रुपये वापस किए।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 50000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "new_customer",
+     "kind": "new customer",
+     "turns": [
+      {
+       "say": "गीता का सत्तर रुपये उधार लिखो।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "new",
+          "paise": 7000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "dedh_sau",
+     "kind": "dedh sau / 150",
+     "turns": [
+      {
+       "say": "रमेश का डेढ़ सौ उधार।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 15000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "sawa_sau",
+     "kind": "sawa sau / 125",
+     "turns": [
+      {
+       "say": "सुरेश का सवा सौ रुपये उधार।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 12500,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "scale_1200",
+     "kind": "1200 (elided/compound scale)",
+     "turns": [
+      {
+       "say": "मोहन का बारह सौ रुपये उधार।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 120000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_amount",
+     "kind": "correction of amount",
+     "turns": [
+      {
+       "say": "रमेश का दो सौ रुपये उधार।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 20000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "नहीं, तीन सौ।",
+       "expect": {
+        "amend": {
+         "paise": 30000
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "query",
+     "kind": "balance query",
+     "turns": [
+      {
+       "say": "सुरेश का कितना बाकी है?",
+       "expect": {
+        "said": [
+         "500"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "missing_dir",
+     "kind": "missing direction then one word",
+     "turns": [
+      {
+       "say": "रमेश चार सौ।",
+       "expect": {
+        "pending": "direction"
+       }
+      },
+      {
+       "say": "उधार।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 40000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "promise",
+     "kind": "promise to pay tomorrow",
+     "turns": [
+      {
+       "say": "सुरेश कल दो सौ रुपये देगा।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 20000,
+          "direction": "payment",
+          "promise": true
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "two_entries",
+     "kind": "two entries in one sentence",
+     "turns": [
+      {
+       "say": "रमेश का सौ रुपये उधार और सुरेश ने पचास रुपये जमा किए।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         },
+         {
+          "cid": "c_suresh",
+          "paise": 5000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "confusable_60",
+     "kind": "60 vs 7 confusable",
+     "turns": [
+      {
+       "say": "मोहन ने साठ रुपये दिए।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 6000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "give_credit",
+     "kind": "shopkeeper gave -> credit",
+     "turns": [
+      {
+       "say": "रमेश को तीन सौ रुपये दिए।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 30000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_dir",
+     "kind": "correction of direction",
+     "turns": [
+      {
+       "say": "सुरेश का सौ रुपये उधार।",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "नहीं, जमा।",
+       "expect": {
+        "amend": {
+         "direction": "payment"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "kn": {
+   "locale": "kn-IN",
+   "yes": "ಹೌದು.",
+   "dirCredit": "ಸಾಲ.",
+   "dirPayment": "ಜಮಾ.",
+   "no": "ಇಲ್ಲ.",
+   "customers": [
+    {
+     "cid": "c_ramesh",
+     "name": "ರಮೇಶ್",
+     "aliases": [
+      "Ramesh"
+     ],
+     "balancePaise": 0
+    },
+    {
+     "cid": "c_suresh",
+     "name": "ಸುರೇಶ್",
+     "aliases": [
+      "Suresh"
+     ],
+     "balancePaise": 50000
+    },
+    {
+     "cid": "c_mohan",
+     "name": "ಮೋಹನ್",
+     "aliases": [
+      "Mohan"
+     ],
+     "balancePaise": 0
+    }
+   ],
+   "scenarios": [
+    {
+     "id": "credit",
+     "kind": "credit",
+     "turns": [
+      {
+       "say": "ರಮೇಶ್ ಅವರ ಮುನ್ನೂರ ನಲವತ್ತು ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 34000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_marker",
+     "kind": "payment via case marker",
+     "turns": [
+      {
+       "say": "ಸುರೇಶ್ ನೂರು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_verb",
+     "kind": "payment verb",
+     "turns": [
+      {
+       "say": "ಮೋಹನ್ ಐನೂರು ರೂಪಾಯಿ ಕಟ್ಟಿದರು.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 50000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "new_customer",
+     "kind": "new customer",
+     "turns": [
+      {
+       "say": "ಗೀತಾ ಅವರ ಎಪ್ಪತ್ತು ರೂಪಾಯಿ ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "new",
+          "paise": 7000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "dedh_sau",
+     "kind": "dedh sau / 150",
+     "turns": [
+      {
+       "say": "ರಮೇಶ್ ಅವರ ನೂರೈವತ್ತು ರೂಪಾಯಿ ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 15000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "sawa_sau",
+     "kind": "sawa sau / 125",
+     "turns": [
+      {
+       "say": "ಸುರೇಶ್ ಅವರ ನೂರ ಇಪ್ಪತ್ತೈದು ರೂಪಾಯಿ ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 12500,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "scale_1200",
+     "kind": "1200 (elided/compound scale)",
+     "turns": [
+      {
+       "say": "ಮೋಹನ್ ಅವರ ಒಂದು ಸಾವಿರದ ಇನ್ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 120000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_amount",
+     "kind": "correction of amount",
+     "turns": [
+      {
+       "say": "ರಮೇಶ್ ಅವರ ಇನ್ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 20000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "ಇಲ್ಲ, ಮುನ್ನೂರು.",
+       "expect": {
+        "amend": {
+         "paise": 30000
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "query",
+     "kind": "balance query",
+     "turns": [
+      {
+       "say": "ಸುರೇಶ್ ಅವರ ಬಾಕಿ ಎಷ್ಟು?",
+       "expect": {
+        "said": [
+         "500"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "missing_dir",
+     "kind": "missing direction then one word",
+     "turns": [
+      {
+       "say": "ರಮೇಶ್ ನಾನೂರು ರೂಪಾಯಿ.",
+       "expect": {
+        "pending": "direction"
+       }
+      },
+      {
+       "say": "ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 40000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "promise",
+     "kind": "promise to pay tomorrow",
+     "turns": [
+      {
+       "say": "ಸುರೇಶ್ ನಾಳೆ ಇನ್ನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರೆ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 20000,
+          "direction": "payment",
+          "promise": true
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "two_entries",
+     "kind": "two entries in one sentence",
+     "turns": [
+      {
+       "say": "ರಮೇಶ್ ಅವರ ನೂರು ರೂಪಾಯಿ ಸಾಲ ಮತ್ತು ಸುರೇಶ್ ಐವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         },
+         {
+          "cid": "c_suresh",
+          "paise": 5000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "confusable_60",
+     "kind": "60 vs 7 confusable",
+     "turns": [
+      {
+       "say": "ಮೋಹನ್ ಅರವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 6000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "give_credit",
+     "kind": "shopkeeper gave -> credit",
+     "turns": [
+      {
+       "say": "ರಮೇಶ್‌ಗೆ ಮುನ್ನೂರು ರೂಪಾಯಿ ಕೊಟ್ಟೆ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 30000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_dir",
+     "kind": "correction of direction",
+     "turns": [
+      {
+       "say": "ಸುರೇಶ್ ಅವರ ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "ಇಲ್ಲ, ಜಮಾ.",
+       "expect": {
+        "amend": {
+         "direction": "payment"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "ta": {
+   "locale": "ta-IN",
+   "yes": "ஆமா.",
+   "dirCredit": "கடன்.",
+   "dirPayment": "வரவு.",
+   "no": "இல்லை.",
+   "customers": [
+    {
+     "cid": "c_ramesh",
+     "name": "ரமேஷ்",
+     "aliases": [
+      "Ramesh"
+     ],
+     "balancePaise": 0
+    },
+    {
+     "cid": "c_suresh",
+     "name": "சுரேஷ்",
+     "aliases": [
+      "Suresh"
+     ],
+     "balancePaise": 50000
+    },
+    {
+     "cid": "c_mohan",
+     "name": "மோகன்",
+     "aliases": [
+      "Mohan"
+     ],
+     "balancePaise": 0
+    }
+   ],
+   "scenarios": [
+    {
+     "id": "credit",
+     "kind": "credit",
+     "turns": [
+      {
+       "say": "ரமேஷுக்கு முன்னூற்று நாற்பது ரூபாய் கடன் எழுதுங்கள்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 34000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_marker",
+     "kind": "payment via case marker",
+     "turns": [
+      {
+       "say": "சுரேஷ் நூறு ரூபாய் கட்டினார்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_verb",
+     "kind": "payment verb",
+     "turns": [
+      {
+       "say": "மோகன் ஐநூறு ரூபாய் கொடுத்தார்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 50000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "new_customer",
+     "kind": "new customer",
+     "turns": [
+      {
+       "say": "கீதாவுக்கு எழுபது ரூபாய் கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "new",
+          "paise": 7000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "dedh_sau",
+     "kind": "dedh sau / 150",
+     "turns": [
+      {
+       "say": "ரமேஷ் நூற்று ஐம்பது ரூபாய் கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 15000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "sawa_sau",
+     "kind": "sawa sau / 125",
+     "turns": [
+      {
+       "say": "சுரேஷ் நூற்று இருபத்தைந்து ரூபாய் கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 12500,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "scale_1200",
+     "kind": "1200 (elided/compound scale)",
+     "turns": [
+      {
+       "say": "மோகன் ஆயிரத்து இருநூறு ரூபாய் கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 120000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_amount",
+     "kind": "correction of amount",
+     "turns": [
+      {
+       "say": "ரமேஷ் இருநூறு ரூபாய் கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 20000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "இல்லை, முன்னூறு.",
+       "expect": {
+        "amend": {
+         "paise": 30000
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "query",
+     "kind": "balance query",
+     "turns": [
+      {
+       "say": "சுரேஷுக்கு எவ்வளவு பாக்கி?",
+       "expect": {
+        "said": [
+         "500"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "missing_dir",
+     "kind": "missing direction then one word",
+     "turns": [
+      {
+       "say": "ரமேஷ் நானூறு ரூபாய்.",
+       "expect": {
+        "pending": "direction"
+       }
+      },
+      {
+       "say": "கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 40000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "promise",
+     "kind": "promise to pay tomorrow",
+     "turns": [
+      {
+       "say": "சுரேஷ் நாளைக்கு இருநூறு ரூபாய் கொடுப்பார்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 20000,
+          "direction": "payment",
+          "promise": true
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "two_entries",
+     "kind": "two entries in one sentence",
+     "turns": [
+      {
+       "say": "ரமேஷ் நூறு ரூபாய் கடன் மற்றும் சுரேஷ் ஐம்பது ரூபாய் கட்டினார்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         },
+         {
+          "cid": "c_suresh",
+          "paise": 5000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "confusable_60",
+     "kind": "60 vs 7 confusable",
+     "turns": [
+      {
+       "say": "மோகன் அறுபது ரூபாய் கட்டினார்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 6000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "give_credit",
+     "kind": "shopkeeper gave -> credit",
+     "turns": [
+      {
+       "say": "ரமேஷுக்கு முன்னூறு ரூபாய் கொடுத்தேன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 30000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_dir",
+     "kind": "correction of direction",
+     "turns": [
+      {
+       "say": "சுரேஷ் நூறு ரூபாய் கடன்.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "இல்லை, வரவு.",
+       "expect": {
+        "amend": {
+         "direction": "payment"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "te": {
+   "locale": "te-IN",
+   "yes": "అవును.",
+   "dirCredit": "అప్పు.",
+   "dirPayment": "జమ.",
+   "no": "కాదు.",
+   "customers": [
+    {
+     "cid": "c_ramesh",
+     "name": "రమేష్",
+     "aliases": [
+      "Ramesh"
+     ],
+     "balancePaise": 0
+    },
+    {
+     "cid": "c_suresh",
+     "name": "సురేష్",
+     "aliases": [
+      "Suresh"
+     ],
+     "balancePaise": 50000
+    },
+    {
+     "cid": "c_mohan",
+     "name": "మోహన్",
+     "aliases": [
+      "Mohan"
+     ],
+     "balancePaise": 0
+    }
+   ],
+   "scenarios": [
+    {
+     "id": "credit",
+     "kind": "credit",
+     "turns": [
+      {
+       "say": "రమేష్ కి మూడు వందల నలభై రూపాయలు అప్పు రాయండి.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 34000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_marker",
+     "kind": "payment via case marker",
+     "turns": [
+      {
+       "say": "సురేష్ వంద రూపాయలు కట్టాడు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "pay_verb",
+     "kind": "payment verb",
+     "turns": [
+      {
+       "say": "మోహన్ ఐదు వందల రూపాయలు ఇచ్చాడు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 50000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "new_customer",
+     "kind": "new customer",
+     "turns": [
+      {
+       "say": "గీత డెబ్బై రూపాయలు అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "new",
+          "paise": 7000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "dedh_sau",
+     "kind": "dedh sau / 150",
+     "turns": [
+      {
+       "say": "రమేష్ నూట యాభై రూపాయలు అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 15000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "sawa_sau",
+     "kind": "sawa sau / 125",
+     "turns": [
+      {
+       "say": "సురేష్ నూట ఇరవై ఐదు రూపాయలు అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 12500,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "scale_1200",
+     "kind": "1200 (elided/compound scale)",
+     "turns": [
+      {
+       "say": "మోహన్ వెయ్యి రెండు వందల రూపాయలు అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 120000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_amount",
+     "kind": "correction of amount",
+     "turns": [
+      {
+       "say": "రమేష్ రెండు వందల రూపాయలు అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 20000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "కాదు, మూడు వందలు.",
+       "expect": {
+        "amend": {
+         "paise": 30000
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "query",
+     "kind": "balance query",
+     "turns": [
+      {
+       "say": "సురేష్ కి ఎంత బాకీ ఉంది?",
+       "expect": {
+        "said": [
+         "500"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "missing_dir",
+     "kind": "missing direction then one word",
+     "turns": [
+      {
+       "say": "రమేష్ నాలుగు వందలు.",
+       "expect": {
+        "pending": "direction"
+       }
+      },
+      {
+       "say": "అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 40000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "promise",
+     "kind": "promise to pay tomorrow",
+     "turns": [
+      {
+       "say": "సురేష్ రేపు రెండు వందల రూపాయలు ఇస్తాడు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 20000,
+          "direction": "payment",
+          "promise": true
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "two_entries",
+     "kind": "two entries in one sentence",
+     "turns": [
+      {
+       "say": "రమేష్ వంద రూపాయలు అప్పు మరియు సురేష్ యాభై రూపాయలు ఇచ్చాడు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         },
+         {
+          "cid": "c_suresh",
+          "paise": 5000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "confusable_60",
+     "kind": "60 vs 7 confusable",
+     "turns": [
+      {
+       "say": "మోహన్ అరవై రూపాయలు కట్టాడు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_mohan",
+          "paise": 6000,
+          "direction": "payment",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "give_credit",
+     "kind": "shopkeeper gave -> credit",
+     "turns": [
+      {
+       "say": "రమేష్ కి మూడు వందల రూపాయలు ఇచ్చాను.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_ramesh",
+          "paise": 30000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "correct_dir",
+     "kind": "correction of direction",
+     "turns": [
+      {
+       "say": "సురేష్ వంద రూపాయలు అప్పు.",
+       "expect": {
+        "entries": [
+         {
+          "cid": "c_suresh",
+          "paise": 10000,
+          "direction": "credit",
+          "promise": false
+         }
+        ]
+       }
+      },
+      {
+       "say": "కాదు, జమ.",
+       "expect": {
+        "amend": {
+         "direction": "payment"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

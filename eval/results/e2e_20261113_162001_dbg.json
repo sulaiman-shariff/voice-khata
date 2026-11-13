@@ -1,0 +1,257 @@
+{
+ "url": "wss://voice-khata-delta.vercel.app/api/voice",
+ "conditions": [
+  {
+   "noise": "none",
+   "snr": null,
+   "label": "clean"
+  }
+ ],
+ "langs": [
+  "hi"
+ ],
+ "streamedSecondsSummed": 23.2304088,
+ "wallSeconds": 6.7284888,
+ "summaries": {
+  "hi|clean": {
+   "entryN": 4,
+   "exact": 4,
+   "direct": 4,
+   "askedOk": 0,
+   "asked": 0,
+   "entryTurns": 4,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 4,
+   "dirOk": 4,
+   "corrN": 0,
+   "corrOk": 0,
+   "queryN": 0,
+   "queryOk": 0,
+   "pendN": 0,
+   "pendOk": 0,
+   "skipped": 0,
+   "p50": 820.5194000000001,
+   "p95": 1053.0169000000005,
+   "latN": 4
+  },
+  "ALL|clean": {
+   "entryN": 4,
+   "exact": 4,
+   "direct": 4,
+   "askedOk": 0,
+   "asked": 0,
+   "entryTurns": 4,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 4,
+   "dirOk": 4,
+   "corrN": 0,
+   "corrOk": 0,
+   "queryN": 0,
+   "queryOk": 0,
+   "pendN": 0,
+   "pendOk": 0,
+   "skipped": 0,
+   "p50": 820.5194000000001,
+   "p95": 1053.0169000000005,
+   "latN": 4
+  }
+ },
+ "turns": [
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "सुरेश ने सौ रुपये दिए।",
+   "heard": [
+    "सुरेश ने 100 रुपए दिए।"
+   ],
+   "replied": [
+    "सुरेश, 100 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 820.5194000000001,
+   "snrDb": 81.50682118855364,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "गीता का सत्तर रुपये उधार लिखो।",
+   "heard": [
+    "गीता का 70 रुपये उधार लिखो।"
+   ],
+   "replied": [
+    "गीता का नया खाता खोला। गीता, 70 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:गीता",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 585.3424,
+   "snrDb": 77.2980234063685,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "रमेश का तीन सौ चालीस रुपये उधार लिख दो।",
+   "heard": [
+    "रमेश का 340 रुपये उधार लिख दो।"
+   ],
+   "replied": [
+    "रमेश, 340 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 752.4542999999994,
+   "snrDb": 80.2085879786388,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "मोहन ने पाँच सौ रुपये वापस किए।",
+   "heard": [
+    "मोहन ने 500 रुपये वापस किए।"
+   ],
+   "replied": [
+    "मोहन, 500 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1053.0169000000005,
+   "snrDb": 81.52762318515933,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  }
+ ]
+}

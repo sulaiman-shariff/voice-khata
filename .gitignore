@@ -1,0 +1,19 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# deps / build
+node_modules/
+dist/
+.vercel/
+
+# eval data (downloaded audio, results)
+eval/data/
+eval/results/*.wav
+*.wav
+
+# misc
+.DS_Store
+*.log
+.playwright-mcp/

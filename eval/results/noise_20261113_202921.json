@@ -1,0 +1,2030 @@
+[
+ {
+  "id": "u03",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u04",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u02",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u01",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u05",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "कृपया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1,870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u12",
+  "noise": "clean",
+  "snr": null,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u03",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u11",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮಿ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u10",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u12",
+  "noise": "STRAFFIC",
+  "snr": 15,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u03",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "कृपया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u11",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u10",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u12",
+  "noise": "STRAFFIC",
+  "snr": 10,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दें।"
+ },
+ {
+  "id": "u03",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u12",
+  "noise": "STRAFFIC",
+  "snr": 5,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "खरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दें।"
+ },
+ {
+  "id": "u02",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u03",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u04",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 रुपये दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u12",
+  "noise": "STRAFFIC",
+  "snr": 0,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "खरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u02",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u03",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u04",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1,870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u12",
+  "noise": "PCAFETER",
+  "snr": 15,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u03",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "कृपया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮಿ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟಳು."
+ },
+ {
+  "id": "u12",
+  "noise": "PCAFETER",
+  "snr": 10,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "खरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिखता।"
+ },
+ {
+  "id": "u02",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u03",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u04",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दल।"
+ },
+ {
+  "id": "u07",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1,870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮಿ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟದ್ದು."
+ },
+ {
+  "id": "u12",
+  "noise": "PCAFETER",
+  "snr": 5,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का साढ़े तीन सौ बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दें।"
+ },
+ {
+  "id": "u02",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u03",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u04",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "उन्होंने 150 से अधिक लोगों को बचाया।"
+ },
+ {
+  "id": "u07",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये का ऑर्डर है।"
+ },
+ {
+  "id": "u06",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लें।"
+ },
+ {
+  "id": "u08",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1,870 उधार।"
+ },
+ {
+  "id": "u12",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "खरी का 350 बाकी"
+ },
+ {
+  "id": "u11",
+  "noise": "PCAFETER",
+  "snr": 0,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಡ್ತಾರೆ."
+ },
+ {
+  "id": "u01",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u02",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u03",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u04",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "कृपया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक में 260 रुपये दिए।"
+ },
+ {
+  "id": "u11",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮಿ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u10",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u12",
+  "noise": "SPSQUARE",
+  "snr": 15,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u03",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u11",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u10",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u12",
+  "noise": "SPSQUARE",
+  "snr": 10,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u03",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी।"
+ },
+ {
+  "id": "u06",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u11",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u10",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u12",
+  "noise": "SPSQUARE",
+  "snr": 5,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "हरी का 350 बाकी।"
+ },
+ {
+  "id": "u01",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   340
+  ],
+  "got": [
+   340
+  ],
+  "ok": true,
+  "text": "रमेश का 340 रुपये उधार लिख दो।"
+ },
+ {
+  "id": "u03",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   7
+  ],
+  "got": [
+   7
+  ],
+  "ok": true,
+  "text": "गीता का 7 रुपये बाकी है।"
+ },
+ {
+  "id": "u02",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   60
+  ],
+  "got": [
+   60
+  ],
+  "ok": true,
+  "text": "सुरेश ने 60 रुपये जमा किए।"
+ },
+ {
+  "id": "u04",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   175
+  ],
+  "got": [
+   175
+  ],
+  "ok": true,
+  "text": "मोहन का 175 उधार।"
+ },
+ {
+  "id": "u05",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   150
+  ],
+  "got": [
+   150
+  ],
+  "ok": true,
+  "text": "अनिल ने 150 दिए।"
+ },
+ {
+  "id": "u07",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   17
+  ],
+  "got": [
+   17
+  ],
+  "ok": true,
+  "text": "रवि का 17 रुपये बाकी है।"
+ },
+ {
+  "id": "u06",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   70
+  ],
+  "got": [
+   70
+  ],
+  "ok": true,
+  "text": "प्रिया का 70 रुपये उधार लिख लो।"
+ },
+ {
+  "id": "u08",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   1500
+  ],
+  "got": [
+   1500
+  ],
+  "ok": true,
+  "text": "Sunita took 1,500 rupees on credit."
+ },
+ {
+  "id": "u09",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   260
+  ],
+  "got": [
+   260
+  ],
+  "ok": true,
+  "text": "दीपक ने 260 रुपये दिए।"
+ },
+ {
+  "id": "u10",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   1870
+  ],
+  "got": [
+   1870
+  ],
+  "ok": true,
+  "text": "विमला का 1870 उधार।"
+ },
+ {
+  "id": "u11",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   2500
+  ],
+  "got": [
+   2500
+  ],
+  "ok": true,
+  "text": "ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+ },
+ {
+  "id": "u12",
+  "noise": "SPSQUARE",
+  "snr": 0,
+  "expected": [
+   350
+  ],
+  "got": [
+   350
+  ],
+  "ok": true,
+  "text": "खरी का 350 बाकी।"
+ }
+]

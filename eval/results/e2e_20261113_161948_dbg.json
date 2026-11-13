@@ -1,0 +1,233 @@
+{
+ "url": "wss://voice-khata-delta.vercel.app/api/voice",
+ "conditions": [
+  {
+   "noise": "none",
+   "snr": null,
+   "label": "clean"
+  }
+ ],
+ "langs": [
+  "hi"
+ ],
+ "streamedSecondsSummed": 24.1591765,
+ "wallSeconds": 7.1711618,
+ "summaries": {
+  "hi|clean": {
+   "entryN": 4,
+   "exact": 0,
+   "direct": 0,
+   "askedOk": 0,
+   "asked": 3,
+   "entryTurns": 4,
+   "askedWrong": 0,
+   "noSave": 4,
+   "silentWrong": 0,
+   "dirN": 4,
+   "dirOk": 0,
+   "corrN": 0,
+   "corrOk": 0,
+   "queryN": 0,
+   "queryOk": 0,
+   "pendN": 0,
+   "pendOk": 0,
+   "skipped": 0,
+   "p50": -193.1278000000002,
+   "p95": 72.57009999999991,
+   "latN": 3
+  },
+  "ALL|clean": {
+   "entryN": 4,
+   "exact": 0,
+   "direct": 0,
+   "askedOk": 0,
+   "asked": 3,
+   "entryTurns": 4,
+   "askedWrong": 0,
+   "noSave": 4,
+   "silentWrong": 0,
+   "dirN": 4,
+   "dirOk": 0,
+   "corrN": 0,
+   "corrOk": 0,
+   "queryN": 0,
+   "queryOk": 0,
+   "pendN": 0,
+   "pendOk": 0,
+   "skipped": 0,
+   "p50": -193.1278000000002,
+   "p95": 72.57009999999991,
+   "latN": 3
+  }
+ },
+ "turns": [
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "सुरेश ने सौ रुपये दिए।",
+   "heard": [
+    "सुरेश ने"
+   ],
+   "replied": [],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#0 not saved",
+   "latencyMs": null,
+   "snrDb": 82.75852562472961,
+   "entryOutcomes": [
+    "no_save"
+   ],
+   "dirOk": [
+    false
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "गीता का सत्तर रुपये उधार लिखो।",
+   "heard": [
+    "गीता का 70।"
+   ],
+   "replied": [
+    "गीता, 70 रुपये, उधार दिया या जमा किया?"
+   ],
+   "asked": [
+    "direction"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#0 not saved (agent stuck asking direction)",
+   "latencyMs": -193.1278000000002,
+   "snrDb": 77.21397444671383,
+   "entryOutcomes": [
+    "no_save"
+   ],
+   "dirOk": [
+    false
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "मोहन ने पाँच सौ रुपये वापस किए।",
+   "heard": [
+    "मोहन ने 500।"
+   ],
+   "replied": [
+    "मोहन, 500 रुपये, उधार दिया या जमा किया?"
+   ],
+   "asked": [
+    "direction"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#0 not saved (agent stuck asking direction)",
+   "latencyMs": 72.57009999999991,
+   "snrDb": 83.27323392132894,
+   "entryOutcomes": [
+    "no_save"
+   ],
+   "dirOk": [
+    false
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "रमेश का तीन सौ चालीस रुपये उधार लिख दो।",
+   "heard": [
+    "रमेश का 304।"
+   ],
+   "replied": [
+    "रमेश, 304 रुपये, उधार दिया या जमा किया?"
+   ],
+   "asked": [
+    "direction"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#0 not saved (agent stuck asking direction)",
+   "latencyMs": -387.6675000000005,
+   "snrDb": 81.48976968778382,
+   "entryOutcomes": [
+    "no_save"
+   ],
+   "dirOk": [
+    false
+   ],
+   "kindOf": "entry"
+  }
+ ]
+}
