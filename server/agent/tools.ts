@@ -28,7 +28,7 @@ import { NAME_SURE, matchName } from '../../shared/names.js'
 import { formatINR } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
 import { LANGS, LANG_NAME, type Lang, guardReply, say, sayMore } from '../../shared/replies.js'
-import { type ChooseOption, LedgerCore, type Reply, type TurnMeta } from '../ledger/core.js'
+import { type ChooseOption, LedgerCore, type Reply, type TurnMeta, WRITTEN_KEEP_MS } from '../ledger/core.js'
 import type { GeminiTool } from '../parse/gemini.js'
 import { type LlmReading, validate } from '../parse/llm.js'
 
@@ -257,6 +257,24 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       }
       const intent = validate(text, raw, contextAmounts, recent.length)
       if (intent.type !== 'entries') return notCaught()
+      // the same customer + amount + direction as an entry written in the last 60 s: the model
+      // repeating itself (or a re-read of one sentence) is not a second entry. Saying it plainly
+      // again takes the instant path, which still writes.
+      const dup = (e: (typeof intent.entries)[number]): SnapCustomer | null => {
+        const c = e.name ? core.lookup(e.name) : null
+        if (!c || e.promise || !e.direction) return null
+        const same = entries.some((x) => x.cid === c.cid && !x.promise && x.direction === e.direction &&
+          x.paise === Math.round(e.amount.value * 100) && core.wroteRecently(x.eid, WRITTEN_KEEP_MS))
+        return same ? c : null
+      }
+      const dups = intent.entries.filter((e) => dup(e))
+      if (dups.length) {
+        const said = dups.map((e) => R.alreadyWritten(dup(e)!.name, e.amount.value))
+        const rest = intent.entries.filter((e) => !dup(e))
+        if (!rest.length) return speak(...said)
+        const r = core.addEntries({ ...intent, entries: rest }, text, tm)
+        return { ...r, parts: [...said, ...r.parts] }
+      }
       return core.addEntries(intent, text, tm)
     }
     case 'change_entry': {

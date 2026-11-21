@@ -20,7 +20,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { mentionsMoney } from '../shared/intent.js'
-import type { LedgerOp, PendingView, ServerMsg, SnapCustomer, Snapshot } from '../shared/protocol.js'
+import type { LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot } from '../shared/protocol.js'
 import { AGENT_SYSTEM, type AgentContext, type ToolCall, decide } from '../server/agent/agent.js'
 import { GEMINI_TOOLS, TOOL_SCHEMAS } from '../server/agent/tools.js'
 import { Session } from '../server/session.js'
@@ -66,8 +66,10 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
     for (const [k, vs] of Object.entries(c.names)) if (vs.some((v) => norm(v) === n || n.split(' ').includes(norm(v)))) return k
     return null
   }
+  // what the phone would hold: the entries written so far, newest first (a snapshot resend must not forget them)
+  const onPhone: SnapEntry[] = []
   const snapshot = (): Snapshot => ({
-    shopName: 'Shop', customers: [...customers], last: null, entries: [],
+    shopName: 'Shop', customers: [...customers], last: onPhone[0] ?? null, entries: [...onPhone],
     today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   })
   const s = new Session({
@@ -141,6 +143,7 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
       }
       if (o.op === 'entry') {
         const name = customers.find((x) => x.cid === o.cid)?.name ?? null
+        onPhone.unshift({ eid: o.eid, cid: o.cid, paise: o.paise, direction: o.direction, day: new Date().toISOString().slice(0, 10), promise: o.promise || undefined })
         written.push({ name: name && (canon(name) ?? name), rs: o.paise / 100, dir: o.direction })
       }
     }

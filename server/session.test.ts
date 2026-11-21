@@ -979,3 +979,35 @@ describe('fast answers need no model, and a dropped final leaves nothing behind'
     expect(h.agentCalls[0].ctx.heard).toEqual([{ locale: 'hi-IN', text: 'Ramesh ka hisaab dikhao' }])
   })
 })
+
+describe('the agent never writes the same entry twice in a minute', () => {
+  const again = () => callsOf({ name: 'add_entries', args: { entries: [{ name: 'Mahi', amount: 300, direction: 'payment' }] } })
+  const people = () => [cust('m', 'Mahi', 0)]
+
+  it('an identical agent entry within 60 s is not written and says it is already written', async () => {
+    const h = harness(people(), { lang: 'en', agent: again })
+    await h.turn('woh Mahi wali baat 300 jama kar dena na')
+    expect(h.written()).toEqual([['m', 300, 'payment']])
+    h.tick(30_000)
+    await h.turn('woh Mahi wali baat 300 jama kar dena na')
+    expect(h.written()).toHaveLength(1)
+    expect(h.said).toEqual([say('en').alreadyWritten('Mahi', 300)])
+    expect(h.asks).toBeNull()
+  })
+
+  it('after 61 s it behaves as before', async () => {
+    const h = harness(people(), { lang: 'en', agent: again })
+    await h.turn('woh Mahi wali baat 300 jama kar dena na')
+    h.tick(61_000)
+    await h.turn('woh Mahi wali baat 300 jama kar dena na')
+    expect(h.written().length + (h.asks ? 1 : 0)).toBeGreaterThan(1)
+  })
+
+  it('a plain instant-path repeat still writes', async () => {
+    const h = harness(people(), { lang: 'en', agent: () => { throw new Error('no agent') } })
+    await h.turn('Mahi paid 300')
+    h.tick(10_000)
+    await h.turn('Mahi paid 300')
+    expect(h.written()).toHaveLength(2)
+  })
+})

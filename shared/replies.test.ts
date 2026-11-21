@@ -43,7 +43,7 @@ it('the guard blocks lending, pressure and judging, and lets a plain balance thr
 describe('agent tool replies', () => {
   const KEYS = [
     'savedWithBalance', 'showCustomer', 'showDues', 'showHistory', 'showToday', 'searchResult', 'topDebtors', 'closed',
-    'customerAdded', 'renamed', 'mergeAsk', 'merged', 'phoneSet', 'reminderReady', 'statementReady', 'noConsent',
+    'customerAdded', 'renamed', 'mergeAsk', 'merged', 'phoneSet', 'reminderReady', 'statementReady', 'noConsent', 'alreadyWritten',
     'languageSet', 'readBackSet', 'speedSet', 'shopNameSet', 'privacyOpen', 'backupReady', 'eraseAsk', 'eraseTap',
     'awakeHello', 'sleeping',
   ]
@@ -73,7 +73,7 @@ describe('agent tool replies', () => {
       S.showDues(3, 12500), S.showHistory('Ramesh', 4), S.showToday(10, 20), S.searchResult('milk', 2), S.searchResult('milk', 0),
       S.topDebtors(['Ramesh', 'Suresh']), S.topDebtors([]), S.closed(), S.customerAdded('Ramesh'), S.renamed('Ramesh', 'Rakesh'),
       S.mergeAsk('Ramesh', 'Rakesh'), S.merged('Ramesh', 'Rakesh'), S.phoneSet('Ramesh'), S.reminderReady('Ramesh'),
-      S.statementReady('Ramesh'), S.noConsent('Ramesh'), S.languageSet('Tamil'), S.readBackSet(true), S.readBackSet(false),
+      S.statementReady('Ramesh'), S.noConsent('Ramesh'), S.alreadyWritten('Ramesh', 300), S.languageSet('Tamil'), S.readBackSet(true), S.readBackSet(false),
       S.speedSet(true), S.speedSet(false), S.shopNameSet('Sharma Store'), S.privacyOpen(), S.backupReady(), S.eraseAsk(),
       S.eraseTap(), S.awakeHello(), S.sleeping(),
     ]
