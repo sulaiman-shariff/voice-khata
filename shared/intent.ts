@@ -564,6 +564,12 @@ export function nameAnswer(text: string): string | null {
   return name || null
 }
 
+/** "Ramesh ka udhaar clear", "hisaab chukta": the customer paid off the whole balance. */
+const SETTLE = S('clear', 'cleared', 'settle', 'settled', 'chukta', 'चुकता', 'chuktha', 'क्लियर', 'ಕ್ಲಿಯರ್', 'ಚುಕ್ತಾ', 'க்ளியர்', 'క్లియర్')
+export function mentionsSettle(text: string): boolean {
+  return tokenize(text).some((t) => SETTLE.has(t))
+}
+
 /** "ಮಾಹಿ ಹೆಸರಿಂದ", "Suresh ke naam se": the turn says whose name or account it is about. */
 export function hasNameWord(text: string): boolean {
   return tokenize(text).some((t) => NAME_WORDS.has(t))

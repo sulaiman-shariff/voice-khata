@@ -7,7 +7,7 @@
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */
-import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasNameWord, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasNameWord, mentionsSettle, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
@@ -66,6 +66,19 @@ const ANOMALY_FACTOR = 5
 /** with no history for the customer, ₹10,000 or more is read back first */
 const BIG_PAISE = 10_000_00
 const PENDING_TTL_MS = 45_000
+/** Ledger words per language, given to the recogniser as hints (see keyterms()). */
+const LEDGER_TERMS: Record<string, string[]> = {
+  en: ['credit', 'paid', 'udhaar', 'jama', 'rupees', 'clear'],
+  hi: ['उधार', 'जमा', 'रुपये', 'दिए', 'लिए', 'चुकता'],
+  kn: ['ಸಾಲ', 'ಉದ್ರಿ', 'ಜಮಾ', 'ರೂಪಾಯಿ', 'ಕೊಟ್ಟರು', 'ಬರೆಯಿರಿ'],
+  ta: ['கடன்', 'வரவு', 'ரூபாய்', 'கொடுத்தார்'],
+  te: ['అప్పు', 'జమ', 'రూపాయలు', 'ఇచ్చారు'],
+  ml: ['കടം', 'വരവ്', 'രൂപ', 'തന്നു'],
+  mr: ['उधार', 'जमा', 'रुपये', 'दिले'],
+  bn: ['বাকি', 'জমা', 'টাকা', 'দিয়েছে'],
+  gu: ['ઉધાર', 'જમા', 'રૂપિયા', 'આપ્યા'],
+  pa: ['ਉਧਾਰ', 'ਜਮ੍ਹਾ', 'ਰੁਪਏ', 'ਦਿੱਤੇ'],
+}
 const TTS_TIMEOUT_MS = 10_000
 /** words that point at an entry already written */
 const POINTS_BACK = /wal[aei]\b|वाल[ाीे]|badl|बदल|change|galat|गलत|asal|असल|actually|instead|entry|एंट्री|\bkal\b|कल|yesterday|parso|परसों/i
@@ -93,6 +106,8 @@ interface Draft {
   readBack?: boolean
   /** heard, not typed: a name in it may be a mishearing, so a new account is read back first */
   spoken: boolean
+  /** the turn had only this one line: a known customer named anywhere in it is this line's customer */
+  single?: boolean
   /** times the open question about this line was asked again (once at most, then it waits quietly) */
   reasked?: number
   paise: number
@@ -288,8 +303,14 @@ export class Session {
     this.deps.warm?.([R.ack(), R.didNotCatch()], LOCALE[this.lang], this.speed)
   }
 
+  /**
+   * Hints for Prisma: customer names, then the ledger words of the language (and the English ones
+   * shopkeepers mix in). Measured on recorded turns: "500 pet" -> "500 paid", "uthar clear" ->
+   * "udhaar clear", and a name lost in chatter came back.
+   */
   private keyterms(): string[] {
-    return this.snap.customers.flatMap((c) => [c.name, ...c.aliases]).slice(0, 200)
+    const names = this.snap.customers.flatMap((c) => [c.name, ...c.aliases])
+    return [...names, ...(LEDGER_TERMS[this.lang] ?? []), ...LEDGER_TERMS.en].filter((x, i, a) => a.indexOf(x) === i).slice(0, 200)
   }
 
   private openStt(reason = 'hello') {
@@ -673,7 +694,8 @@ export class Session {
         // the model could not read it either, and the fast reading has no credit/paid word and no
         // customer we know ("Sukha, 3 rupees" from "teen sau"; "So, 1300"): a guess, not an entry
         else if (reading.intent === 'unclear' && intent.type === 'entries' &&
-          intent.entries.every((e) => !e.direction && !(e.name && this.lookup(e.name)))) {
+          intent.entries.every((e) => !e.direction && !(e.name && this.lookup(e.name))) &&
+          !(intent.entries.length === 1 && this.knownWithin(text))) {
           this.log.info('unclear_over_guess', { turn, text })
           intent = { type: 'unknown' }
         }
@@ -887,6 +909,7 @@ export class Session {
     switch (intent.type) {
       case 'entries': {
         const drafts = intent.entries.map((e) => this.draftFrom(e, text, snrDb, noisy, path))
+        if (drafts.length === 1) drafts[0].single = true
         // "uska 100 aur" / "usko 50 udhaar": the customer we were just talking about
         if (this.focusCid && refersBack(text))
           for (const d of drafts)
@@ -962,6 +985,8 @@ export class Session {
       case 'unknown': {
         // Part of an entry, said on its own: start the entry and ask for what is missing.
         // Only a name ("ಮಾಹಿ ಹೆಸರಿಂದ"): ask how much. Only an amount ("300"): ask whose.
+        const settle = this.settleDraft(text, snrDb, noisy, path)
+        if (settle) return this.processDrafts([settle], { parts: [], ops: [] })
         const part = this.partialDraft(text, snrDb, noisy, path)
         if (part) return this.processDrafts([part], { parts: [], ops: [] })
         // background talk to a customer is ignored; only speak up if it sounded like ledger talk
@@ -1077,7 +1102,7 @@ export class Session {
     if (!near.length) {
       // before opening a new account: does the heard name contain a customer we already have?
       // ("ಸುರೇಶ್ ಹೆಸರಿಂದ", "Sureshdu", "ಸುರೇಶ್ದು" -> Suresh). Then read it back instead of guessing.
-      const inside = this.knownWithin(d.heardName!)
+      const inside = this.knownWithin(d.heardName!) ?? (d.single ? this.knownWithin(d.transcript) : null)
       if (inside) {
         this.log.info('name_guard', { heard: d.heardName, matched: inside.name })
         d.cid = inside.cid
@@ -1486,13 +1511,30 @@ export class Session {
       snrDb, noisy, spoken: this.turnSrc !== 'tap',
     })
     if (!amounts.length) {
-      if (!this.loneName(text)) return null
-      return blank(nameAnswer(text), 0, ['no-amount'])
+      const n = nameAnswer(text)
+      const shortWithDir = !!directionAnswer(text) && !!n && n.split(' ').length <= 2 && text.trim().split(/\s+/).length <= 5
+      if (!this.loneName(text) && !shortWithDir) return null
+      return blank(n, 0, ['no-amount'])
     }
     // only the amount: every word is a number, currency or filler ("300", "300, 300", "300 rupees")
     const same = amounts.every((a) => a.value === amounts[0].value)
     if (same && mentionsMoney(text) && !hasUnplacedWords(text, [])) return blank(null, amounts[0].value, ['no-name'])
     return null
+  }
+
+  /**
+   * "Ramesh ka udhaar clear" / "hisaab chukta": the customer paid off what they owe. Only for one
+   * customer we know who owes something; always read back ("Ramesh, 200 rupees paid, correct?").
+   */
+  private settleDraft(text: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Draft | null {
+    if (!mentionsSettle(text) || parseAmounts(text).some((a) => a.value > 0)) return null
+    const c = this.knownWithin(text) ?? (nameAnswer(text) ? this.lookup(nameAnswer(text)!) : null)
+    if (!c || c.balancePaise <= 0) return null
+    return {
+      heardName: c.name, cid: c.cid, newName: null, nameSure: true, paise: c.balancePaise, alt: null, direction: 'payment',
+      dayOffset: 0, promise: false, confidence: 'low', reasons: ['settle-balance'], path, transcript: text, snrDb, noisy,
+      spoken: this.turnSrc !== 'tap', single: true,
+    }
   }
 
   /** Long talk with no answer in it is the shopkeeper talking to someone else: keep the question, stay quiet. */
