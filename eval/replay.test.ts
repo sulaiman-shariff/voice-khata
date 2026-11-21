@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
-const MISSED_NOW = 1 // 9l8xtcf6: "ಸುಲೇಮಾನ್" said alone, then "another thing" (Suleiman ₹300 credit)
+const MISSED_NOW = 2 // 9l8xtcf6: "ಮಾಹಿ ಹೆಸರಿಂದ" / "ಸುಲೇಮಾನ್" said alone, then "300 ಬರೀ": a new name is read back even on a tap, and the log has no yes for it
 
 describe('production conversations replayed', () => {
   it('write 0 wrong entries and open 0 junk accounts', () => {

@@ -147,6 +147,17 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
 | Unit tests | 540 passing |
 
+### Audio for unclear moments
+
+The agent first reads the words. Only when it answers `unclear` is the utterance audio (up to 20 s) sent in a second call, and only inside a 2 500 ms budget counted from the start of the first call; over budget or still unclear, the shopkeeper is asked to repeat. Every write from an audio reading is read back (`from-audio` is a hard reason). Measured with `eval/audio_latency.ts` (20 synthetic addressed lines, about 3 s each, Vertex asia-south1, three live runs; the first two runs ignored failed calls, the third counts a failed or timed-out call as the 15 s timeout and prints the error rate):
+
+| Model | Cold first call | Warm p50 | Warm p95 (n=20) | Errors |
+|---|---|---|---|---|
+| gemini-3.5-flash-lite | 3.2 s, 7.7 s, or timeout | 1.34 - 1.54 s | 2.3 s, 7.1 s, 9.1 s | 0/20 in the counted run (one warm-up timeout in run 2) |
+| gemini-3.5-flash | 1.5 - 2.5 s | 1.84 - 2.08 s | 3.9 s, 6.9 s, 14.5 s | 0/20 in the counted run |
+
+Latency varies a lot from run to run (occasional multi-second spikes), so the 2 500 ms cut-off in the session is what protects the reply time. `AGENT_AUDIO_MODEL` selects the model; the default is `gemini-3.5-flash-lite` (best p50, and the only one that met p95 <= 2 500 ms, in one of three runs). flash-lite's cold first call is about 3 to 8 s or a timeout, so the first audio retry after a cold start is usually cut off and the shopkeeper is asked to repeat.
+
 ### Replaying real conversations
 
 Every production session in the logs becomes a replayable conversation: `eval/logs_to_corpus.py` turns `vercel logs --json` dumps into steps (what was said, tapped or typed, plus the model readings logged for each text), and `eval/corpus/label_prod.py` adds what the shopkeeper meant. `npx tsx eval/replay.ts` runs every conversation through the Session with no audio and no network (the model's answers are the logged ones) and counts:

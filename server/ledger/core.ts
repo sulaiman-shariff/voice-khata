@@ -53,10 +53,10 @@ export type Pending =
   | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
   | { kind: 'which'; draft: Draft; queue: Draft[]; options: SnapCustomer[] }
   /**
-   * Erase everything. With requireTap (the agent's erase_all) a spoken yes only arms it
-   * (spokenYes); the on-screen button tap then erases. Without it, a yes erases (the old flow).
+   * Erase everything. With requireType (the agent's erase_all) only the typed word erases;
+   * a spoken or tapped yes never does. Without it, a yes erases (the old flow).
    */
-  | { kind: 'delete'; requireTap?: boolean; spokenYes?: boolean }
+  | { kind: 'delete'; requireType?: string }
   /** one question for a list that shared a single direction word */
   | { kind: 'batch'; drafts: Draft[] }
   /**
@@ -658,21 +658,22 @@ export class LedgerCore {
       this.pending = null
       return this.choose(p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
     }
+    if (p.kind === 'delete' && p.requireType) {
+      // typed on the phone (answer / text), exactly the word: nothing spoken can do this
+      const norm = (x: string) => x.normalize('NFC').trim().toLowerCase()
+      if (this.turnSrc === 'tap' && norm(text) === norm(p.requireType)) {
+        this.pending = null
+        return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
+      }
+      // a yes (spoken or tapped) is not enough: keep waiting for the word
+      if (intent.type === 'yes') return { parts: [R.eraseType(p.requireType)], ops: [] }
+    }
     if (intent.type === 'undo' || (intent.type === 'no' && p.kind !== 'confusable')) {
       this.pending = null
       if (p.kind === 'delete') return { parts: [R.notSaved()], ops: [] }
       return { parts: [R.notSaved()], ops: [] }
     }
     if (p.kind === 'delete') {
-      if (p.requireTap && intent.type === 'yes') {
-        // erase_all: a spoken yes arms it, then only the on-screen button erases
-        if (this.turnSrc === 'tap' && p.spokenYes) {
-          this.pending = null
-          return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
-        }
-        if (this.turnSrc !== 'tap') this.pending = { kind: 'delete', requireTap: true, spokenYes: true }
-        return { parts: [this.turnSrc !== 'tap' ? R.eraseTap() : R.eraseAsk()], ops: [] }
-      }
       this.pending = null
       if (intent.type === 'yes') return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
       return { parts: [R.notSaved()], ops: [] }
@@ -765,7 +766,9 @@ export class LedgerCore {
           return { parts: [R.askDirection(this.customerName(d), d.paise / 100)], ops: [] }
         }
         d.direction = dir
-        if (this.turnSrc === 'tap') {
+        // a new name the model supplied is always read back, even on a tap: the card showed the
+        // direction question, not "open an account for this word?"
+        if (this.turnSrc === 'tap' && !(d.newName && d.path === 'llm')) {
           // tapped on the card that shows the name and the amount: that is the yes, new customer included
           d.confirmed = true
           d.readBack = true
@@ -943,11 +946,20 @@ export class LedgerCore {
     return { parts: [done], ops }
   }
 
+  /** the amounts this customer usually has (typical, then recent), as buttons for the amount question */
+  private amountChoices(cid: string | null): number[] | undefined {
+    if (!cid) return undefined
+    const c = this.snap.customers.find((x) => x.cid === cid)
+    const recent = (this.snap.entries ?? []).filter((e) => e.cid === cid && !e.promise).map((e) => e.paise)
+    const out = [...new Set([...recent, c?.typicalPaise ?? 0].filter((p) => p > 0))].slice(0, 3).map((p) => p / 100)
+    return out.length ? out : undefined
+  }
+
   pendingView(): PendingView | null {
     this.expireStale()
     const p = this.pending
     if (!p) return null
-    if (p.kind === 'delete') return p.requireTap ? { kind: 'delete', requireTap: true } : { kind: 'delete' }
+    if (p.kind === 'delete') return p.requireType ? { kind: 'delete', requireType: p.requireType } : { kind: 'delete' }
     if (p.kind === 'choose') return { kind: 'which', options: p.options.map((o) => o.label) }
     if (p.kind === 'modify') return p.view
     if (p.kind === 'batch') {
@@ -961,6 +973,7 @@ export class LedgerCore {
       paise: d.paise,
       direction: d.direction,
       newCustomer: p.kind === 'confirm' && this.opensAccount(d) ? true : undefined,
+      amounts: p.kind === 'amount' ? this.amountChoices(d.cid) : undefined,
       options: p.kind === 'which' ? p.options.map((c) => this.label(c)) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
     }
   }
