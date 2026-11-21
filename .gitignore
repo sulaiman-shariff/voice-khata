@@ -29,3 +29,9 @@ eval/recordings/
 
 # parallel agents' worktrees
 .claude/worktrees/
+
+# wake-word training
+wakeword/.venv/
+wakeword/data/
+wakeword/work/
+wakeword/.cache/

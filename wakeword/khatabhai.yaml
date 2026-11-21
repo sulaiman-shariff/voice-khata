@@ -1,0 +1,26 @@
+# LiveKit WakeWord training config for "KhataBhai".
+# Run from wakeword/ (see README.md). LiveKit Cloud TTS makes the base speech; the Gnani Timbre
+# renders in wakeword/data/ are merged in by train.py as extra positives / negatives.
+wakeword: Khata Bhai
+model_name: khatabhai
+language: en
+pronunciations:
+  khata: K AA1 T AA0
+  bhai: B AA1 IY0
+  kya: K Y AA1
+  dikhao: D IH0 K HH AA1 OW0
+hard_negatives:
+  - Kya bhai
+  - Khatam bhai
+  - Gata bhai
+  - Khata dikhao
+  - Bhai suno
+  - Chatha bhai
+output_dir: ../public/wakeword
+data_dir: work/dataset
+plan: build
+n_positive: 500
+n_confusable: 500
+n_sentence: 150
+steps: 5000
+target_fpph: 0.5
