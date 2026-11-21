@@ -61,6 +61,58 @@ export interface Replies {
   remindReady: (name: string) => string
   remindNotAllowed: (name: string) => string
   reminderText: (name: string, owed: number, shop: string) => string
+  /** one save line plus the customer's new balance; a negative balance means the shop holds their advance */
+  savedWithBalance: (name: string, amt: number, dir: Dir, balanceRs: number) => string
+  /** a customer's balance, with their last entry when there is one */
+  showCustomer: (name: string, balanceRs: number, lastEntry?: { amt: number; dir: Dir }) => string
+  /** how many customers owe in total and how much (list is on screen) */
+  showDues: (count: number, totalRs: number) => string
+  /** a customer's (or period's) entry history is being shown; label names whose or which */
+  showHistory: (label: string, count: number) => string
+  /** today's credit and payment totals */
+  showToday: (creditRs: number, paidRs: number) => string
+  /** search results are on screen; text is what was searched for, 0 count says nothing was found */
+  searchResult: (text: string, count: number) => string
+  /** the customers with the largest balances, in the order given */
+  topDebtors: (names: string[]) => string
+  /** the agent closed a panel or screen */
+  closed: () => string
+  /** a new customer account was opened */
+  customerAdded: (name: string) => string
+  /** a customer was renamed from old to new */
+  renamed: (oldName: string, newName: string) => string
+  /** ask whether two names are one person before merging their accounts */
+  mergeAsk: (a: string, b: string) => string
+  /** two accounts were joined into one */
+  merged: (a: string, b: string) => string
+  /** a customer's phone number was saved */
+  phoneSet: (name: string) => string
+  /** a reminder message for the customer is ready to send */
+  reminderReady: (name: string) => string
+  /** a statement for the customer is ready */
+  statementReady: (name: string) => string
+  /** the customer has not agreed to messages, so none is made */
+  noConsent: (name: string) => string
+  /** the spoken language was changed; langName is the language's own name */
+  languageSet: (langName: string) => string
+  /** read-back of entries before saving was turned on or off */
+  readBackSet: (on: boolean) => string
+  /** speaking speed was set to fast or slow */
+  speedSet: (fast: boolean) => string
+  /** the shop name was saved */
+  shopNameSet: (name: string) => string
+  /** the privacy details were opened on screen */
+  privacyOpen: () => string
+  /** the backup file is ready to save */
+  backupReady: () => string
+  /** first step of erasing all data: ask for a spoken yes */
+  eraseAsk: () => string
+  /** second step of erasing all data: ask for the on-screen button tap */
+  eraseTap: () => string
+  /** the agent woke up on the wake word */
+  awakeHello: () => string
+  /** the agent went back to sleep */
+  sleeping: () => string
 }
 
 const HI: Replies = {
@@ -96,6 +148,32 @@ const HI: Replies = {
   remindReady: (n) => `${n} के लिए WhatsApp संदेश तैयार है। भेजने के लिए बटन दबाइए।`,
   remindNotAllowed: (n) => `${n} ने याद दिलाने की अनुमति नहीं दी है, इसलिए संदेश नहीं बनाया।`,
   reminderText: (n, o, s) => `नमस्ते ${n} जी, ${s} पर आपका ${r(o)} रुपये का हिसाब है। जब सुविधा हो, देख लीजिए। धन्यवाद! (ऐसे संदेश नहीं चाहिए तो "बंद" लिखें।)`,
+  savedWithBalance: (n, a, d, b) => `${n} का ${r(a)} रुपये ${d === 'credit' ? 'उधार लिख दिया' : 'जमा कर लिया'}। अब ${HI.balance(n, b)}`,
+  showCustomer: (n, b, l) => HI.balance(n, b) + (l ? ` आख़िरी एंट्री ${r(l.amt)} रुपये ${l.dir === 'credit' ? 'उधार' : 'जमा'} की है।` : ''),
+  showDues: (c, t) => `अभी ${c} लोगों का कुल ${r(t)} रुपये बाकी है।`,
+  showHistory: (l, c) => `${l} की ${c} एंट्री स्क्रीन पर दिखा रहा हूँ।`,
+  showToday: (c, p) => `आज उधार ${r(c)} रुपये और जमा ${r(p)} रुपये हुआ।`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" के ${c} नतीजे मिले, स्क्रीन पर हैं।` : `"${t}" के लिए कुछ नहीं मिला।`),
+  topDebtors: (ns) => (ns.length ? `ज़्यादा बाकी वाले: ${ns.join(', ')}।` : HI.noDues()),
+  closed: () => 'ठीक है, बंद कर दिया।',
+  customerAdded: (n) => `${n} का नया खाता खोल दिया।`,
+  renamed: (o, n) => `${o} का नाम बदलकर ${n} कर दिया।`,
+  mergeAsk: (a, b) => `${a} और ${b} एक ही हैं? दोनों खाते मिला दूँ?`,
+  merged: (a, b) => `${a} और ${b} का खाता एक कर दिया।`,
+  phoneSet: (n) => `${n} का फ़ोन नंबर लिख लिया।`,
+  reminderReady: (n) => `${n} के लिए याद दिलाने वाला संदेश तैयार है।`,
+  statementReady: (n) => `${n} की हिसाब पर्ची तैयार है।`,
+  noConsent: (n) => `${n} ने संदेश की इजाज़त नहीं दी है, इसलिए नहीं भेज सकता।`,
+  languageSet: (l) => `ठीक है, अब ${l} में बात करूँगा।`,
+  readBackSet: (on) => (on ? 'ठीक है, लिखने से पहले पढ़कर सुनाऊँगा।' : 'ठीक है, अब सीधे लिख दूँगा, पढ़कर नहीं सुनाऊँगा।'),
+  speedSet: (f) => (f ? 'ठीक है, अब तेज़ बोलूँगा।' : 'ठीक है, अब धीरे बोलूँगा।'),
+  shopNameSet: (n) => `दुकान का नाम ${n} रख दिया।`,
+  privacyOpen: () => 'प्राइवेसी की जानकारी स्क्रीन पर खोल दी है।',
+  backupReady: () => 'बैकअप तैयार है, सेव करने के लिए बटन दबाइए।',
+  eraseAsk: () => 'सारा डेटा मिटाना है? पक्का हो तो हाँ बोलिए।',
+  eraseTap: () => 'ठीक है, मिटाने के लिए स्क्रीन का बटन दबाइए।',
+  awakeHello: () => 'हाँ, बोलिए।',
+  sleeping: () => 'ठीक है, ज़रूरत हो तो बुला लीजिए।',
 }
 
 const EN: Replies = {
@@ -131,6 +209,32 @@ const EN: Replies = {
   remindReady: (n) => `A WhatsApp message for ${n} is ready. Press the button to send it.`,
   remindNotAllowed: (n) => `${n} has not agreed to reminders, so I did not make a message.`,
   reminderText: (n, o, s) => `Hello ${n}, your account at ${s} shows ${r(o)} rupees. Please have a look whenever convenient. Thank you! (Reply STOP to get no more messages like this.)`,
+  savedWithBalance: (n, a, d, b) => `${n}'s ${r(a)} rupees ${d === 'credit' ? 'written on credit' : 'received as payment'}. ${b > 0 ? `Now ${n} owes ${r(b)} rupees in total.` : b < 0 ? `Now you hold ${r(-b)} rupees of ${n}'s advance.` : `Now ${n} owes nothing.`}`,
+  showCustomer: (n, b, l) => EN.balance(n, b) + (l ? ` The last entry was ${r(l.amt)} rupees ${l.dir === 'credit' ? 'on credit' : 'paid'}.` : ''),
+  showDues: (c, t) => `Right now ${c} customers owe ${r(t)} rupees in total.`,
+  showHistory: (l, c) => `Showing ${l}'s ${c} entries on screen.`,
+  showToday: (c, p) => `Today it is ${r(c)} rupees on credit and ${r(p)} rupees paid.`,
+  searchResult: (t, c) => (c > 0 ? `Found ${c} results for "${t}", they are on screen.` : `I found nothing for "${t}".`),
+  topDebtors: (ns) => (ns.length ? `The biggest balances are: ${ns.join(', ')}.` : EN.noDues()),
+  closed: () => 'Okay, closed it.',
+  customerAdded: (n) => `Added ${n} as a new customer.`,
+  renamed: (o, n) => `Changed the name ${o} to ${n}.`,
+  mergeAsk: (a, b) => `Are ${a} and ${b} the same person? Should I join both accounts?`,
+  merged: (a, b) => `Joined ${a} and ${b} into one account.`,
+  phoneSet: (n) => `Saved ${n}'s phone number.`,
+  reminderReady: (n) => `The reminder message for ${n} is ready.`,
+  statementReady: (n) => `${n}'s statement is ready.`,
+  noConsent: (n) => `${n} has not agreed to messages, so I cannot send one.`,
+  languageSet: (l) => `Okay, I will speak in ${l} from now on.`,
+  readBackSet: (on) => (on ? 'Okay, I will read each entry back before saving.' : 'Okay, I will save directly without reading it back.'),
+  speedSet: (f) => (f ? 'Okay, I will speak faster now.' : 'Okay, I will speak slower now.'),
+  shopNameSet: (n) => `Set the shop name to ${n}.`,
+  privacyOpen: () => 'I have opened the privacy details on screen.',
+  backupReady: () => 'Your backup is ready, press the button to save it.',
+  eraseAsk: () => 'Erase all data? If you are sure, say yes.',
+  eraseTap: () => 'Okay, press the button on screen to erase it.',
+  awakeHello: () => 'Yes, tell me.',
+  sleeping: () => 'Okay, call me when you need me.',
 }
 
 const KN: Replies = {
@@ -166,6 +270,32 @@ const KN: Replies = {
   remindReady: (n) => `${n} ಅವರಿಗೆ WhatsApp ಸಂದೇಶ ಸಿದ್ಧ. ಕಳುಹಿಸಲು ಬಟನ್ ಒತ್ತಿ.`,
   remindNotAllowed: (n) => `${n} ಅವರು ನೆನಪಿನ ಸಂದೇಶಕ್ಕೆ ಒಪ್ಪಿಗೆ ಕೊಟ್ಟಿಲ್ಲ, ಹಾಗಾಗಿ ಸಂದೇಶ ಮಾಡಲಿಲ್ಲ.`,
   reminderText: (n, o, s) => `ನಮಸ್ಕಾರ ${n} ಅವರೇ, ${s} ನಲ್ಲಿ ನಿಮ್ಮ ಲೆಕ್ಕ ${r(o)} ರೂಪಾಯಿ ಇದೆ. ಅನುಕೂಲವಾದಾಗ ನೋಡಿ. ಧನ್ಯವಾದ! (ಇಂಥ ಸಂದೇಶ ಬೇಡವಾದರೆ "ನಿಲ್ಲಿಸಿ" ಎಂದು ಉತ್ತರಿಸಿ.)`,
+  savedWithBalance: (n, a, d, b) => `${n} ಅವರ ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ ಬರೆದಿದ್ದೇನೆ' : 'ಜಮಾ ಮಾಡಿದ್ದೇನೆ'}. ಈಗ ${KN.balance(n, b)}`,
+  showCustomer: (n, b, l) => KN.balance(n, b) + (l ? ` ಕೊನೆಯ ಎಂಟ್ರಿ ${r(l.amt)} ರೂಪಾಯಿ ${l.dir === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}.` : ''),
+  showDues: (c, t) => `ಈಗ ${c} ಜನರ ಒಟ್ಟು ಬಾಕಿ ${r(t)} ರೂಪಾಯಿ.`,
+  showHistory: (l, c) => `${l} ಅವರ ${c} ಎಂಟ್ರಿಗಳು ಪರದೆಯ ಮೇಲಿವೆ.`,
+  showToday: (c, p) => `ಇವತ್ತು ಸಾಲ ${r(c)} ರೂಪಾಯಿ, ಜಮಾ ${r(p)} ರೂಪಾಯಿ.`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" ಗೆ ${c} ಫಲಿತಾಂಶ ಸಿಕ್ಕಿವೆ, ಪರದೆಯ ಮೇಲಿವೆ.` : `"${t}" ಗೆ ಏನೂ ಸಿಗಲಿಲ್ಲ.`),
+  topDebtors: (ns) => (ns.length ? `ಹೆಚ್ಚು ಬಾಕಿ ಇರುವವರು: ${ns.join(', ')}.` : KN.noDues()),
+  closed: () => 'ಸರಿ, ಮುಚ್ಚಿದ್ದೇನೆ.',
+  customerAdded: (n) => `${n} ಅವರ ಹೊಸ ಖಾತೆ ತೆರೆದಿದ್ದೇನೆ.`,
+  renamed: (o, n) => `${o} ಹೆಸರನ್ನು ${n} ಎಂದು ಬದಲಾಯಿಸಿದ್ದೇನೆ.`,
+  mergeAsk: (a, b) => `${a} ಮತ್ತು ${b} ಒಬ್ಬರೇನಾ? ಎರಡೂ ಖಾತೆ ಒಂದು ಮಾಡಲಾ?`,
+  merged: (a, b) => `${a} ಮತ್ತು ${b} ಖಾತೆಗಳನ್ನು ಒಂದು ಮಾಡಿದ್ದೇನೆ.`,
+  phoneSet: (n) => `${n} ಅವರ ಫೋನ್ ನಂಬರ್ ಬರೆದುಕೊಂಡೆ.`,
+  reminderReady: (n) => `${n} ಅವರಿಗೆ ನೆನಪಿನ ಸಂದೇಶ ಸಿದ್ಧ.`,
+  statementReady: (n) => `${n} ಅವರ ಲೆಕ್ಕದ ಚೀಟಿ ಸಿದ್ಧ.`,
+  noConsent: (n) => `${n} ಅವರು ಸಂದೇಶಕ್ಕೆ ಒಪ್ಪಿಗೆ ಕೊಟ್ಟಿಲ್ಲ, ಹಾಗಾಗಿ ಕಳುಹಿಸಲಾಗುವುದಿಲ್ಲ.`,
+  languageSet: (l) => `ಸರಿ, ಇನ್ನು ${l} ನಲ್ಲಿ ಮಾತಾಡುತ್ತೇನೆ.`,
+  readBackSet: (on) => (on ? 'ಸರಿ, ಬರೆಯುವ ಮೊದಲು ಓದಿ ಹೇಳುತ್ತೇನೆ.' : 'ಸರಿ, ಇನ್ನು ನೇರವಾಗಿ ಬರೆಯುತ್ತೇನೆ, ಓದಿ ಹೇಳುವುದಿಲ್ಲ.'),
+  speedSet: (f) => (f ? 'ಸರಿ, ಇನ್ನು ವೇಗವಾಗಿ ಮಾತಾಡುತ್ತೇನೆ.' : 'ಸರಿ, ಇನ್ನು ನಿಧಾನವಾಗಿ ಮಾತಾಡುತ್ತೇನೆ.'),
+  shopNameSet: (n) => `ಅಂಗಡಿಯ ಹೆಸರು ${n} ಎಂದು ಇಟ್ಟಿದ್ದೇನೆ.`,
+  privacyOpen: () => 'ಗೌಪ್ಯತೆ ಮಾಹಿತಿಯನ್ನು ಪರದೆಯ ಮೇಲೆ ತೆರೆದಿದ್ದೇನೆ.',
+  backupReady: () => 'ಬ್ಯಾಕಪ್ ಸಿದ್ಧ, ಉಳಿಸಲು ಬಟನ್ ಒತ್ತಿ.',
+  eraseAsk: () => 'ಎಲ್ಲಾ ಡೇಟಾ ಅಳಿಸಬೇಕಾ? ಖಚಿತವಿದ್ದರೆ ಹೌದು ಎಂದು ಹೇಳಿ.',
+  eraseTap: () => 'ಸರಿ, ಅಳಿಸಲು ಪರದೆಯ ಮೇಲಿನ ಬಟನ್ ಒತ್ತಿ.',
+  awakeHello: () => 'ಹೌದು, ಹೇಳಿ.',
+  sleeping: () => 'ಸರಿ, ಬೇಕಾದಾಗ ಕರೆಯಿರಿ.',
 }
 
 const TA: Replies = {
@@ -201,6 +331,32 @@ const TA: Replies = {
   remindReady: (n) => `${n} அவர்களுக்கு WhatsApp செய்தி தயார். அனுப்ப பொத்தானை அழுத்துங்கள்.`,
   remindNotAllowed: (n) => `${n} நினைவூட்டலுக்கு ஒப்புதல் தரவில்லை, அதனால் செய்தி உருவாக்கவில்லை.`,
   reminderText: (n, o, s) => `வணக்கம் ${n}, ${s} கடையில் உங்கள் கணக்கில் ${r(o)} ரூபாய் உள்ளது. வசதிப்படும்போது பாருங்கள். நன்றி! (இத்தகைய செய்திகள் வேண்டாமெனில் "நிறுத்து" என்று பதில் அனுப்புங்கள்.)`,
+  savedWithBalance: (n, a, d, b) => `${n} அவர்களுக்கு ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன் எழுதிவிட்டேன்' : 'வரவு வைத்தேன்'}. இப்போது ${TA.balance(n, b)}`,
+  showCustomer: (n, b, l) => TA.balance(n, b) + (l ? ` கடைசிப் பதிவு ${r(l.amt)} ரூபாய் ${l.dir === 'credit' ? 'கடன்' : 'வரவு'}.` : ''),
+  showDues: (c, t) => `இப்போது ${c} பேரின் மொத்த பாக்கி ${r(t)} ரூபாய்.`,
+  showHistory: (l, c) => `${l} அவர்களின் ${c} பதிவுகள் திரையில் உள்ளன.`,
+  showToday: (c, p) => `இன்று கடன் ${r(c)} ரூபாய், வரவு ${r(p)} ரூபாய்.`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" க்கு ${c} முடிவுகள் கிடைத்தன, திரையில் உள்ளன.` : `"${t}" க்கு எதுவும் கிடைக்கவில்லை.`),
+  topDebtors: (ns) => (ns.length ? `அதிக பாக்கி உள்ளவர்கள்: ${ns.join(', ')}.` : TA.noDues()),
+  closed: () => 'சரி, மூடிவிட்டேன்.',
+  customerAdded: (n) => `${n} அவர்களுக்குப் புதிய கணக்கு திறந்துவிட்டேன்.`,
+  renamed: (o, n) => `${o} பெயரை ${n} என்று மாற்றிவிட்டேன்.`,
+  mergeAsk: (a, b) => `${a} மற்றும் ${b} ஒரே ஆளா? இரண்டு கணக்கையும் ஒன்றாக்கவா?`,
+  merged: (a, b) => `${a} மற்றும் ${b} கணக்குகளை ஒன்றாக்கிவிட்டேன்.`,
+  phoneSet: (n) => `${n} அவர்களின் போன் நம்பரை எழுதிக்கொண்டேன்.`,
+  reminderReady: (n) => `${n} அவர்களுக்கான நினைவூட்டல் செய்தி தயார்.`,
+  statementReady: (n) => `${n} அவர்களின் கணக்கு சீட்டு தயார்.`,
+  noConsent: (n) => `${n} செய்தி அனுப்ப ஒப்புதல் தரவில்லை, அதனால் அனுப்ப முடியாது.`,
+  languageSet: (l) => `சரி, இனி ${l} மொழியில் பேசுகிறேன்.`,
+  readBackSet: (on) => (on ? 'சரி, எழுதுவதற்கு முன் படித்துச் சொல்கிறேன்.' : 'சரி, இனி நேராக எழுதுகிறேன், படித்துச் சொல்ல மாட்டேன்.'),
+  speedSet: (f) => (f ? 'சரி, இனி வேகமாகப் பேசுகிறேன்.' : 'சரி, இனி மெதுவாகப் பேசுகிறேன்.'),
+  shopNameSet: (n) => `கடை பெயரை ${n} என்று வைத்துவிட்டேன்.`,
+  privacyOpen: () => 'தனியுரிமை தகவலைத் திரையில் திறந்துள்ளேன்.',
+  backupReady: () => 'காப்புப்பிரதி தயார், சேமிக்க பொத்தானை அழுத்துங்கள்.',
+  eraseAsk: () => 'எல்லா தரவையும் அழிக்கவா? உறுதியென்றால் ஆமாம் என்று சொல்லுங்கள்.',
+  eraseTap: () => 'சரி, அழிக்க திரையில் உள்ள பொத்தானை அழுத்துங்கள்.',
+  awakeHello: () => 'ஆமாம், சொல்லுங்கள்.',
+  sleeping: () => 'சரி, தேவைப்பட்டால் கூப்பிடுங்கள்.',
 }
 
 const TE: Replies = {
@@ -236,6 +392,32 @@ const TE: Replies = {
   remindReady: (n) => `${n} గారికి WhatsApp సందేశం సిద్ధం. పంపడానికి బటన్ నొక్కండి.`,
   remindNotAllowed: (n) => `${n} గారు రిమైండర్‌కు అనుమతి ఇవ్వలేదు, అందుకే సందేశం చేయలేదు.`,
   reminderText: (n, o, s) => `నమస్కారం ${n} గారు, ${s} లో మీ ఖాతాలో ${r(o)} రూపాయలు ఉన్నాయి. వీలైనప్పుడు చూడండి. ధన్యవాదాలు! (ఇలాంటి సందేశాలు వద్దంటే "ఆపండి" అని జవాబివ్వండి.)`,
+  savedWithBalance: (n, a, d, b) => `${n} గారి ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పుగా రాశాను' : 'జమ చేశాను'}. ఇప్పుడు ${TE.balance(n, b)}`,
+  showCustomer: (n, b, l) => TE.balance(n, b) + (l ? ` చివరి ఎంట్రీ ${r(l.amt)} రూపాయలు ${l.dir === 'credit' ? 'అప్పు' : 'జమ'}.` : ''),
+  showDues: (c, t) => `ఇప్పుడు ${c} మంది మొత్తం బాకీ ${r(t)} రూపాయలు.`,
+  showHistory: (l, c) => `${l} గారి ${c} ఎంట్రీలు తెరపై ఉన్నాయి.`,
+  showToday: (c, p) => `ఈరోజు అప్పు ${r(c)} రూపాయలు, జమ ${r(p)} రూపాయలు.`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" కి ${c} ఫలితాలు దొరికాయి, తెరపై ఉన్నాయి.` : `"${t}" కి ఏమీ దొరకలేదు.`),
+  topDebtors: (ns) => (ns.length ? `ఎక్కువ బాకీ ఉన్నవారు: ${ns.join(', ')}.` : TE.noDues()),
+  closed: () => 'సరే, మూసేశాను.',
+  customerAdded: (n) => `${n} గారికి కొత్త ఖాతా తెరిచాను.`,
+  renamed: (o, n) => `${o} పేరును ${n} గా మార్చాను.`,
+  mergeAsk: (a, b) => `${a}, ${b} ఒకరేనా? రెండు ఖాతాలను ఒకటి చేయనా?`,
+  merged: (a, b) => `${a}, ${b} ఖాతాలను ఒకటి చేశాను.`,
+  phoneSet: (n) => `${n} గారి ఫోన్ నంబర్ రాసుకున్నాను.`,
+  reminderReady: (n) => `${n} గారికి రిమైండర్ సందేశం సిద్ధం.`,
+  statementReady: (n) => `${n} గారి లెక్క చిట్టా సిద్ధం.`,
+  noConsent: (n) => `${n} గారు సందేశాలకు అనుమతి ఇవ్వలేదు, అందుకే పంపలేను.`,
+  languageSet: (l) => `సరే, ఇకపై ${l} లో మాట్లాడతాను.`,
+  readBackSet: (on) => (on ? 'సరే, రాసే ముందు చదివి వినిపిస్తాను.' : 'సరే, ఇకపై నేరుగా రాస్తాను, చదివి వినిపించను.'),
+  speedSet: (f) => (f ? 'సరే, ఇకపై వేగంగా మాట్లాడతాను.' : 'సరే, ఇకపై నెమ్మదిగా మాట్లాడతాను.'),
+  shopNameSet: (n) => `షాప్ పేరును ${n} గా పెట్టాను.`,
+  privacyOpen: () => 'ప్రైవసీ వివరాలను తెరపై తెరిచాను.',
+  backupReady: () => 'బ్యాకప్ సిద్ధం, సేవ్ చేయడానికి బటన్ నొక్కండి.',
+  eraseAsk: () => 'మొత్తం డేటా తొలగించాలా? ఖచ్చితమైతే అవును అని చెప్పండి.',
+  eraseTap: () => 'సరే, తొలగించడానికి తెరపై బటన్ నొక్కండి.',
+  awakeHello: () => 'అవును, చెప్పండి.',
+  sleeping: () => 'సరే, అవసరమైతే పిలవండి.',
 }
 
 const ML: Replies = {
@@ -271,6 +453,32 @@ const ML: Replies = {
   remindReady: (n) => `${n} ന് WhatsApp സന്ദേശം തയ്യാർ. അയക്കാൻ ബട്ടൺ അമർത്തൂ.`,
   remindNotAllowed: (n) => `${n} ഓർമ്മപ്പെടുത്തലിന് സമ്മതം നൽകിയിട്ടില്ല, അതിനാൽ സന്ദേശം ഉണ്ടാക്കിയില്ല.`,
   reminderText: (n, o, s) => `നമസ്കാരം ${n}, ${s} ൽ നിങ്ങളുടെ കണക്കിൽ ${r(o)} രൂപയുണ്ട്. സൗകര്യം പോലെ നോക്കൂ. നന്ദി! (ഇത്തരം സന്ദേശങ്ങൾ വേണ്ടെങ്കിൽ "നിർത്തൂ" എന്ന് മറുപടി അയക്കൂ.)`,
+  savedWithBalance: (n, a, d, b) => `${n} ന്റെ ${r(a)} രൂപ ${d === 'credit' ? 'കടമായി എഴുതി' : 'വരവ് വെച്ചു'}. ഇപ്പോൾ ${ML.balance(n, b)}`,
+  showCustomer: (n, b, l) => ML.balance(n, b) + (l ? ` അവസാന എൻട്രി ${r(l.amt)} രൂപ ${l.dir === 'credit' ? 'കടം' : 'വരവ്'}.` : ''),
+  showDues: (c, t) => `ഇപ്പോൾ ${c} പേരുടെ ആകെ ബാക്കി ${r(t)} രൂപ.`,
+  showHistory: (l, c) => `${l} ന്റെ ${c} എൻട്രികൾ സ്ക്രീനിലുണ്ട്.`,
+  showToday: (c, p) => `ഇന്ന് കടം ${r(c)} രൂപ, വരവ് ${r(p)} രൂപ.`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" ന് ${c} ഫലങ്ങൾ കിട്ടി, സ്ക്രീനിലുണ്ട്.` : `"${t}" ന് ഒന്നും കിട്ടിയില്ല.`),
+  topDebtors: (ns) => (ns.length ? `കൂടുതൽ ബാക്കിയുള്ളവർ: ${ns.join(', ')}.` : ML.noDues()),
+  closed: () => 'ശരി, അടച്ചു.',
+  customerAdded: (n) => `${n} എന്നയാൾക്ക് പുതിയ കണക്ക് തുറന്നു.`,
+  renamed: (o, n) => `${o} എന്ന പേര് ${n} എന്നാക്കി മാറ്റി.`,
+  mergeAsk: (a, b) => `${a} ഉം ${b} ഉം ഒരാളാണോ? രണ്ടു കണക്കും ഒന്നാക്കട്ടെ?`,
+  merged: (a, b) => `${a} ഉം ${b} ഉം കണക്കുകൾ ഒന്നാക്കി.`,
+  phoneSet: (n) => `${n} ന്റെ ഫോൺ നമ്പർ എഴുതിവെച്ചു.`,
+  reminderReady: (n) => `${n} ന് ഓർമ്മപ്പെടുത്തൽ സന്ദേശം തയ്യാർ.`,
+  statementReady: (n) => `${n} ന്റെ കണക്ക് സ്ലിപ്പ് തയ്യാർ.`,
+  noConsent: (n) => `${n} സന്ദേശത്തിന് സമ്മതം നൽകിയിട്ടില്ല, അതിനാൽ അയക്കാനാവില്ല.`,
+  languageSet: (l) => `ശരി, ഇനി ${l} ൽ സംസാരിക്കാം.`,
+  readBackSet: (on) => (on ? 'ശരി, എഴുതുന്നതിനു മുൻപ് വായിച്ചു കേൾപ്പിക്കാം.' : 'ശരി, ഇനി നേരെ എഴുതാം, വായിച്ചു കേൾപ്പിക്കില്ല.'),
+  speedSet: (f) => (f ? 'ശരി, ഇനി വേഗത്തിൽ സംസാരിക്കാം.' : 'ശരി, ഇനി പതുക്കെ സംസാരിക്കാം.'),
+  shopNameSet: (n) => `കടയുടെ പേര് ${n} എന്നാക്കി.`,
+  privacyOpen: () => 'സ്വകാര്യതാ വിവരങ്ങൾ സ്ക്രീനിൽ തുറന്നിട്ടുണ്ട്.',
+  backupReady: () => 'ബാക്കപ്പ് തയ്യാർ, സേവ് ചെയ്യാൻ ബട്ടൺ അമർത്തൂ.',
+  eraseAsk: () => 'എല്ലാ ഡാറ്റയും മായ്ക്കണോ? ഉറപ്പാണെങ്കിൽ അതെ എന്ന് പറയൂ.',
+  eraseTap: () => 'ശരി, മായ്ക്കാൻ സ്ക്രീനിലെ ബട്ടൺ അമർത്തൂ.',
+  awakeHello: () => 'അതെ, പറയൂ.',
+  sleeping: () => 'ശരി, വേണമെങ്കിൽ വിളിക്കൂ.',
 }
 
 const MR: Replies = {
@@ -306,6 +514,32 @@ const MR: Replies = {
   remindReady: (n) => `${n} यांच्यासाठी WhatsApp संदेश तयार आहे. पाठवण्यासाठी बटण दाबा.`,
   remindNotAllowed: (n) => `${n} यांनी आठवणीसाठी परवानगी दिलेली नाही, म्हणून संदेश बनवला नाही.`,
   reminderText: (n, o, s) => `नमस्कार ${n}, ${s} येथे तुमचा ${r(o)} रुपयांचा हिशोब आहे. सोयीने पाहा. धन्यवाद! (असे संदेश नको असल्यास "बंद" लिहा.)`,
+  savedWithBalance: (n, a, d, b) => `${n} यांचे ${r(a)} रुपये ${d === 'credit' ? 'उधार लिहिले' : 'जमा केले'}. आता ${MR.balance(n, b)}`,
+  showCustomer: (n, b, l) => MR.balance(n, b) + (l ? ` शेवटची नोंद ${r(l.amt)} रुपये ${l.dir === 'credit' ? 'उधार' : 'जमा'}.` : ''),
+  showDues: (c, t) => `सध्या ${c} जणांची एकूण बाकी ${r(t)} रुपये आहे.`,
+  showHistory: (l, c) => `${l} यांच्या ${c} नोंदी स्क्रीनवर आहेत.`,
+  showToday: (c, p) => `आज उधार ${r(c)} रुपये, जमा ${r(p)} रुपये.`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" साठी ${c} निकाल सापडले, स्क्रीनवर आहेत.` : `"${t}" साठी काही सापडले नाही.`),
+  topDebtors: (ns) => (ns.length ? `जास्त बाकी असलेले: ${ns.join(', ')}.` : MR.noDues()),
+  closed: () => 'ठीक आहे, बंद केले.',
+  customerAdded: (n) => `${n} यांचे नवीन खाते उघडले.`,
+  renamed: (o, n) => `${o} यांचे नाव बदलून ${n} केले.`,
+  mergeAsk: (a, b) => `${a} आणि ${b} एकच आहेत का? दोन्ही खाती एक करू?`,
+  merged: (a, b) => `${a} आणि ${b} यांची खाती एक केली.`,
+  phoneSet: (n) => `${n} यांचा फोन नंबर लिहून घेतला.`,
+  reminderReady: (n) => `${n} यांच्यासाठी आठवण संदेश तयार आहे.`,
+  statementReady: (n) => `${n} यांची हिशोब पावती तयार आहे.`,
+  noConsent: (n) => `${n} यांनी संदेशासाठी परवानगी दिलेली नाही, म्हणून पाठवता येणार नाही.`,
+  languageSet: (l) => `ठीक आहे, आता ${l} मध्ये बोलेन.`,
+  readBackSet: (on) => (on ? 'ठीक आहे, लिहिण्यापूर्वी वाचून दाखवेन.' : 'ठीक आहे, आता थेट लिहीन, वाचून दाखवणार नाही.'),
+  speedSet: (f) => (f ? 'ठीक आहे, आता वेगात बोलेन.' : 'ठीक आहे, आता हळू बोलेन.'),
+  shopNameSet: (n) => `दुकानाचे नाव ${n} ठेवले.`,
+  privacyOpen: () => 'गोपनीयतेची माहिती स्क्रीनवर उघडली आहे.',
+  backupReady: () => 'बॅकअप तयार आहे, सेव्ह करण्यासाठी बटण दाबा.',
+  eraseAsk: () => 'सगळा डेटा पुसायचा आहे का? नक्की असेल तर हो म्हणा.',
+  eraseTap: () => 'ठीक आहे, पुसण्यासाठी स्क्रीनवरचे बटण दाबा.',
+  awakeHello: () => 'हो, बोला.',
+  sleeping: () => 'ठीक आहे, लागल्यास हाक मारा.',
 }
 
 const BN: Replies = {
@@ -341,6 +575,32 @@ const BN: Replies = {
   remindReady: (n) => `${n}-এর জন্য WhatsApp বার্তা তৈরি। পাঠাতে বোতাম টিপুন।`,
   remindNotAllowed: (n) => `${n} মনে করানোর অনুমতি দেননি, তাই বার্তা বানাইনি।`,
   reminderText: (n, o, s) => `নমস্কার ${n}, ${s}-এ আপনার হিসাবে ${r(o)} টাকা আছে। সুবিধামতো দেখে নেবেন। ধন্যবাদ! (এমন বার্তা না চাইলে "বন্ধ" লিখুন।)`,
+  savedWithBalance: (n, a, d, b) => `${n}-এর ${r(a)} টাকা ${d === 'credit' ? 'বাকি লিখে নিলাম' : 'জমা করে নিলাম'}। এখন ${BN.balance(n, b)}`,
+  showCustomer: (n, b, l) => BN.balance(n, b) + (l ? ` শেষ এন্ট্রি ${r(l.amt)} টাকা ${l.dir === 'credit' ? 'বাকি' : 'জমা'}।` : ''),
+  showDues: (c, t) => `এখন ${c} জনের মোট বাকি ${r(t)} টাকা।`,
+  showHistory: (l, c) => `${l}-এর ${c}টি এন্ট্রি স্ক্রিনে আছে।`,
+  showToday: (c, p) => `আজ বাকি ${r(c)} টাকা, জমা ${r(p)} টাকা।`,
+  searchResult: (t, c) => (c > 0 ? `"${t}"-এর জন্য ${c}টি ফল পেয়েছি, স্ক্রিনে আছে।` : `"${t}"-এর জন্য কিছু পাইনি।`),
+  topDebtors: (ns) => (ns.length ? `বেশি বাকি যাঁদের: ${ns.join(', ')}।` : BN.noDues()),
+  closed: () => 'ঠিক আছে, বন্ধ করে দিলাম।',
+  customerAdded: (n) => `${n}-এর নতুন খাতা খুলে দিলাম।`,
+  renamed: (o, n) => `${o}-এর নাম বদলে ${n} করে দিলাম।`,
+  mergeAsk: (a, b) => `${a} আর ${b} কি একই মানুষ? দুটো খাতা এক করে দেব?`,
+  merged: (a, b) => `${a} আর ${b}-এর খাতা এক করে দিলাম।`,
+  phoneSet: (n) => `${n}-এর ফোন নম্বর লিখে নিলাম।`,
+  reminderReady: (n) => `${n}-এর জন্য মনে করানোর বার্তা তৈরি।`,
+  statementReady: (n) => `${n}-এর হিসাবের কাগজ তৈরি।`,
+  noConsent: (n) => `${n} বার্তা পাঠানোর অনুমতি দেননি, তাই পাঠাতে পারব না।`,
+  languageSet: (l) => `ঠিক আছে, এবার থেকে ${l}-তে কথা বলব।`,
+  readBackSet: (on) => (on ? 'ঠিক আছে, লেখার আগে পড়ে শোনাব।' : 'ঠিক আছে, এবার সরাসরি লিখব, পড়ে শোনাব না।'),
+  speedSet: (f) => (f ? 'ঠিক আছে, এবার তাড়াতাড়ি বলব।' : 'ঠিক আছে, এবার ধীরে বলব।'),
+  shopNameSet: (n) => `দোকানের নাম ${n} রাখলাম।`,
+  privacyOpen: () => 'গোপনীয়তার তথ্য স্ক্রিনে খুলে দিয়েছি।',
+  backupReady: () => 'ব্যাকআপ তৈরি, সেভ করতে বোতাম টিপুন।',
+  eraseAsk: () => 'সব ডেটা মুছে দেব? নিশ্চিত হলে হ্যাঁ বলুন।',
+  eraseTap: () => 'ঠিক আছে, মোছার জন্য স্ক্রিনের বোতাম টিপুন।',
+  awakeHello: () => 'হ্যাঁ, বলুন।',
+  sleeping: () => 'ঠিক আছে, দরকার হলে ডাকবেন।',
 }
 
 const GU: Replies = {
@@ -376,6 +636,32 @@ const GU: Replies = {
   remindReady: (n) => `${n} માટે WhatsApp સંદેશ તૈયાર છે. મોકલવા બટન દબાવો.`,
   remindNotAllowed: (n) => `${n}એ યાદ અપાવવાની મંજૂરી આપી નથી, એટલે સંદેશ બનાવ્યો નથી.`,
   reminderText: (n, o, s) => `નમસ્તે ${n}, ${s} પર તમારો ${r(o)} રૂપિયાનો હિસાબ છે. અનુકૂળતાએ જોઈ લેજો. આભાર! (આવા સંદેશ ન જોઈએ તો "બંધ" લખો.)`,
+  savedWithBalance: (n, a, d, b) => `${n}ના ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર લખ્યા' : 'જમા કર્યા'}. હવે ${GU.balance(n, b)}`,
+  showCustomer: (n, b, l) => GU.balance(n, b) + (l ? ` છેલ્લી એન્ટ્રી ${r(l.amt)} રૂપિયા ${l.dir === 'credit' ? 'ઉધાર' : 'જમા'}.` : ''),
+  showDues: (c, t) => `અત્યારે ${c} લોકોની કુલ બાકી ${r(t)} રૂપિયા છે.`,
+  showHistory: (l, c) => `${l}ની ${c} એન્ટ્રી સ્ક્રીન પર છે.`,
+  showToday: (c, p) => `આજે ઉધાર ${r(c)} રૂપિયા, જમા ${r(p)} રૂપિયા.`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" માટે ${c} પરિણામ મળ્યા, સ્ક્રીન પર છે.` : `"${t}" માટે કંઈ મળ્યું નહીં.`),
+  topDebtors: (ns) => (ns.length ? `વધારે બાકી હોય તેવા: ${ns.join(', ')}.` : GU.noDues()),
+  closed: () => 'બરાબર, બંધ કરી દીધું.',
+  customerAdded: (n) => `${n}નું નવું ખાતું ખોલી દીધું.`,
+  renamed: (o, n) => `${o}નું નામ બદલીને ${n} કરી દીધું.`,
+  mergeAsk: (a, b) => `${a} અને ${b} એક જ છે? બંને ખાતાં એક કરી દઉં?`,
+  merged: (a, b) => `${a} અને ${b}ના ખાતાં એક કરી દીધાં.`,
+  phoneSet: (n) => `${n}નો ફોન નંબર લખી લીધો.`,
+  reminderReady: (n) => `${n} માટે યાદ અપાવવાનો સંદેશ તૈયાર છે.`,
+  statementReady: (n) => `${n}ની હિસાબ ચિઠ્ઠી તૈયાર છે.`,
+  noConsent: (n) => `${n}એ સંદેશની મંજૂરી આપી નથી, એટલે મોકલી શકાશે નહીં.`,
+  languageSet: (l) => `બરાબર, હવે ${l}માં વાત કરીશ.`,
+  readBackSet: (on) => (on ? 'બરાબર, લખતા પહેલાં વાંચી સંભળાવીશ.' : 'બરાબર, હવે સીધું લખીશ, વાંચી સંભળાવીશ નહીં.'),
+  speedSet: (f) => (f ? 'બરાબર, હવે ઝડપથી બોલીશ.' : 'બરાબર, હવે ધીમે બોલીશ.'),
+  shopNameSet: (n) => `દુકાનનું નામ ${n} રાખ્યું.`,
+  privacyOpen: () => 'ગોપનીયતાની માહિતી સ્ક્રીન પર ખોલી છે.',
+  backupReady: () => 'બેકઅપ તૈયાર છે, સેવ કરવા બટન દબાવો.',
+  eraseAsk: () => 'બધો ડેટા ભૂંસી નાખું? પાકું હોય તો હા બોલો.',
+  eraseTap: () => 'બરાબર, ભૂંસવા માટે સ્ક્રીન પરનું બટન દબાવો.',
+  awakeHello: () => 'હા, બોલો.',
+  sleeping: () => 'બરાબર, જરૂર પડે તો બોલાવજો.',
 }
 
 const PA: Replies = {
@@ -411,6 +697,32 @@ const PA: Replies = {
   remindReady: (n) => `${n} ਲਈ WhatsApp ਸੁਨੇਹਾ ਤਿਆਰ ਹੈ। ਭੇਜਣ ਲਈ ਬਟਨ ਦਬਾਓ।`,
   remindNotAllowed: (n) => `${n} ਨੇ ਯਾਦ ਕਰਾਉਣ ਦੀ ਇਜਾਜ਼ਤ ਨਹੀਂ ਦਿੱਤੀ, ਇਸ ਲਈ ਸੁਨੇਹਾ ਨਹੀਂ ਬਣਾਇਆ।`,
   reminderText: (n, o, s) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ ${n} ਜੀ, ${s} ਉੱਤੇ ਤੁਹਾਡਾ ${r(o)} ਰੁਪਏ ਦਾ ਹਿਸਾਬ ਹੈ। ਸਹੂਲਤ ਅਨੁਸਾਰ ਦੇਖ ਲੈਣਾ। ਧੰਨਵਾਦ! (ਅਜਿਹੇ ਸੁਨੇਹੇ ਨਹੀਂ ਚਾਹੀਦੇ ਤਾਂ "ਬੰਦ" ਲਿਖੋ।)`,
+  savedWithBalance: (n, a, d, b) => `${n} ਦੇ ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ ਲਿਖ ਲਏ' : 'ਜਮ੍ਹਾ ਕਰ ਲਏ'}। ਹੁਣ ${PA.balance(n, b)}`,
+  showCustomer: (n, b, l) => PA.balance(n, b) + (l ? ` ਆਖ਼ਰੀ ਐਂਟਰੀ ${r(l.amt)} ਰੁਪਏ ${l.dir === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'} ਦੀ ਹੈ।` : ''),
+  showDues: (c, t) => `ਹੁਣ ${c} ਲੋਕਾਂ ਦਾ ਕੁੱਲ ਬਾਕੀ ${r(t)} ਰੁਪਏ ਹੈ।`,
+  showHistory: (l, c) => `${l} ਦੀਆਂ ${c} ਐਂਟਰੀਆਂ ਸਕਰੀਨ ਉੱਤੇ ਹਨ।`,
+  showToday: (c, p) => `ਅੱਜ ਉਧਾਰ ${r(c)} ਰੁਪਏ, ਜਮ੍ਹਾ ${r(p)} ਰੁਪਏ।`,
+  searchResult: (t, c) => (c > 0 ? `"${t}" ਲਈ ${c} ਨਤੀਜੇ ਮਿਲੇ, ਸਕਰੀਨ ਉੱਤੇ ਹਨ।` : `"${t}" ਲਈ ਕੁਝ ਨਹੀਂ ਮਿਲਿਆ।`),
+  topDebtors: (ns) => (ns.length ? `ਵੱਧ ਬਾਕੀ ਵਾਲੇ: ${ns.join(', ')}।` : PA.noDues()),
+  closed: () => 'ਠੀਕ ਹੈ, ਬੰਦ ਕਰ ਦਿੱਤਾ।',
+  customerAdded: (n) => `${n} ਦਾ ਨਵਾਂ ਖਾਤਾ ਖੋਲ੍ਹ ਦਿੱਤਾ।`,
+  renamed: (o, n) => `${o} ਦਾ ਨਾਮ ਬਦਲ ਕੇ ${n} ਕਰ ਦਿੱਤਾ।`,
+  mergeAsk: (a, b) => `${a} ਅਤੇ ${b} ਇੱਕੋ ਹੀ ਹਨ? ਦੋਵੇਂ ਖਾਤੇ ਇੱਕ ਕਰ ਦਿਆਂ?`,
+  merged: (a, b) => `${a} ਅਤੇ ${b} ਦੇ ਖਾਤੇ ਇੱਕ ਕਰ ਦਿੱਤੇ।`,
+  phoneSet: (n) => `${n} ਦਾ ਫ਼ੋਨ ਨੰਬਰ ਲਿਖ ਲਿਆ।`,
+  reminderReady: (n) => `${n} ਲਈ ਯਾਦ ਕਰਾਉਣ ਵਾਲਾ ਸੁਨੇਹਾ ਤਿਆਰ ਹੈ।`,
+  statementReady: (n) => `${n} ਦੀ ਹਿਸਾਬ ਪਰਚੀ ਤਿਆਰ ਹੈ।`,
+  noConsent: (n) => `${n} ਨੇ ਸੁਨੇਹੇ ਦੀ ਇਜਾਜ਼ਤ ਨਹੀਂ ਦਿੱਤੀ, ਇਸ ਲਈ ਭੇਜ ਨਹੀਂ ਸਕਦਾ।`,
+  languageSet: (l) => `ਠੀਕ ਹੈ, ਹੁਣ ${l} ਵਿੱਚ ਗੱਲ ਕਰਾਂਗਾ।`,
+  readBackSet: (on) => (on ? 'ਠੀਕ ਹੈ, ਲਿਖਣ ਤੋਂ ਪਹਿਲਾਂ ਪੜ੍ਹ ਕੇ ਸੁਣਾਵਾਂਗਾ।' : 'ਠੀਕ ਹੈ, ਹੁਣ ਸਿੱਧਾ ਲਿਖਾਂਗਾ, ਪੜ੍ਹ ਕੇ ਨਹੀਂ ਸੁਣਾਵਾਂਗਾ।'),
+  speedSet: (f) => (f ? 'ਠੀਕ ਹੈ, ਹੁਣ ਤੇਜ਼ ਬੋਲਾਂਗਾ।' : 'ਠੀਕ ਹੈ, ਹੁਣ ਹੌਲੀ ਬੋਲਾਂਗਾ।'),
+  shopNameSet: (n) => `ਦੁਕਾਨ ਦਾ ਨਾਮ ${n} ਰੱਖ ਦਿੱਤਾ।`,
+  privacyOpen: () => 'ਪਰਦੇਦਾਰੀ ਦੀ ਜਾਣਕਾਰੀ ਸਕਰੀਨ ਉੱਤੇ ਖੋਲ੍ਹ ਦਿੱਤੀ ਹੈ।',
+  backupReady: () => 'ਬੈਕਅੱਪ ਤਿਆਰ ਹੈ, ਸੇਵ ਕਰਨ ਲਈ ਬਟਨ ਦਬਾਓ।',
+  eraseAsk: () => 'ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਉਣਾ ਹੈ? ਪੱਕਾ ਹੋਵੇ ਤਾਂ ਹਾਂ ਬੋਲੋ।',
+  eraseTap: () => 'ਠੀਕ ਹੈ, ਮਿਟਾਉਣ ਲਈ ਸਕਰੀਨ ਦਾ ਬਟਨ ਦਬਾਓ।',
+  awakeHello: () => 'ਹਾਂ, ਬੋਲੋ।',
+  sleeping: () => 'ਠੀਕ ਹੈ, ਲੋੜ ਪਵੇ ਤਾਂ ਸੱਦ ਲਿਓ।',
 }
 
 export const REPLIES: Record<Lang, Replies> = { hi: HI, en: EN, kn: KN, ta: TA, te: TE, ml: ML, mr: MR, bn: BN, gu: GU, pa: PA }
