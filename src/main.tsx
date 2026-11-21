@@ -2,6 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 
+// caches the wake-word model and its runtime (production builds only)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
 /** ?reset=1: wipe this browser's KhataBhai data (ledger + settings), then load the app empty. */
 async function resetIfAsked(): Promise<boolean> {
   if (!new URLSearchParams(location.search).has('reset')) return false
