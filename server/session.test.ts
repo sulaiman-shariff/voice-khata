@@ -1160,6 +1160,28 @@ describe('save anyway', () => {
     expect(h.asks).toBeNull()
   })
 
+  it('a forced line is still speech: a new name from the agent is read back before anything is written', async () => {
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en', agent: () => addEntry('Talk', 300, 'payment') })
+    h.s.onClient({ type: 'force', text: 'Talk 300 diye' })
+    await h.s.idle()
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('confirm')
+    expect(lastCard(h.out)).toMatchObject({ kind: 'confirm', newCustomer: true })
+    await h.tap('yes')
+    expect(h.accounts()).toEqual(['Talk'])
+    expect(h.entries()).toHaveLength(1)
+  })
+
+  it('a forced correction to a name not in the ledger is read back first', async () => {
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en', agent: () => callsOf({ name: 'move_entry', args: { ref: 1, to_name: 'Talk' } }) })
+    await h.turn('Ramesh ka 340 udhaar')
+    const n = h.ops().length
+    h.s.onClient({ type: 'force', text: 'nahi, Talk' })
+    await h.s.idle()
+    expect(h.ops()).toHaveLength(n)
+    expect(h.asks).toBe('modify')
+  })
+
   it('a tool reply with a show and a ready card reaches the phone', async () => {
     const h = harness([cust('r', 'Ramesh', 0)], {
       lang: 'en',

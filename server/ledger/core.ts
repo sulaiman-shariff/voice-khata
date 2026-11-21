@@ -130,8 +130,12 @@ export class LedgerCore {
   }
   /** the customer the conversation is about right now */
   focusCid: string | null = null
-  /** where the turn being handled came from (taps and typed text arrive as 'tap') */
-  turnSrc: 'voice' | 'tap' | 'resend' = 'voice'
+  /**
+   * Where the turn being handled came from: taps and typed text arrive as 'tap'; 'force' is "Save
+   * anyway" on a dimmed line. A forced turn is deliberate (addressed to the app) but its words are
+   * still a transcript of speech, so a new name in it is read back like any spoken one.
+   */
+  turnSrc: 'voice' | 'tap' | 'resend' | 'force' = 'voice'
   /** when the open question was asked: stale questions expire */
   pendingAt = 0
   /** last few turns, for the model and for "uska / him / same" */
@@ -572,7 +576,7 @@ export class LedgerCore {
     if (!p) return true
     // a fresh complete plain entry replaces the question, with no model in the way
     if (intent.type === 'entries' && this.isPlainEntry(intent)) return true
-    if (this.turnSrc === 'tap') return true
+    if (this.turnSrc === 'tap' || this.turnSrc === 'force') return true
     if (intent.type === 'yes' || intent.type === 'no' || intent.type === 'undo') return true
     const words = text.trim().split(/\s+/).filter(Boolean).length
     const full = intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)

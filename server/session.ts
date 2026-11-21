@@ -190,9 +190,9 @@ export class Session {
     return rest
   }
 
-  /** A typed or tapped turn: the window restarts after the reply; an open question keeps us awake for the spoken answer. */
-  private async typedTurn(text: string) {
-    await this.handleText(text, null, 'tap')
+  /** A typed, tapped or forced turn: the window restarts after the reply; an open question keeps us awake for the spoken answer. */
+  private async typedTurn(text: string, src: 'tap' | 'force' = 'tap') {
+    await this.handleText(text, null, src)
     if (this.pending) this.attention.wake('tap')
     else this.attention.touch()
   }
@@ -293,7 +293,7 @@ export class Session {
       case 'force':
         // "Save anyway" on a not-an-entry line: addressed to the app, never dropped as talk to someone else
         this.log.info('input', { kind: 'force', text: msg.text })
-        if (msg.text.trim() && msg.text.length <= 2000) this.enqueue(() => this.handleText(msg.text.trim(), null, 'tap', true))
+        if (msg.text.trim() && msg.text.length <= 2000) this.enqueue(() => this.typedTurn(msg.text.trim(), 'force'))
         break
       case 'barge':
         this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
@@ -588,10 +588,10 @@ export class Session {
   async handleText(
     text: string,
     t: TurnTiming | null,
-    _src: 'voice' | 'tap' | 'resend',
-    /** "Save anyway": handled as addressed to the app; the model may not answer not_for_me */
-    forced = false,
+    /** 'force': "Save anyway", handled as addressed to the app (the model may not answer not_for_me), its words still speech */
+    _src: 'voice' | 'tap' | 'resend' | 'force',
   ): Promise<void> {
+    const forced = _src === 'force'
     const t0 = this.now()
     this.ledger.turnSrc = _src
     const heard = t?.heard?.length ? t.heard : [{ locale: LOCALE[this.lang], text }]
