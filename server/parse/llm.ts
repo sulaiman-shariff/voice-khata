@@ -152,7 +152,8 @@ function describeCandidates(spans: AmountSpan[]): string {
 }
 
 let client: Anthropic | null = null
-const getClient = () => (client ??= new Anthropic({ maxRetries: 1, timeout: 6000 }))
+// a voice turn cannot wait: ~1 s is normal, so give up at 3 s (no retry) and ask the shopkeeper instead
+const getClient = () => (client ??= new Anthropic({ maxRetries: 0, timeout: 3000 }))
 
 export function userMessage(transcript: string, ctx: LlmContext): string {
   const spans = parseAmounts(transcript)
