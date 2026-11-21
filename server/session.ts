@@ -906,6 +906,11 @@ export class Session {
   // ------------------------------------------------------------------ dialogue
   private dispatch(intent: Intent, text: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Reply | null {
     const R = say(this.lang)
+    // "udhaar clear" / "hisaab clear": settling the whole balance, before any reading as a question
+    if (intent.type !== 'entries' && mentionsSettle(text)) {
+      const settled = this.settle(text, snrDb, noisy, path)
+      if (settled) return settled
+    }
     switch (intent.type) {
       case 'entries': {
         const drafts = intent.entries.map((e) => this.draftFrom(e, text, snrDb, noisy, path))
@@ -985,8 +990,6 @@ export class Session {
       case 'unknown': {
         // Part of an entry, said on its own: start the entry and ask for what is missing.
         // Only a name ("ಮಾಹಿ ಹೆಸರಿಂದ"): ask how much. Only an amount ("300"): ask whose.
-        const settle = this.settleDraft(text, snrDb, noisy, path)
-        if (settle) return this.processDrafts([settle], { parts: [], ops: [] })
         const part = this.partialDraft(text, snrDb, noisy, path)
         if (part) return this.processDrafts([part], { parts: [], ops: [] })
         // background talk to a customer is ignored; only speak up if it sounded like ledger talk
@@ -1102,13 +1105,17 @@ export class Session {
     if (!near.length) {
       // before opening a new account: does the heard name contain a customer we already have?
       // ("ಸುರೇಶ್ ಹೆಸರಿಂದ", "Sureshdu", "ಸುರೇಶ್ದು" -> Suresh). Then read it back instead of guessing.
-      const inside = this.knownWithin(d.heardName!) ?? (d.single ? this.knownWithin(d.transcript) : null)
-      if (inside) {
-        this.log.info('name_guard', { heard: d.heardName, matched: inside.name })
-        d.cid = inside.cid
+      let found = this.candidates(d.heardName!)
+      if (!found.length && d.single) found = this.candidates(d.transcript)
+      const one = Session.clearWinner(found)
+      if (one) {
+        this.log.info('name_guard', { heard: d.heardName, matched: one.name })
+        d.cid = one.cid
         d.nameSure = false
         return 'ok'
       }
+      // two customers fit about equally ("Ramesh" / "Rameshwar", two Sureshes): ask, never pick or open a third
+      if (found.length >= 2) return found.slice(0, 3).map((x) => x.c)
       d.newName = titleCase(newCustomerName(d.heardName!))
       d.nameSure = true
       return 'ok'
@@ -1127,8 +1134,23 @@ export class Session {
    * glued on). Null when none or more than one customer fits.
    */
   private knownWithin(heard: string): SnapCustomer | null {
+    return Session.clearWinner(this.candidates(heard))
+  }
+
+  /** One customer clearly ahead of the rest (alone, or an exact match against only close ones), else null. */
+  static clearWinner(found: { c: SnapCustomer; score: number }[]): SnapCustomer | null {
+    if (found.length === 1) return found[0].c
+    if (found.length >= 2 && found[0].score >= NAME_SURE && found[1].score < found[0].score - 0.05) return found[0].c
+    return null
+  }
+
+  /**
+   * Every known customer the heard words could name, best first: a word, two adjacent words, or a
+   * word without a possessive ending. Two people with the same name both come back.
+   */
+  private candidates(heard: string): { c: SnapCustomer; score: number }[] {
     const people = this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] }))
-    if (!people.length) return null
+    if (!people.length) return []
     const words = heard.split(/[\s,.;:!?।]+/).filter(Boolean)
     const tries = new Set<string>()
     for (let i = 0; i < words.length; i++) {
@@ -1137,13 +1159,19 @@ export class Session {
       for (const suf of ['ದು', 'ದ', 'ರ', 'du', 'da', 'ra', 'ka', 'ki', 'ke', 'ಅವರ'])
         if (words[i].length > suf.length + 2 && words[i].toLowerCase().endsWith(suf)) tries.add(words[i].slice(0, -suf.length))
     }
-    const hits = new Set<string>()
-    for (const t of tries) {
-      const best = matchName(t, people)[0]
-      if (best && best.score >= NAME_NEAR) hits.add(best.id)
-    }
-    if (hits.size !== 1) return null
-    return this.snap.customers.find((c) => c.cid === [...hits][0]) ?? null
+    const best = new Map<string, number>()
+    for (const t of tries)
+      for (const m of matchName(t, people))
+        if (m.score >= NAME_NEAR && m.score > (best.get(m.id) ?? 0)) best.set(m.id, m.score)
+    return [...best]
+      .map(([id, score]) => ({ c: this.snap.customers.find((x) => x.cid === id)!, score }))
+      .sort((a, b) => b.score - a.score)
+  }
+
+  /** How a customer is shown in a "which one?" question: with the balance when another has the same name. */
+  private label(c: SnapCustomer): string {
+    const twin = this.snap.customers.some((x) => x.cid !== c.cid && x.name.toLowerCase() === c.name.toLowerCase())
+    return twin ? `${c.name} · ₹${(c.balancePaise / 100).toLocaleString('en-IN')}` : c.name
   }
 
   /** A turn that is only a known customer's name ("ಸುರೇಶ್", then a pause, then "300 ರೂಪಾಯಿ ಸಾಲ"). */
@@ -1168,6 +1196,15 @@ export class Session {
     const R = say(this.lang)
     while (drafts.length) {
       const d = drafts.shift()!
+      // "udhaar clear": the amount is whatever the customer owes, known once the customer is
+      if (d.reasons.includes('settle-balance') && d.cid) {
+        const c = this.snap.customers.find((x) => x.cid === d.cid)
+        if (!c || c.balancePaise <= 0) {
+          acc.parts.push(R.balance(c?.name ?? this.customerName(d), (c?.balancePaise ?? 0) / 100))
+          continue
+        }
+        d.paise = c.balancePaise
+      }
       if (d.paise <= 0) {
         if (!d.heardName && !d.cid) {
           acc.parts.push(R.didNotCatch())
@@ -1177,7 +1214,7 @@ export class Session {
         const res = this.resolveName(d)
         if (Array.isArray(res)) {
           this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
-          acc.parts.push(R.askWhich(res[0].name, res[1].name))
+          acc.parts.push(R.askWhich(this.label(res[0]), this.label(res[1])))
           return acc
         }
         this.pending = { kind: 'amount', draft: d, queue: drafts }
@@ -1192,7 +1229,7 @@ export class Session {
       const res = this.resolveName(d)
       if (Array.isArray(res)) {
         this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
-        acc.parts.push(R.askWhich(res[0].name, res[1].name))
+        acc.parts.push(R.askWhich(this.label(res[0]), this.label(res[1])))
         return acc
       }
       const name = this.customerName(d)
@@ -1346,7 +1383,7 @@ export class Session {
             const res = this.resolveName(d)
             if (Array.isArray(res)) {
               this.pending = { kind: 'which', draft: d, queue: p.queue, options: res }
-              return { parts: [R.askWhich(res[0].name, res[1].name)], ops: [] }
+              return { parts: [R.askWhich(this.label(res[0]), this.label(res[1]))], ops: [] }
             }
           }
           this.save(d, acc) // the user just said the right value: no second confirmation
@@ -1394,10 +1431,12 @@ export class Session {
         return this.processDrafts([d, ...p.queue], acc)
       }
       case 'which': {
+        // a tap sends the option exactly as shown ("Suresh · ₹300"); speech is matched by name
+        const tapped = p.options.find((c) => this.label(c) === text.trim())
         const n = nameAnswer(text) ?? text
-        const m = matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
+        const m = tapped ? [{ id: tapped.cid, score: 1 }] : matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
         if (!m.length || m[0].score < NAME_NEAR || (m[1] && m[1].score >= m[0].score - 0.01))
-          return { parts: [R.askWhich(p.options[0].name, p.options[1].name)], ops: [] }
+          return Session.offTopic(text) || Session.askedEnough(d) ? null : { parts: [R.askWhich(this.label(p.options[0]), this.label(p.options[1]))], ops: [] }
         d.cid = m[0].id
         d.nameSure = true
         return this.processDrafts([d, ...p.queue], acc)
@@ -1523,18 +1562,30 @@ export class Session {
   }
 
   /**
-   * "Ramesh ka udhaar clear" / "hisaab chukta": the customer paid off what they owe. Only for one
-   * customer we know who owes something; always read back ("Ramesh, 200 rupees paid, correct?").
+   * "Ramesh ka udhaar clear" / "hisaab chukta" / just "clear": the customer paid off what they owe.
+   * The customer is the one named, or the one just talked about when no name is said. Two customers
+   * who both fit ("Ramesh" / "Rameshwar", two Sureshes) are asked about first. Always read back
+   * with that customer's balance ("Ramesh, 200 rupees paid, correct?"); nothing is written without a yes.
    */
-  private settleDraft(text: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Draft | null {
+  private settle(text: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Reply | null {
     if (!mentionsSettle(text) || parseAmounts(text).some((a) => a.value > 0)) return null
-    const c = this.knownWithin(text) ?? (nameAnswer(text) ? this.lookup(nameAnswer(text)!) : null)
-    if (!c || c.balancePaise <= 0) return null
-    return {
-      heardName: c.name, cid: c.cid, newName: null, nameSure: true, paise: c.balancePaise, alt: null, direction: 'payment',
-      dayOffset: 0, promise: false, confidence: 'low', reasons: ['settle-balance'], path, transcript: text, snrDb, noisy,
-      spoken: this.turnSrc !== 'tap', single: true,
+    const found = this.candidates(text)
+    const named = nameAnswer(text)
+    const saysNoName = !named || named.split(' ').every((w) => mentionsSettle(w))
+    const focus = saysNoName && this.focusCid ? this.snap.customers.find((c) => c.cid === this.focusCid) ?? null : null
+    const one = Session.clearWinner(found) ?? (found.length ? null : focus)
+    if (!one && found.length < 2) return null // nobody we know: not a settle
+    const d: Draft = {
+      heardName: one?.name ?? null, cid: one?.cid ?? null, newName: null, nameSure: true, paise: one?.balancePaise ?? 1, alt: null,
+      direction: 'payment', dayOffset: 0, promise: false, confidence: 'low', reasons: ['settle-balance'], path, transcript: text,
+      snrDb, noisy, spoken: this.turnSrc !== 'tap', single: true,
     }
+    if (!one) {
+      const options = found.slice(0, 3).map((x) => x.c)
+      this.pending = { kind: 'which', draft: d, queue: [], options }
+      return { parts: [say(this.lang).askWhich(this.label(options[0]), this.label(options[1]))], ops: [] }
+    }
+    return this.processDrafts([d], { parts: [], ops: [] })
   }
 
   /** Long talk with no answer in it is the shopkeeper talking to someone else: keep the question, stay quiet. */
@@ -1586,7 +1637,7 @@ export class Session {
       paise: d.paise,
       direction: d.direction,
       newCustomer: p.kind === 'confirm' && this.opensAccount(d) ? true : undefined,
-      options: p.kind === 'which' ? p.options.map((c) => c.name) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
+      options: p.kind === 'which' ? p.options.map((c) => this.label(c)) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
     }
   }
 
