@@ -213,23 +213,6 @@ describe('never a wrong amount silently', () => {
     expect(h.asks).toBe('confirm')
     expect(h.entries()).toEqual([])
   })
-
-  it('a noisy turn whose second transcription hears another amount asks "70 or 17?"', async () => {
-    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'रमेश का सत्रह रुपये उधार' }) })
-    await h.turn('रमेश का 70 रुपये उधार', true)
-    expect(h.ops()).toEqual([])
-    expect(lastCard(h.out)).toMatchObject({ kind: 'confusable', options: ['70', '17'] })
-    await h.turn('सत्रह', true)
-    await h.turn('हाँ', true) // noisy: the chosen amount is read back once more
-    expect(h.written()).toEqual([['r', 17, 'credit']])
-  })
-
-  it('a failed second transcription still reads the noisy turn back (never a silent write)', async () => {
-    const h = harness([cust('r', 'Ramesh')], { transcribe2: () => Promise.reject(new Error('429')) })
-    await h.turn('रमेश का 70 रुपये उधार', true)
-    expect(h.asks).toBe('confirm')
-    expect(h.ops()).toEqual([])
-  })
 })
 
 describe('a heard name not in the ledger is never written without a yes', () => {
@@ -707,20 +690,6 @@ describe('answers about the ledger', () => {
 })
 
 describe('language', () => {
-  it('a turn the recogniser garbled in Hindi but reads in Kannada is switched to Kannada and written', async () => {
-    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'ರಮೇಶ್‌ಗೆ 500 ರೂಪಾಯಿ ಸಾಲ ಕೊಟ್ಟೆ', lang: 'kn-IN' }) })
-    await h.turn('रमेश के 500 रुपये साला कोटे')
-    expect(h.s.lang).toBe('kn')
-    expect(h.written()).toEqual([['r', 500, 'credit']])
-  })
-
-  it('a customer chatting in another language changes nothing', async () => {
-    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'ಹೇಗಿದ್ದೀರಾ ಅಣ್ಣ', lang: 'kn-IN' }) })
-    await h.turn('हेगिदिरा अन्ना')
-    expect(h.s.lang).toBe('hi')
-    expect(h.ops()).toEqual([])
-  })
-
   it('English code-mixing in a Hindi session never switches the reply language', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.s.handleText('Ramesh 500 credit', { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: 25, noisy: false, lang: 'en-IN' }, 'voice')
@@ -770,41 +739,5 @@ describe('turn taking', () => {
     expect(await talk((h) => { h.cb.onSpeechStart?.(); h.cb.onPartial?.('nahi ruko') })).toBe(true)
     expect(await talk((h) => { h.cb.onSpeechStart?.(); h.cb.onSpeechEnd?.() })).toBe(false)
     expect(await talk((h) => h.cb.onPartial?.('Ramesh का कुल'))).toBe(false)
-  })
-})
-
-describe('a second opinion (Sarvam) on unclear turns', () => {
-  it('rescues a turn Gnani misheard, and reads it back before writing', async () => {
-    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: async () => ({ text: 'रमेश 500 खाता', lang: 'hi-IN' }), llm: () => ({ intent: 'unclear', sure: false }) })
-    await h.turn("Ramesh pancho khatam It's all.")
-    expect(h.ops()).toEqual([])
-    expect(h.asks).toBe('confirm')
-    expect(h.said.join(' ')).toMatch(/500/)
-    await h.turn('yes')
-    expect(h.written()).toEqual([['r', 500, 'credit']])
-  })
-
-  it('a different amount from the second opinion becomes a question, never a guess', async () => {
-    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: async () => ({ text: 'Ramesh 500' }) })
-    await h.turn('Ramesh 300')
-    await h.answer('udhaar')
-    expect(h.ops()).toEqual([])
-    expect(h.asks).toBe('confusable') // "300 or 500?"
-    await h.turn('500')
-    expect(h.written()).toEqual([['r', 500, 'credit']])
-  })
-
-  it('a clean reading of a known customer is written without waiting for it', async () => {
-    let calls = 0
-    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: () => { calls++; return new Promise(() => {}) } })
-    await h.turn('Ramesh 300 credit')
-    expect(h.written()).toEqual([['r', 300, 'credit']])
-    expect(calls).toBe(1) // asked, but not waited on
-  })
-
-  it('a second opinion that fails or never answers changes nothing', async () => {
-    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: async () => { throw new Error('down') } })
-    await h.turn('Ramesh 300')
-    expect(h.asks).toBe('direction')
   })
 })

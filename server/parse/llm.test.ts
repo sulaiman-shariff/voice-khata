@@ -52,4 +52,10 @@ describe('guard on confident model guesses', () => {
     expect(reasons('Sunitu ka 340 udhaar', entry('Geeta', 'credit'))).toContain('name-changed')
     expect(reasons('रमेश का 340 उधार', entry('Ramesh', 'credit'))).not.toContain('name-changed')
   })
+  it('a name the model altered (Sunitu -> Sunita) is read back', () => {
+    const sunita = entry('Sunita', 'credit')
+    sunita.entries[0].amount = 1000
+    expect(reasons('Sunitu dobar 1,000 rupees on credit', sunita)).toContain('name-changed')
+    expect(reasons('रमेश का 340 उधार', entry('Ramesh', 'credit'))).not.toContain('name-changed')
+  })
 })

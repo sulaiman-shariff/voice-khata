@@ -11,10 +11,8 @@ import { WebSocket, WebSocketServer } from 'ws'
 import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
 import { MultiStt } from '../server/gnani/multi.js'
-import { transcribeSarvam } from '../server/sarvam.js'
 import { TtsPool } from '../server/gnani/tts.js'
-import { transcribeRest } from '../server/gnani/rest.js'
-import { llmModel, llmProvider, readWithLlm, warmUp } from '../server/parse/llm.js'
+import { llmModel, readWithLlm, warmUp } from '../server/parse/llm.js'
 import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
 
@@ -120,20 +118,13 @@ wss.on('connection', (ws, req) => {
     warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
     llm: async (text, ctx) => {
       const r = await readWithLlm(text, ctx)
-      L.info('llm_call', { provider: llmProvider(), model: llmModel(), ms: r.ms, cachedTokens: r.cachedTokens })
+      L.info('llm_call', { model: llmModel(), ms: r.ms })
       return r.reading
     },
-    // Prisma REST reading of the turn audio: language rescue always; the noisy-turn amount
-    // cross-check only with SECOND_READING=on (it agreed 57/65 times in the e2e suite, caught no
-    // error, and cost 0.4-0.65 s per noisy turn). SECOND_READING=off disables both.
-    transcribe2: process.env.SECOND_READING === 'off' ? undefined : (pcm, locale, keyterms, prev) => transcribeRest(key, pcm, locale, keyterms, prev),
-    secondReading: process.env.SECOND_READING === 'on',
     send,
     sendAudio: (pcm) => ws.readyState === WebSocket.OPEN && ws.send(pcm),
     log: L,
     record: process.env.KB_RECORD_DIR ? recorder(process.env.KB_RECORD_DIR, sid) : undefined,
-    // second opinion on unclear turns, when a Sarvam key is configured
-    verify: process.env.SARVAM_API_KEY ? (pcm, terms) => transcribeSarvam(process.env.SARVAM_API_KEY!, pcm, terms) : undefined,
   })
   let audioFrames = 0
   // replayed speech (and live audio that arrives meanwhile) goes through a paced queue, in order

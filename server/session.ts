@@ -41,22 +41,10 @@ export interface SessionDeps {
   /** Pre-synthesize fixed phrases so speak() replays them without a TTS round trip. */
   warm?: (texts: string[], locale: string, speed: 0.8 | 1 | 1.2) => void
   llm: (text: string, ctx: LlmContext) => Promise<Partial<LlmReading>>
-  /**
-   * Optional second, independent transcription of a noisy turn's audio (Prisma REST,
-   * verbatim). Returns the transcript; any error or timeout means "no second opinion".
-   */
-  transcribe2?: (pcm: Buffer, locale: string, keyterms: string[], previousText?: string) => Promise<{ text: string; lang?: string }>
-  /** Also cross-check the amount of noisy money turns with transcribe2 (opt-in: it adds latency). */
-  secondReading?: boolean
   send: (msg: ServerMsg) => void
   sendAudio: (pcm: Buffer) => void
   /** Structured logger for this session (server/log.ts); silent when absent. */
   log?: Logger
-  /**
-   * A second, independent reading of a turn's audio (Sarvam): used to rescue turns Gnani could not
-   * read and to catch amount disagreements. Never the only reason anything is written.
-   */
-  verify?: (pcm: Buffer, keyterms: string[]) => Promise<{ text: string; lang?: string }>
   /** Local test runs only (KB_RECORD_DIR): keep each turn's audio and what was made of it. */
   record?: (turn: Record<string, unknown>, pcm?: Buffer) => void
   now?: () => number
@@ -73,8 +61,6 @@ const ANOMALY_FACTOR = 5
 /** with no history for the customer, ₹10,000 or more is read back first */
 const BIG_PAISE = 10_000_00
 const PENDING_TTL_MS = 45_000
-/** How long an unclear turn waits for the second opinion (deps.verify) before going on without it. */
-export const VERIFY_WAIT_MS = 1500
 /** Ledger words per language, given to the recogniser as hints (see keyterms()). */
 const LEDGER_TERMS: Record<string, string[]> = {
   en: ['credit', 'paid', 'udhaar', 'jama', 'rupees', 'clear'],
@@ -94,14 +80,10 @@ const POINTS_BACK = /wal[aei]\b|वाल[ाीे]|badl|बदल|change|galat
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
 
 type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean; pcm?: Buffer; lang?: string; heardAt?: number | null }
-/** Audio kept for the second reading of a noisy turn (16 kHz s16le): the last 20 s at most. */
+/** Audio kept for the turn (16 kHz s16le): the last 20 s at most. */
 const UTT_AUDIO_MAX = 20 * 16000 * 2
 /** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
 const STT_REFRESH_MS = 14 * 60_000
-/** How long an unreadable turn waits for Prisma REST to hear it in another language. */
-const RESCUE_WAIT_MS = 1500
-/** How long a noisy turn waits for the second reading before going on without it. */
-export const SECOND_READ_WAIT_MS = 1200
 const minSnr = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b))
 
 interface Draft {
@@ -177,15 +159,9 @@ export class Session {
   private stt: SttLike | null = null
   private energy = newEnergyState()
   private frameCarry = Buffer.alloc(0)
-  /** mic audio since the last final, for the second reading of a noisy turn */
+  /** mic audio since the last final (16 kHz s16le) */
   private uttAudio: Buffer[] = []
   private uttBytes = 0
-  /** amounts the second reading heard for the turn being handled (null: none asked or none usable) */
-  private secondAmounts: number[] | null = null
-  /** this turn's words came from the second opinion, not Gnani: read every line back */
-  private fromVerifier = false
-  /** what the second opinion heard this turn (for the turn record) */
-  private verified: { text: string; lang?: string; used: boolean } | null = null
   private lastPartial = ''
   private committed = false
   private commitAt: number | null = null
@@ -386,11 +362,9 @@ export class Session {
   // ------------------------------------------------------------------ audio + end of turn
   onAudio(pcm: Buffer): void {
     this.stt?.send(pcm)
-    if (this.deps.transcribe2) {
-      this.uttAudio.push(pcm)
-      this.uttBytes += pcm.length
-      while (this.uttBytes - this.uttAudio[0].length > UTT_AUDIO_MAX) this.uttBytes -= this.uttAudio.shift()!.length
-    }
+    this.uttAudio.push(pcm)
+    this.uttBytes += pcm.length
+    while (this.uttBytes - this.uttAudio[0].length > UTT_AUDIO_MAX) this.uttBytes -= this.uttAudio.shift()!.length
     let buf = this.frameCarry.length ? Buffer.concat([this.frameCarry, pcm]) : pcm
     const FB = FRAME_SAMPLES * 2
     while (buf.length >= FB) {
@@ -530,77 +504,6 @@ export class Session {
     return pcm
   }
 
-  /**
-   * Second, independent reading of a noisy money turn: Prisma REST in verbatim format (numbers
-   * spelled out, read by our own number parser) on the same audio. Resolves to the amounts it
-   * heard (rupees), or null when there is no usable second opinion.
-   */
-  private secondReading(read: Promise<{ text: string; lang?: string } | null>, text: string): Promise<number[] | null> {
-    const amounts = read
-      .then((r) => {
-        // heard in another language: that is the rescue's business, not a second opinion on the amount
-        if (!r || (r.lang && r.lang !== LOCALE[this.lang])) return null
-        const t2 = r.text
-        const v = parseAmounts(t2).map((a) => a.value)
-        this.log.info('second_reading', { text, second: t2, amounts: v })
-        return v.length ? v : null
-      })
-    const wait = new Promise<null>((resolve) => setTimeout(() => resolve(null), SECOND_READ_WAIT_MS).unref?.())
-    return Promise.race([amounts, wait])
-  }
-
-  /**
-   * A voice turn nobody could read: maybe the shopkeeper spoke another language than the one
-   * picked (realtime Prisma forces the session language and returns garble). Prisma REST follows
-   * the spoken language; when it hears another supported language AND that text reads as a
-   * ledger turn, switch the session to it and use that reading.
-   */
-  /** One Prisma REST reading of this turn's audio, shared by the second reading and the rescue (REST allows one request at a time). */
-  private restRead(pcm: Buffer | undefined): Promise<{ text: string; lang?: string } | null> | null {
-    if (!pcm || !this.deps.transcribe2 || pcm.length < 16000) return null
-    const prev = this.history.length ? this.history[this.history.length - 1].replace(/^\w+: /, '') : undefined
-    const t0 = this.now()
-    return Promise.race([
-      this.deps.transcribe2(pcm, LOCALE[this.lang], this.keyterms(), prev)
-        .then((r) => {
-          this.log.info('rest_read', { ms: this.now() - t0, text: r.text, lang: r.lang, audioMs: pcm.length / 32 })
-          return r
-        })
-        .catch((e) => {
-          this.log.warn('rest_read_failed', { ms: this.now() - t0, error: e })
-          return null
-        }),
-      new Promise<null>((resolve) => setTimeout(() => {
-        resolve(null)
-      }, RESCUE_WAIT_MS).unref?.()),
-    ])
-  }
-
-  /**
-   * Unreadable, or money with no readable direction AND words we could not place: the verbs may
-   * be in another language. A plain "Ramesh, 400" has nothing unplaced, so it asks at once
-   * instead of waiting for Prisma REST (that wait cost 0.5-1.4 s per turn in the e2e suite).
-   */
-  private static rescuable(intent: Intent, text: string): boolean {
-    if (intent.type === 'unknown') return true
-    return intent.type === 'entries' && intent.entries.some((e) => !e.direction && !e.promise) &&
-      hasUnplacedWords(text, intent.entries.map((e) => e.name))
-  }
-
-  private async languageRescue(read: Promise<{ text: string; lang?: string } | null>): Promise<{ text: string; intent: Intent } | null> {
-    const r = await read
-    if (!r?.lang || !r.text.trim()) return null
-    const lang = langFromLocale(r.lang)
-    if (lang === this.lang || LOCALE[lang] !== r.lang) return null
-    const intent = parseFast(r.text)
-    if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return null
-    if (intent.type === 'entries' && intent.entries.some((e) => !e.direction && !e.promise)) return null // no better than what we had
-    this.log.info('language_rescue', { from: this.lang, to: lang, text: r.text })
-    this.switchLang(lang)
-    this.deps.send({ type: 'final', text: r.text })
-    return { text: r.text, intent }
-  }
-
   /** Replies, and the realtime stream (update_settings, no reconnect), follow the shopkeeper's language. */
   private switchLang(lang: Lang) {
     this.log.info('language_switch', { from: this.lang, to: lang })
@@ -669,7 +572,6 @@ export class Session {
   ): Promise<void> {
     const t0 = this.now()
     this.turnSrc = _src
-    // started now so it runs alongside parsing; only noisy money turns ask for it
     let intent: Intent = parseFast(text)
     let path: 'fast' | 'llm' | 'none' = 'fast'
     let llmMs: number | undefined
@@ -681,46 +583,6 @@ export class Session {
       this.pending = null
     }
     const turn = ++this.turnNo
-    // a turn that does not read may be in another language: ask Prisma REST now, decide after parsing
-    const wantRescue = !this.pending && Session.rescuable(intent, text)
-    const wantSecond = !!this.deps.secondReading && !!t?.noisy && mentionsMoney(text)
-    const rest = wantRescue || wantSecond ? this.restRead(t?.pcm) : null
-    // started now so they run alongside parsing
-    const second = rest && wantSecond ? this.secondReading(rest, text) : null
-    const rescue = wantRescue ? rest : null
-
-    // Second opinion (Sarvam) on the same audio. A clean reading is not held up: the check is only
-    // logged. An unclear one waits for it (VERIFY_WAIT_MS at most): a better reading is used, and is
-    // read back; a different amount becomes a question ("300 or 500?").
-    this.fromVerifier = false
-    this.verified = null
-    let verifyAmounts: number[] | null = null
-    const ver = !this.pending && _src === 'voice' && t?.pcm?.length && this.deps.verify ? this.verifyRead(t.pcm) : null
-    if (ver) {
-      if (this.confidentEntry(intent)) {
-        const heard = text
-        void ver.then((r) => {
-          if (r?.text) this.log.info('verify', { turn, text: heard, other: r.text, lang: r.lang, agree: Session.sameAmounts(heard, r.text), waited: false })
-        })
-      } else {
-        const r = await ver
-        if (r?.text) {
-          const used = this.readScore(r.text) > this.readScore(text)
-          this.verified = { text: r.text, lang: r.lang, used }
-          this.log.info('verify', { turn, text, other: r.text, lang: r.lang, used, waited: true })
-          if (used) {
-            this.deps.send({ type: 'final', text: r.text })
-            text = r.text
-            intent = parseFast(text)
-            this.fromVerifier = true
-          } else if (intent.type === 'entries') {
-            const v = parseAmounts(r.text).map((a) => a.value).filter((x) => x > 0)
-            if (v.length) verifyAmounts = v
-          }
-        }
-      }
-    }
-
     let unsureChange = false
     if (!this.pending && this.needsLlm(text, intent)) {
       const change = this.isChangeTalk(text, intent)
@@ -757,12 +619,8 @@ export class Session {
       if (unsureChange && intent.type !== 'modify') intent = { type: 'unknown' }
       llmMs = this.now() - l0
     }
-    if (rescue && !this.pending && Session.rescuable(intent, text)) {
-      const rescued = await this.languageRescue(rescue)
-      if (rescued) ({ text, intent } = rescued)
-    } else if (!this.pending) this.followDetectedLang(t?.lang, intent)
+    if (!this.pending) this.followDetectedLang(t?.lang, intent)
     const parseMs = this.now() - t0
-    this.secondAmounts = second ? await second : verifyAmounts
 
     const before = this.pending
     let reply = this.pending
@@ -775,7 +633,6 @@ export class Session {
     // a turn lost to a dropped connection, handled again: say so, then the full read-back
     if (reply && _src === 'resend') reply.parts.unshift(say(this.lang).resent())
     if (this.pending && this.pending !== before) this.pendingAt = this.now()
-    this.secondAmounts = null
     if (!reply) path = 'none'
     this.remember(`Shopkeeper: ${text}`)
     if (reply?.parts.length) this.remember(`Agent: ${reply.parts.join(' ')}`)
@@ -837,7 +694,7 @@ export class Session {
       turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, heardAll, intent: intent.type, path,
       reply: reply?.parts.join(' ') ?? null, pending: this.pending?.kind ?? null,
       ops: reply?.ops ?? [], snrDb: t?.snrDb ?? null, noisy: t?.noisy ?? null,
-      finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null, verified: this.verified,
+      finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null,
     }, t?.pcm)
     // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
     if (_src === 'voice' && !reply && !this.pending) this.deps.send({ type: 'not_entry', text })
@@ -1116,17 +973,6 @@ export class Session {
   private draftFrom(e: EntryIntent, transcript: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Draft {
     let alt = e.reasons.includes('confusable') && e.amount.alternatives.length ? e.amount.alternatives[0] : null
     const reasons = [...e.reasons]
-    const sec = this.secondAmounts
-    if (alt === null && sec && !sec.includes(e.amount.value)) {
-      // the second reading of this noisy audio heard a different number: ask which, never guess
-      const other = sec.length === 1 ? sec[0] : null
-      if (other !== null && other > 0) {
-        alt = other
-        reasons.push('second-reading-differs')
-      }
-    } else if (sec?.includes(e.amount.value)) reasons.push('second-reading-agrees')
-    // the words came from the second opinion only (Gnani heard something else): read back
-    if (this.fromVerifier) reasons.push('verifier-only')
     return {
       heardName: e.name,
       cid: null,
@@ -1137,7 +983,7 @@ export class Session {
       direction: e.direction,
       dayOffset: e.dayOffset,
       promise: e.promise,
-      confidence: this.fromVerifier ? 'low' : e.confidence,
+      confidence: e.confidence,
       reasons,
       path,
       transcript,
@@ -1581,31 +1427,6 @@ export class Session {
     this.lastHeard = heard
     if (best !== 0) this.log.info('heard_in_other_language', { chose: heard[best].locale, heard, scores })
     return best
-  }
-
-  /** The second opinion, or null if it fails or takes longer than VERIFY_WAIT_MS. */
-  private verifyRead(pcm: Buffer): Promise<{ text: string; lang?: string } | null> {
-    const read = this.deps.verify!(pcm, this.keyterms()).catch((e) => {
-      this.log.warn('verify_failed', { error: e })
-      return null
-    })
-    const late = new Promise<null>((r) => {
-      const timer = setTimeout(() => r(null), VERIFY_WAIT_MS)
-      timer.unref?.()
-    })
-    return Promise.race([read, late])
-  }
-
-  /** A reading clean enough not to wait for a second opinion: known customers, credit/paid said, nothing in doubt. */
-  private confidentEntry(intent: Intent): boolean {
-    return intent.type === 'entries' && intent.entries.every((e) =>
-      !!e.name && !!(e.direction || e.promise) && e.confidence === 'high' && (!!this.lookup(e.name) || !!this.knownWithin(e.name)))
-  }
-
-  /** Do two readings carry the same amounts? (for the verify log) */
-  static sameAmounts(a: string, b: string): boolean {
-    const x = parseAmounts(a).map((s) => s.value).sort().join(',')
-    return x !== '' && x === parseAmounts(b).map((s) => s.value).sort().join(',')
   }
 
   /** How well a transcript reads as something said to the ledger (higher is better). */

@@ -1,31 +1,21 @@
 /**
- * Slow path: an AI model reads turns the fast path could not settle. Gemini on Vertex AI (Mumbai)
- * in production (gemini.ts); Claude Haiku only with LLM_PROVIDER=claude, for comparison.
+ * Slow path: an AI model reads turns the fast path could not settle: Gemini on Vertex AI (Mumbai),
+ * see gemini.ts.
  *
  * The model never invents money. It picks from the amounts our own parser heard
  * (`candidates`); anything else is rejected by `validate()` and the agent asks instead.
  * The system prompt is frozen (no dates, no names) so it stays prompt-cached; volatile
  * context (customer names, last entry, language) goes in the user message.
  */
-import Anthropic from '@anthropic-ai/sdk'
 import { type EntryIntent, type Intent, directionAnswer } from '../../shared/intent.js'
-import { NAME_SURE, matchName } from '../../shared/names.js'
+import { phoneticKey } from '../../shared/names.js'
 import { type AmountSpan, parseAmounts } from '../../shared/numbers.js'
 import { log } from '../log.js'
-import { GEMINI_MODEL, WARM_TIMEOUT_MS, geminiConfigured, geminiToolCall } from './gemini.js'
+import { GEMINI_MODEL, type GeminiTool, WARM_TIMEOUT_MS, geminiToolCall } from './gemini.js'
 
-export const CLAUDE_MODEL = 'claude-haiku-5-5'
-/** Which model reads hard turns: Gemini when its key is configured, unless LLM_PROVIDER says otherwise. */
-export function llmProvider(): 'gemini' | 'claude' {
-  const p = process.env.LLM_PROVIDER
-  if (p === 'gemini' || p === 'claude') return p
-  return geminiConfigured() ? 'gemini' : 'claude'
-}
 export function llmModel(): string {
-  return llmProvider() === 'gemini' ? GEMINI_MODEL : CLAUDE_MODEL
+  return GEMINI_MODEL
 }
-/** @deprecated the model in use is llmModel() */
-export const LLM_MODEL = CLAUDE_MODEL
 
 export const SYSTEM = `You are the understanding module of KhataBhai, a voice credit ledger used by small Indian shopkeepers (kirana stores).
 A shopkeeper speaks mid-sale, in any Indian language mixed with English. Speech-to-text has already turned their speech into text, which may contain recognition errors.
@@ -78,7 +68,7 @@ Never judge, score or comment on a customer. Record only what was said.`
 const NULLABLE_STR = { type: ['string', 'null'] }
 const DIR = { anyOf: [{ type: 'string', enum: ['credit', 'payment'] }, { type: 'null' }] }
 
-export const TOOL: Anthropic.Tool = {
+export const TOOL: GeminiTool = {
   name: 'khata',
   description: 'Record the structured reading of one shopkeeper utterance. Omit fields that do not apply.',
   input_schema: {
@@ -165,10 +155,6 @@ function describeCandidates(spans: AmountSpan[]): string {
     .join('; ')
 }
 
-let client: Anthropic | null = null
-// a voice turn cannot wait: ~1 s is normal, so give up at 3 s (no retry) and ask the shopkeeper instead
-const getClient = () => (client ??= new Anthropic({ maxRetries: 0, timeout: 3000 }))
-
 export function userMessage(transcript: string, ctx: LlmContext): string {
   const spans = parseAmounts(transcript)
   return [
@@ -184,36 +170,15 @@ export function userMessage(transcript: string, ctx: LlmContext): string {
 
 export async function readWithLlm(
   transcript: string, ctx: LlmContext, signal?: AbortSignal,
-): Promise<{ reading: Partial<LlmReading>; ms: number; cachedTokens: number }> {
-  if (llmProvider() === 'gemini') {
-    const r = await geminiToolCall<Partial<LlmReading>>(SYSTEM, userMessage(transcript, ctx), TOOL, signal)
-    return { reading: r.args, ms: r.ms, cachedTokens: 0 }
-  }
-  const t0 = performance.now()
-  const res = await getClient().messages.create(
-    {
-      model: CLAUDE_MODEL,
-      max_tokens: 600,
-      system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-      tools: [TOOL],
-      tool_choice: { type: 'tool', name: 'khata' },
-      messages: [{ role: 'user', content: userMessage(transcript, ctx) }],
-    },
-    { signal },
-  )
-  const ms = performance.now() - t0
-  const block = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!block) throw new Error(`no tool call (stop_reason ${res.stop_reason})`)
-  return { reading: block.input as Partial<LlmReading>, ms, cachedTokens: res.usage.cache_read_input_tokens ?? 0 }
+): Promise<{ reading: Partial<LlmReading>; ms: number }> {
+  const r = await geminiToolCall<Partial<LlmReading>>(SYSTEM, userMessage(transcript, ctx), TOOL, signal)
+  return { reading: r.args, ms: r.ms }
 }
 
-/** Fire one tiny request at boot so the prompt cache and TLS connection are warm. */
+/** Fire one real request at boot: the model's first answers after a cold start are slow (2-6 s), so pay that here, with a longer limit, instead of on a shopkeeper's turn. */
 export async function warmUp(): Promise<void> {
   try {
-    // one real call: the model's first answers after a cold start are slow (2-6 s on Gemini), so
-    // pay that here, with a longer limit, instead of on a shopkeeper's turn
-    if (llmProvider() === 'gemini') await geminiToolCall(SYSTEM, userMessage('haan', { lang: 'hi-IN', customers: [] }), TOOL, undefined, WARM_TIMEOUT_MS)
-    else await readWithLlm('haan', { lang: 'hi-IN', customers: [] })
+    await geminiToolCall(SYSTEM, userMessage('haan', { lang: 'hi-IN', customers: [] }), TOOL, undefined, WARM_TIMEOUT_MS)
   } catch (e) {
     log.warn('llm_warmup_failed', { error: e }) // best effort
   }
@@ -227,9 +192,11 @@ export async function warmUp(): Promise<void> {
 /** Is this name (or one of its words) in the sentence, in any script? */
 function saidName(name: string, transcript: string): boolean {
   const words = transcript.split(/[\s,.;:!?।]+/).filter(Boolean)
-  const tries = [...words, ...words.slice(1).map((w, i) => `${words[i]} ${w}`)]
-  const target = [{ id: 'n', names: [name, ...name.split(/\s+/)] }]
-  return tries.some((t) => (matchName(t, target)[0]?.score ?? 0) >= NAME_SURE)
+  const tries = [...words, ...words.slice(1).map((w, i) => `${words[i]} ${w}`)].map(phoneticKey).filter(Boolean)
+  // a name counts as said only when its sound matches a said word exactly: near-misses (Sunitu for
+  // Sunita) are the model changing the name, so they are read back
+  const keys = [name, ...name.split(/\s+/)].map(phoneticKey).filter(Boolean)
+  return keys.some((k) => tries.includes(k))
 }
 
 export function validate(transcript: string, raw: Partial<LlmReading>, contextAmounts: number[] = [], recentCount = 0): Intent {

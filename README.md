@@ -109,12 +109,6 @@ Every claim below was checked against the live API with the probe scripts `eval/
 - `commit` frame: once the transcript is a complete khata sentence and the speaker has paused, we send `commit` rather than wait for Prisma's silence timer.
 - Finding: the `x-partials: true` header is not in the public docs. With it, Prisma streams `partial_transcript` events plus `speech_start` and `speech_end` events, and ends the turn with `final_transcript`. Without it you only get `processing` and `transcript`. Partials are what let us parse before the sentence ends.
 
-**Prisma v3.0 STT, REST** (`POST https://api.vachana.ai/stt/v3`), used for a second reading of the same turn audio
-- On REST, `language_code` is a hint, not a lock. Kannada speech sent with `hi-IN` comes back in Kannada script tagged `kn-IN`. The realtime stream, with Shivani-voiced Kannada, wrote it in Hindi script instead.
-- **Noisy turns (opt-in, `SECOND_READING=on`):** the audio is also sent with `format=verbatim`, so numbers come back as words and our own number parser reads the amount. When the two readings disagree, the agent asks "70 ya 17?" instead of a plain yes/no read-back. `previous_text` carries what the agent just asked. In the e2e suite the two readings agreed 57 times out of 65 and the cross-check caught no error, while adding 0.4–0.65 s per noisy turn, so it is off by default.
-- **Unreadable turns in another language:** when realtime text does not read as a ledger turn, or has money but no direction, the REST reading is used if it is in another supported language and does read. The session switches to that language.
-- Both uses share one REST call per turn, because REST allows one active request at a time. Latency was 180–450 ms warm. Any error or timeout (1.2–1.5 s) leaves the turn as it would have been.
-- v3.0 vs v2.5: both read 7 of 7 amounts correctly across hi/kn/ta/te/en/mr, so we stay on v3.0. The comparison found a gap in our own parser: Kannada "ಏಳುನೂರ ಐವತ್ತು" was read as 50. The joined hundreds forms for 600–900 are now handled in Kannada, Tamil and Malayalam.
 
 **Timbre v3.0 TTS** (`wss://api.vachana.ai/api/v1/tts`, WebSocket only)
 - One female voice per language, each from Gnani's recommended list for that language: Shivani (hi/mr/bn/gu), Sunaina (en/ml), Sneha (kn), Kalpana (ta/te/pa). 16 kHz PCM. `eval/tts_roundtrip.ts` speaks each language's saved-entry reply with an amount and reads it back through Prisma. For Malayalam we tried Tarika, Rajni, Shubham, Sunaina and Shivani, and Sunaina came back most exactly. Spoken 17 is sometimes heard as 15 (പതിനഞ്ച്) with every voice.
@@ -219,11 +213,10 @@ npm run dev              # frontend (Vite)
 
 Environment variables (names only; `.env` is gitignored):
 - `GNANI_API_KEY`
-- `ANTHROPIC_API_KEY`
+- `VERTEX_PROJECT`, `GOOGLE_VERTEX_KEY` (Gemini on Vertex AI; `GOOGLE_VERTEX_KEY` is the base64 service-account JSON)
 - `DATABASE_URL` (optional; enables backup and confirmation links, set by the Neon integration on Vercel)
 - `CRON_SECRET` (optional; protects the cleanup cron)
 - `LOG_LEVEL` (optional; `debug`, `info` (default), `warn` or `error`)
-- `SECOND_READING` (optional; `on` adds the noisy-turn amount cross-check, `off` also disables the language rescue)
 - `STT_MIN_SILENCE_MS`, `STT_VAD_THRESHOLD` (optional; Prisma realtime VAD tuning, not sent unless set)
 
 Run the voice server locally:

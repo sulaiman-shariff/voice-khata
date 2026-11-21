@@ -13,13 +13,13 @@ import type { UiStrings } from './strings'
 
 const NOTES_EN = [
   'Your khata is stored only on this phone, encrypted (AES-256). Each customer has their own key.',
-  'Your voice goes to Gnani for speech-to-text and back as speech. Hard sentences go to Claude (Anthropic) as text. Nothing is kept on our server.',
+  'Your voice goes to Gnani for speech-to-text and back as speech. Hard sentences go to Gemini (Google Vertex AI, Mumbai) as text. Nothing is kept on our server.',
   'Every entry is chained with a fingerprint, so any change shows up. Corrections are added, never overwritten.',
   'Reminders: only for adult customers who agreed, and you send them yourself.',
 ]
 const NOTES_HI = [
   'आपका खाता सिर्फ़ इसी फ़ोन पर, ताले (AES-256) में रहता है। हर ग्राहक की अलग चाबी।',
-  'आपकी आवाज़ लिखने और बोलने के लिए Gnani को जाती है। मुश्किल वाक्य शब्दों में Claude (Anthropic) को। हमारे सर्वर पर कुछ नहीं रुकता।',
+  'आपकी आवाज़ लिखने और बोलने के लिए Gnani को जाती है। मुश्किल वाक्य शब्दों में Gemini (Google Vertex AI, मुंबई) को। हमारे सर्वर पर कुछ नहीं रुकता।',
   'हर एंट्री पर एक निशान जुड़ता है, इसलिए कोई भी बदलाव पकड़ में आता है। सुधार नई लाइन में जुड़ते हैं, पुराना मिटता नहीं।',
   'याद दिलाना: सिर्फ़ उन वयस्क ग्राहकों को जिन्होंने हाँ कहा, और भेजते आप ख़ुद हैं।',
 ]

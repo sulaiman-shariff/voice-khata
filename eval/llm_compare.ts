@@ -3,7 +3,7 @@
  * correct, latency, and SILENT WRONG (a wrong reading that would be written without a read-back).
  *   npx tsx --env-file=.env eval/llm_compare.ts [passes]      (LLM_PROVIDER=gemini|claude)
  */
-import { llmModel, llmProvider, readWithLlm, validate, warmUp } from '../server/parse/llm.js'
+import { llmModel, readWithLlm, validate, warmUp } from '../server/parse/llm.js'
 import { CASES, CTX, pct, score } from './llm_cases.js'
 
 const passes = Number(process.argv[2] ?? 3)
@@ -30,4 +30,4 @@ for (let p = 0; p < passes; p++)
       console.log(`  failed: "${text}" ${String(e).slice(0, 100)}`)
     }
   }
-console.log(`${llmProvider()} ${llmModel()}: ${correct}/${total} correct, silent wrong ${silentWrong}, failed ${failed}, p50 ${Math.round(pct(ms, 0.5))} ms, p95 ${Math.round(pct(ms, 0.95))} ms`)
+console.log(`${llmModel()}: ${correct}/${total} correct, silent wrong ${silentWrong}, failed ${failed}, p50 ${Math.round(pct(ms, 0.5))} ms, p95 ${Math.round(pct(ms, 0.95))} ms`)
