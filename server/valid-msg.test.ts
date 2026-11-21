@@ -28,6 +28,7 @@ const EXAMPLES: { [K in ClientMsg['type']]: Extract<ClientMsg, { type: K }> } = 
   replay_start: { type: 'replay_start' },
   replay_end: { type: 'replay_end' },
   force: { type: 'force', text: 'Talk 300 diye' },
+  announce: { type: 'announce', kind: 'payment', cid: 'c1', paise: 50000, balancePaise: 20000, partial: true },
 }
 
 /** the `type: '...'` literals of the ClientMsg union, read from the source (so a new type fails here) */

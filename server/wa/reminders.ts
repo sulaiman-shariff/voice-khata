@@ -4,12 +4,13 @@
  * - sendLogged: send through Vonage and remember it (so a reply finds its shop)
  * - handleRemindersTick: the hourly automatic sweep (Cloud Scheduler -> POST /internal/reminders-tick)
  */
-import { buildReminder } from '../../shared/reminder.js'
+import { buildReminder, formatRupees } from '../../shared/reminder.js'
+import { sayShop } from '../../shared/replies-shop.js'
 import { ensureSchema, json, randomHex, sql } from '../db.js'
 import { log } from '../log.js'
 import { cronAuthorized } from '../request.js'
 import { services } from '../services.js'
-import { dueForReminder } from './policy.js'
+import { dueForReminder, isDaytime, istDay } from './policy.js'
 import { isLang, waTexts } from './texts.js'
 
 /** a link stays valid this long, and is reused while it is */
@@ -62,6 +63,27 @@ export async function ensureLink(r: ReminderRow, owedPaise = Number(r.balance_pa
   return { id, shortUrl: link.short_url }
 }
 
+/**
+ * The automatic reminder's words (shared/reminder.ts), and for an instalment day a line under the
+ * balance with the instalment the link is for. Pure, for tests.
+ */
+export function autoReminderText(r: Pick<ReminderRow, 'lang' | 'shop_name' | 'name' | 'balance_paise' | 'signature'>, payUrl: string | null, partPaise?: number): string {
+  const lang = isLang(r.lang) ? r.lang : 'hi'
+  const text = buildReminder({
+    lang,
+    shopName: r.shop_name || 'Khata',
+    customerName: r.name,
+    owedPaise: Number(r.balance_paise),
+    payUrl,
+    signature: r.signature,
+  })
+  if (!partPaise || partPaise <= 0) return text
+  // the instalment line goes right under the balance line (the third line of the message)
+  const lines = text.split('\n')
+  lines.splice(3, 0, sayShop(lang).instalmentLine(formatRupees(partPaise)))
+  return lines.join('\n')
+}
+
 /** Customers can answer 1 / 2 / 3 / STOP only when the inbound webhook is set up. */
 export const repliesEnabled = (env = process.env) => !!(env.VONAGE_SIGNATURE_SECRET || env.VONAGE_WEBHOOK_TOKEN)
 
@@ -82,26 +104,23 @@ export async function sendLogged(to: string, text: string, kind: string, shopId:
   return id
 }
 
-/** One automatic reminder, worded exactly as the phone words it (shared/reminder.ts). */
-export async function sendAutoReminder(r: ReminderRow): Promise<{ messageId: string; payUrl: string | null }> {
+/**
+ * One automatic reminder, worded exactly as the phone words it (shared/reminder.ts). With
+ * `partPaise` (an instalment day) the link is for that instalment and a line under the balance says so.
+ */
+export async function sendAutoReminder(r: ReminderRow, partPaise?: number): Promise<{ messageId: string; payUrl: string | null }> {
   let link: OpenLink | null = null
+  const linkPaise = partPaise && partPaise > 0 ? Math.min(partPaise, Number(r.balance_paise)) : Number(r.balance_paise)
   try {
-    link = await ensureLink(r)
+    link = await ensureLink(r, linkPaise)
   } catch (e) {
     // a reminder without a link still helps; the customer can reply 1 for one later
     log.warn('payment_link_failed', { fn: 'pay', error: e })
   }
   const lang = isLang(r.lang) ? r.lang : 'hi'
-  let text = buildReminder({
-    lang,
-    shopName: r.shop_name || 'Khata',
-    customerName: r.name,
-    owedPaise: Number(r.balance_paise),
-    payUrl: link?.shortUrl ?? null,
-    signature: r.signature,
-  })
+  let text = autoReminderText(r, link?.shortUrl ?? null, partPaise ? linkPaise : undefined)
   if (repliesEnabled()) text = withMenu(text, lang)
-  const messageId = await sendLogged(r.phone, text, 'reminder', r.shop_id, r.cid)
+  const messageId = await sendLogged(r.phone, text, partPaise ? 'instalment' : 'reminder', r.shop_id, r.cid)
   await sql`UPDATE receivables SET last_reminded_at = now() WHERE shop_id = ${r.shop_id} AND cid = ${r.cid}`
   // the phone stamps it too, so its reminders screen shows when this customer was last reminded
   await sql`INSERT INTO pending_events (shop_id, kind, body) VALUES (${r.shop_id}, 'reminded',
@@ -110,7 +129,46 @@ export async function sendAutoReminder(r: ReminderRow): Promise<{ messageId: str
   return { messageId, payUrl: link?.shortUrl ?? null }
 }
 
-type Candidate = ReminderRow & { last_reminded_at: string | null; remind_every_days: number }
+type Candidate = ReminderRow & {
+  last_reminded_at: string | null
+  remind_every_days: number
+  due_day?: string | null
+  plan_next_day?: string | null
+  plan_part_paise?: string | number | null
+}
+
+export type SweepAction = { kind: 'plan'; paise: number } | { kind: 'due' } | { kind: 'interval' } | null
+
+/**
+ * What the hourly sweep does for one synced customer (pure; daytime in India only). At most one
+ * message a day per customer:
+ * - an instalment plan whose next instalment's day has come: a link for that instalment
+ *   (a customer on a plan gets only these, never the every-N-days reminder for the whole balance)
+ * - a due date that has come: a reminder for the balance
+ * - otherwise the shop's "every N days" rule (dueForReminder)
+ */
+export function sweepAction(c: {
+  balancePaise: number
+  lastRemindedAt: Date | null
+  everyDays: number
+  dueDay?: string | null
+  planNextDay?: string | null
+  planPartPaise?: number | null
+}, now: Date): SweepAction {
+  if (!isDaytime(now) || c.balancePaise <= 0) return null
+  const today = istDay(now)
+  const remindedToday = !!c.lastRemindedAt && istDay(c.lastRemindedAt) === today
+  if (c.planNextDay && c.planPartPaise && c.planPartPaise > 0) {
+    if (c.planNextDay > today || remindedToday) return null
+    return { kind: 'plan', paise: Math.min(c.planPartPaise, c.balancePaise) }
+  }
+  if (c.dueDay && c.dueDay <= today && !remindedToday) {
+    // once on the day itself, then the usual rhythm (not every day after it)
+    const sinceDue = !c.lastRemindedAt || istDay(c.lastRemindedAt) < c.dueDay
+    if (sinceDue) return { kind: 'due' }
+  }
+  return dueForReminder({ balancePaise: c.balancePaise, lastRemindedAt: c.lastRemindedAt, everyDays: c.everyDays }, now) ? { kind: 'interval' } : null
+}
 
 export async function handleRemindersTick(req: Request): Promise<Response> {
   if (!cronAuthorized(req)) return json({ error: 'unauthorized' }, 401)
@@ -118,25 +176,34 @@ export async function handleRemindersTick(req: Request): Promise<Response> {
     await ensureSchema()
     const dry = new URL(req.url).searchParams.get('dry') === '1'
     const now = services().now()
+    const today = istDay(now)
     const rows = (await sql`SELECT r.shop_id, r.cid, r.name, r.phone, r.balance_paise, r.last_reminded_at,
+        r.due_day, r.plan_next_day, r.plan_part_paise,
         s.name AS shop_name, s.lang, s.signature, s.remind_every_days
       FROM receivables r JOIN shops s ON s.id = r.shop_id
       WHERE s.auto_remind AND r.balance_paise > 0
-        AND (r.last_reminded_at IS NULL OR r.last_reminded_at < now() - make_interval(days => s.remind_every_days))
+        AND (r.last_reminded_at IS NULL OR r.last_reminded_at < now() - make_interval(days => s.remind_every_days)
+          OR r.due_day <= ${today} OR r.plan_next_day <= ${today})
         AND NOT EXISTS (SELECT 1 FROM wa_optouts o WHERE o.phone = r.phone)
       ORDER BY r.last_reminded_at NULLS FIRST
       LIMIT 500`) as Candidate[]
-    const due = rows.filter((r) => dueForReminder({
-      balancePaise: Number(r.balance_paise),
-      lastRemindedAt: r.last_reminded_at ? new Date(r.last_reminded_at) : null,
-      everyDays: r.remind_every_days,
-    }, now)).slice(0, MAX_PER_TICK)
+    const due = rows.map((r) => ({
+      r,
+      action: sweepAction({
+        balancePaise: Number(r.balance_paise),
+        lastRemindedAt: r.last_reminded_at ? new Date(r.last_reminded_at) : null,
+        everyDays: r.remind_every_days,
+        dueDay: r.due_day ?? null,
+        planNextDay: r.plan_next_day ?? null,
+        planPartPaise: r.plan_part_paise == null ? null : Number(r.plan_part_paise),
+      }, now),
+    })).filter((x) => x.action).slice(0, MAX_PER_TICK)
     if (dry) return json({ considered: rows.length, due: due.length })
     let sent = 0
     let failed = 0
-    for (const r of due) {
+    for (const { r, action } of due) {
       try {
-        await sendAutoReminder(r)
+        await sendAutoReminder(r, action?.kind === 'plan' ? action.paise : undefined)
         sent++
       } catch (e) {
         failed++

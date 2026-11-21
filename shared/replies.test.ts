@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { parseAmounts } from './numbers.js'
-import { LANGS, REPLIES, guardReply } from './replies.js'
+import { LANGS, REPLIES, guardReply, sayPay } from './replies.js'
 
 describe.each(LANGS)('%s', (l) => {
   const R = REPLIES[l]
@@ -86,5 +86,26 @@ describe('agent tool replies', () => {
     expect(S.renamed('Ramesh', 'Rakesh')).toMatch(/Ramesh.*Rakesh|Rakesh.*Ramesh/)
     expect(new Set([S.speedSet('slower'), S.speedSet('normal'), S.speedSet('faster')]).size).toBe(3)
     expect('readBackSet' in S).toBe(false)
+  })
+})
+
+describe.each(LANGS)('payment replies (%s)', (l) => {
+  const P = sayPay(l)
+  it('carry the exact amounts and pass the tone guard', () => {
+    const cases: [string, number[]][] = [
+      [P.paymentReceived('X', 1870, 640), [1870, 640]],
+      [P.paymentReceived('X', 1870, 0), [1870]],
+      [P.paymentReceived('X', 1870, -250), [1870, 250]],
+      [P.partialPaid(640), [640]],
+      [P.qrReady('X', 1870), [1870]],
+    ]
+    for (const [t, amts] of cases) {
+      expect(t).not.toMatch(/undefined|NaN|\$\{/)
+      expect(guardReply(t), t).not.toBeNull()
+      const got = parseAmounts(t).map((s) => s.value)
+      for (const a of amts) expect(got, t).toContain(a)
+    }
+    expect(guardReply(P.qrSupplier('X'))).not.toBeNull()
+    expect(P.partialPaid(640)).toMatch(/[?？]$/)
   })
 })

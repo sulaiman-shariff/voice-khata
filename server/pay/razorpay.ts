@@ -22,7 +22,8 @@ export interface LinkRequest {
   /** our id for the link; Razorpay requires it unique per account */
   referenceId: string
   description: string
-  customer: { name: string; contact: string }
+  /** omitted for a counter link: the customer is standing there, no number needed */
+  customer?: { name: string; contact: string }
   notes: Record<string, string>
   expireBy: Date
   /** minimum first part-payment; omitted = the full amount must be paid at once */
@@ -55,7 +56,7 @@ export async function createPaymentLink(keys: RazorpayKeys, r: LinkRequest, fetc
     ...(r.minPartialPaise !== undefined ? { first_min_partial_amount: r.minPartialPaise } : {}),
     reference_id: r.referenceId,
     description: r.description.slice(0, 2048),
-    customer: { name: r.customer.name.slice(0, 255), contact: `+${r.customer.contact}` },
+    ...(r.customer ? { customer: { name: r.customer.name.slice(0, 255), contact: `+${r.customer.contact}` } } : {}),
     // we send the link and the receipt on WhatsApp ourselves
     notify: { sms: false, email: false },
     reminder_enable: false,
@@ -71,6 +72,17 @@ export async function createPaymentLink(keys: RazorpayKeys, r: LinkRequest, fetc
   const text = await res.text()
   if (!res.ok) throw new RazorpayError(res.status, describe(text))
   return JSON.parse(text) as PaymentLink
+}
+
+/** Cancel a link nobody should pay any more (a counter link the shopkeeper closed). */
+export async function cancelPaymentLink(keys: RazorpayKeys, id: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  const res = await fetchImpl(`${API}/payment_links/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    headers: { authorization: basic(keys) },
+    signal: AbortSignal.timeout(10_000),
+  })
+  // already paid, cancelled or expired: nothing to do
+  if (!res.ok && res.status !== 400) throw new RazorpayError(res.status, describe(await res.text()))
 }
 
 const basic = (k: RazorpayKeys) => `Basic ${Buffer.from(`${k.keyId}:${k.keySecret}`).toString('base64')}`
@@ -126,6 +138,108 @@ export function parseLinkPaid(body: unknown): LinkPaidEvent | null {
     linkStatus: link.status ?? '',
     // Razorpay sends an empty notes object as []
     notes: Array.isArray(link.notes) ? {} : (link.notes ?? {}),
+    paymentId: pay.id,
+    paymentPaise: pay.amount,
+    method: pay.method ?? null,
+    createdAt: pay.created_at ?? Math.floor(Date.now() / 1000),
+  }
+}
+
+// ------------------------------------------------------------------ counter QR (QR Codes API)
+// https://razorpay.com/docs/api/qr-codes/
+
+/** a counter QR is open this long: the customer is standing at the counter */
+export const QR_OPEN_MS = 15 * 60_000
+
+export interface QrRequest {
+  amountPaise: number
+  /** shown in the customer's UPI app as the payee label */
+  name: string
+  description: string
+  notes: Record<string, string>
+  closeBy: Date
+}
+
+export interface QrCode {
+  id: string
+  image_url: string
+  status: string
+  close_by: number
+  payment_amount: number
+}
+
+/** One single-use UPI QR for exactly this amount, closing at `closeBy`. */
+export async function createQr(keys: RazorpayKeys, r: QrRequest, fetchImpl: typeof fetch = fetch): Promise<QrCode> {
+  const body = {
+    type: 'upi_qr',
+    name: r.name.slice(0, 50) || 'Khata',
+    usage: 'single_use',
+    fixed_amount: true,
+    payment_amount: r.amountPaise,
+    description: r.description.slice(0, 255),
+    close_by: Math.floor(r.closeBy.getTime() / 1000),
+    notes: r.notes,
+  }
+  const res = await fetchImpl(`${API}/payments/qr_codes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: basic(keys) },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new RazorpayError(res.status, describe(text))
+  return JSON.parse(text) as QrCode
+}
+
+/** Close a QR that is no longer wanted (paid in cash, sheet closed), so it cannot be paid later. */
+export async function closeQr(keys: RazorpayKeys, id: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  const res = await fetchImpl(`${API}/payments/qr_codes/${encodeURIComponent(id)}/close`, {
+    method: 'POST',
+    headers: { authorization: basic(keys) },
+    signal: AbortSignal.timeout(10_000),
+  })
+  // already closed or paid: nothing to do
+  if (!res.ok && res.status !== 400) throw new RazorpayError(res.status, describe(await res.text()))
+}
+
+/**
+ * The account cannot make QR codes (the feature is off for it, or the keys cannot use it): the
+ * phone falls back to a plain upi:// QR. Other errors are real failures.
+ */
+export function qrNotEnabled(e: unknown): boolean {
+  if (!(e instanceof RazorpayError)) return false
+  if (e.status === 401 || e.status === 403 || e.status === 404) return true
+  return e.status === 400 && /not (been )?(enabled|activated|allowed|permitted|available)|feature|requested url/i.test(e.message)
+}
+
+/** The parts of a qr_code.credited webhook we use. */
+export interface QrCreditedEvent {
+  event: 'qr_code.credited'
+  qrId: string
+  notes: Record<string, string>
+  paymentId: string
+  paymentPaise: number
+  method: string | null
+  createdAt: number
+}
+
+export function parseQrCredited(body: unknown): QrCreditedEvent | null {
+  const b = body as {
+    event?: string
+    payload?: {
+      qr_code?: { entity?: { id?: string; notes?: Record<string, string> | unknown[] } }
+      payment?: { entity?: { id?: string; amount?: number; status?: string; method?: string; created_at?: number } }
+    }
+  }
+  if (b?.event !== 'qr_code.credited') return null
+  const qr = b.payload?.qr_code?.entity
+  const pay = b.payload?.payment?.entity
+  if (!qr?.id || !pay?.id || typeof pay.amount !== 'number' || !Number.isInteger(pay.amount) || pay.amount <= 0) return null
+  if (pay.status && pay.status !== 'captured') return null
+  return {
+    event: 'qr_code.credited',
+    qrId: qr.id,
+    notes: Array.isArray(qr.notes) ? {} : (qr.notes ?? {}),
     paymentId: pay.id,
     paymentPaise: pay.amount,
     method: pay.method ?? null,

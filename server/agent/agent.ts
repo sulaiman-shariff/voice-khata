@@ -46,6 +46,8 @@ Rules:
 - Never invent amounts. An amount must be one that was actually said; if it is missing or doubtful, ask for it instead of guessing.
 - The reply language is the language the shopkeeper spoke.
 - If the words cannot be trusted (garbled, contradictory transcripts, too short to mean anything), call unclear.
+- customers marks the shop's suppliers "[supplier]" and shows nicknames in brackets ("Ramesh (doodhwala)"); pass a name exactly as listed. Two customers with one name: pass the plain name and the app asks which, unless a nickname or "naya / doosra" was said.
+- Money with no person named (expenses, cash put in or taken out of the galla) is add_cash, never add_entries. A named customer always means add_entries.
 - Several tools may be called in one turn, in the order they should run (for example add several entries, then query a balance).
 - Pick tools only from the list given.`
 

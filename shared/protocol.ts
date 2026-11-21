@@ -3,7 +3,7 @@
  * The ledger lives on the phone; the server is stateless across connections and works from
  * the snapshot the phone sends, replying with ledger ops for the phone to apply.
  */
-import type { Direction } from './ledger.js'
+import type { CashCategory, Direction, PartyKind } from './ledger.js'
 import type { Lang } from './replies.js'
 
 export interface SnapCustomer {
@@ -18,6 +18,30 @@ export interface SnapCustomer {
   /** shown and spoken instead of `name` when two customers share it ("Ramesh · Gali 3") */
   label?: string
   phone?: string
+  /** nickname that tells two customers with one name apart ("doodhwala", "Gali 3"); matched with the name */
+  tag?: string
+  /** absent = customer; a supplier's positive balance is what the shop owes them */
+  kind?: PartyKind
+  /** the oldest unpaid credit's day (dues ageing) */
+  oldestDay?: string
+  /** the earliest due date among unpaid credits */
+  dueDay?: string
+  /** the earliest open promise on or after today */
+  promiseDay?: string
+  /** the active instalment plan, as the agent needs it */
+  plan?: SnapPlan
+}
+
+export interface SnapPlan {
+  pid: string
+  totalPaise: number
+  parts: number
+  everyDays: number
+  paidParts: number
+  /** the next open instalment: its day and what is left of it */
+  nextDay?: string
+  nextPaise?: number
+  behind: boolean
 }
 
 export interface SnapEntry {
@@ -28,6 +52,9 @@ export interface SnapEntry {
   day: string
   promise?: boolean
   ts?: number
+  due?: string
+  /** items of an itemised bill */
+  note?: string
 }
 
 export interface Snapshot {
@@ -36,12 +63,14 @@ export interface Snapshot {
   last: SnapEntry | null
   /** Every live entry (voided excluded), newest first: the agent answers and changes from this. Memory only on the server. */
   entries: SnapEntry[]
-  today: { creditPaise: number; paymentPaise: number; entries: number }
+  /** customers only; cashIn / cashOut: the galla; newCustomers: accounts opened today */
+  today: { creditPaise: number; paymentPaise: number; entries: number; cashIn?: number; cashOut?: number; newCustomers?: number }
   month: { creditPaise: number; paymentPaise: number; entries: number }
 }
 
 export type LedgerOp =
-  | { op: 'add_customer'; cid: string; name: string }
+  /** `kind: 'supplier'` opens a supplier account (absent = customer) */
+  | { op: 'add_customer'; cid: string; name: string; kind?: PartyKind }
   | { op: 'add_alias'; cid: string; alias: string }
   | {
     op: 'entry'
@@ -51,6 +80,10 @@ export type LedgerOp =
     direction: Direction
     dayOffset: number
     promise: boolean
+    /** pay-by date for a credit ("Somvaar tak"), YYYY-MM-DD */
+    due?: string
+    /** itemised bill: the items said, comma-separated */
+    note?: string
     source: { transcript: string; confidence: 'high' | 'low'; reasons: string[]; lang: string; snrDb?: number; path: 'fast' | 'llm' }
   }
   | { op: 'amend'; eid: string; paise?: number; direction?: Direction; cid?: string }
@@ -61,6 +94,13 @@ export type LedgerOp =
   /** two accounts are one person: `from`'s entries move to `into`, `from`'s names become aliases, `from` is gone */
   | { op: 'merge_customers'; from: string; into: string }
   | { op: 'set_phone'; cid: string; phone: string }
+  /** galla: cash in / out that is no customer's ("bijli 800", "galle mein 2000 daale") */
+  | { op: 'cash'; eid: string; paise: number; dir: 'in' | 'out'; category: CashCategory; note?: string; dayOffset: number }
+  /** an instalment plan (replaces the customer's current one); the first instalment is `startOffset` days from today */
+  | { op: 'set_plan'; cid: string; pid: string; totalPaise: number; parts: number; everyDays: number; startOffset: number }
+  | { op: 'cancel_plan'; cid: string; pid: string }
+  /** the customer's nickname (tag); '' clears it. Stored through the consent event, other consent fields kept. */
+  | { op: 'set_tag'; cid: string; tag: string }
 
 export type ClientMsg =
   | {
@@ -90,12 +130,18 @@ export type ClientMsg =
   | { type: 'replay_end' }
   /** "Save anyway" on a dimmed not-an-entry line: handled as addressed to the agent, never not_for_me */
   | { type: 'force'; text: string }
+  /**
+   * A payment landed off the phone (counter QR, Razorpay link) and is now in the ledger: say it
+   * aloud ("Ramesh ne 500 diye, ab 200 baaki"). `balancePaise` is the balance after it (the phone's
+   * ledger); `partial`: a link paid only in part, so the reply also offers a link for the rest.
+   */
+  | { type: 'announce'; kind: 'payment'; cid: string; paise: number; balancePaise?: number; partial?: boolean }
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
   /** batch read-back: every line with its own direction; one yes saves them all */
   rows?: { name: string; paise: number; direction: Direction; newCustomer?: boolean }[]
-  kind: 'confirm' | 'name' | 'amount' | 'direction' | 'which' | 'confusable' | 'delete' | 'batch' | 'modify'
+  kind: 'confirm' | 'name' | 'amount' | 'direction' | 'which' | 'confusable' | 'delete' | 'batch' | 'modify' | 'nickname' | 'soundalike'
   /** confirm: saying yes also opens an account for this name (it is not in the ledger yet) */
   newCustomer?: boolean
   /** batch: one line per entry ("Ramesh ₹200"); modify: true when the change removes the entry */
@@ -108,6 +154,17 @@ export interface PendingView {
   amounts?: number[]
   /** delete: only typing this word (an answer / typed text) erases; a spoken or tapped yes never does */
   requireType?: string
+  /**
+   * which / soundalike: the buttons, each with an id to send back as the answer (`answer(id)`): a
+   * customer's cid, or 'new' (soundalike: open a new account with the same entry). Labels are unique.
+   */
+  choices?: { id: string; label: string }[]
+  /** nickname: the account just opened that needs a nickname */
+  cid?: string
+  /** nickname: every customer with this name (the new one included), so the card can tag the others too */
+  twins?: { cid: string; label: string; tag?: string }[]
+  /** soundalike: the heard name, offered as a new account ("+ naya Rakesh") */
+  newName?: string
 }
 
 /** A setting the agent changed by voice; the phone applies and stores it. */
@@ -133,6 +190,15 @@ export interface TurnMetrics {
   cached?: boolean
 }
 
+/**
+ * One big button on the phone: open WhatsApp with `text` (to `cid`'s number), start the backup,
+ * or show the counter QR for `cid` and `paise` (src/lib/qr.ts createQr; a upi:// QR when Razorpay
+ * cannot make one).
+ */
+export type ReadyCard =
+  | { kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
+  | { kind: 'qr'; cid: string; paise: number }
+
 export type ServerMsg =
   | { type: 'ready'; region: string }
   /** attention state: sent after every hello and on each change */
@@ -154,9 +220,13 @@ export type ServerMsg =
   /** entries between two days (YYYY-MM-DD, inclusive) */
   | { type: 'show'; view: 'history'; from: string; to: string; cid?: string }
   | { type: 'show'; view: 'search'; text: string; cids?: string[]; eids?: string[] }
+  /** dues whose oldest unpaid credit is older than `days` (ageing) */
+  | { type: 'show'; view: 'overdue'; days: number }
+  /** collect: the collect-today queue; cashbook: today's galla; suppliers: the Dues tab on Suppliers */
+  | { type: 'show'; view: 'collect' | 'cashbook' | 'suppliers' }
   | SettingMsg
-  /** one big button on the phone: open WhatsApp with `text` (to `cid`'s number) or start the backup */
-  | { type: 'ready'; kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
+  /** one big button on the phone (ReadyCard) */
+  | ({ type: 'ready' } & ReadyCard)
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */

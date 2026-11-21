@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { LANGS } from '../../shared/replies.js'
 import { buildReminder } from '../../shared/reminder.js'
 import { parseInbound, verifyVonageJwt } from '../remind/vonage.js'
-import { waIntent } from './intent.js'
+import { waIntent, waPromise } from './intent.js'
 import { dueForReminder, istDay, isDaytime } from './policy.js'
 import { withMenu } from './reminders.js'
-import { waTexts } from './texts.js'
+import { promiseNoted, waTexts } from './texts.js'
+import { VOICE_NOTE_MAX_S, voiceNoteText, type VoiceNoteDeps } from './voicenote.js'
 
 describe('customer replies', () => {
   it('numbers and button payloads', () => {
@@ -95,5 +96,60 @@ describe('Vonage webhooks', () => {
     expect(parseInbound({ channel: 'whatsapp', message_uuid: 'm2', from: '+91 98450 12345', message_type: 'reply', reply: { id: 'PAY', title: 'Pay now' } }))
       .toEqual({ messageId: 'm2', from: '919845012345', text: 'Pay now', payload: 'PAY' })
     expect(parseInbound({ channel: 'sms', message_uuid: 'x', from: '1' })).toBeNull()
+  })
+})
+
+describe('promises in a reply ("kal de dunga")', () => {
+  // Sunday = 0
+  it('a will-pay word and a day', () => {
+    expect(waPromise('kal de dunga', 0)).toEqual({ dayOffset: 1 })
+    expect(waPromise('Bhaiya kal 500 bhej dunga', 0)).toEqual({ dayOffset: 1, paise: 50000 })
+    expect(waPromise('parso de dungi', 3)).toEqual({ dayOffset: 2 })
+    expect(waPromise('will pay tomorrow', 0)).toEqual({ dayOffset: 1 })
+    expect(waPromise('कल दूंगा', 0)).toEqual({ dayOffset: 1 })
+    expect(waPromise('aaj shaam ko de dunga', 0)).toEqual({ dayOffset: 0 })
+  })
+  it('a weekday: the next one (a week ahead when it is today)', () => {
+    expect(waPromise('somvaar ko de dunga', 0)).toEqual({ dayOffset: 1 })
+    expect(waPromise('will pay on monday', 1)).toEqual({ dayOffset: 7 })
+    expect(waPromise('friday ko 300 denge', 3)).toEqual({ dayOffset: 2, paise: 30000 })
+  })
+  it('not a promise: no day, past tense, or other talk', () => {
+    expect(waPromise('de dunga', 0)).toBeNull()
+    expect(waPromise('kal de diya tha', 0)).toBeNull()
+    expect(waPromise('mera hisab batao', 0)).toBeNull()
+    expect(waPromise('', 0)).toBeNull()
+  })
+  it('thanked in every language', () => {
+    for (const l of LANGS) expect(promiseNoted(l, 'Sharma Kirana')).toContain('Sharma Kirana')
+  })
+})
+
+describe('voice notes', () => {
+  it('reads an audio message', () => {
+    expect(parseInbound({ channel: 'whatsapp', message_uuid: 'm3', from: '919845012345', message_type: 'audio', audio: { url: 'https://api.nexmo.com/v3/media/abc' } }))
+      .toEqual({ messageId: 'm3', from: '919845012345', text: '', audioUrl: 'https://api.nexmo.com/v3/media/abc' })
+    expect(parseInbound({ channel: 'whatsapp', message_uuid: 'm4', from: '91', message_type: 'audio', audio: { url: 'http://insecure' } })?.audioUrl).toBeUndefined()
+  })
+  const deps = (seconds: number, said = 'kal de dunga'): VoiceNoteDeps & { heard: string[] } => {
+    const heard: string[] = []
+    return {
+      heard,
+      download: async () => Buffer.from('OggS'),
+      decode: async () => Buffer.alloc(Math.round(seconds * 32000)),
+      transcribe: async (_pcm, locale) => { heard.push(locale); return said },
+    }
+  }
+  it('transcribes a short note in the shop language', async () => {
+    const d = deps(4)
+    expect(await voiceNoteText('https://x', 'kn', d)).toEqual({ text: 'kal de dunga' })
+    expect(d.heard).toEqual(['kn-IN'])
+  })
+  it(`skips notes over ${VOICE_NOTE_MAX_S} s, empty audio, failures, and no STT key`, async () => {
+    expect(await voiceNoteText('https://x', 'hi', deps(VOICE_NOTE_MAX_S + 1))).toEqual({ skipped: 'too_long' })
+    expect(await voiceNoteText('https://x', 'hi', deps(0.1))).toEqual({ skipped: 'failed' })
+    expect(await voiceNoteText('https://x', 'hi', { ...deps(3), download: async () => { throw new Error('404') } })).toEqual({ skipped: 'failed' })
+    expect(await voiceNoteText('https://x', 'hi', { ...deps(3), transcribe: null })).toEqual({ skipped: 'unconfigured' })
+    expect(await voiceNoteText('https://x', 'hi', deps(3, '  '))).toEqual({ skipped: 'failed' })
   })
 })

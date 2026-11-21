@@ -133,3 +133,18 @@ const ALL: Record<Lang, WaTexts> = { hi: HI, en: EN, kn: KN, ta: TA, te: TE, ml:
 
 export const isLang = (x: unknown): x is Lang => typeof x === 'string' && x in ALL
 export const waTexts = (lang: string): WaTexts => (isLang(lang) ? ALL[lang] : HI)
+
+/** A customer said when they will pay ("kal de dunga"): thanked, and the shop is told. */
+const PROMISE_NOTED: Record<Lang, (shop: string) => string> = {
+  hi: (s) => `धन्यवाद! हमने ${s} को बता दिया है कि आप कब देंगे।`,
+  en: (s) => `Thank you! We have let ${s} know when you will pay.`,
+  kn: (s) => `ಧನ್ಯವಾದ! ನೀವು ಯಾವಾಗ ಕೊಡುತ್ತೀರಿ ಎಂದು ${s} ಗೆ ತಿಳಿಸಿದ್ದೇವೆ.`,
+  ta: (s) => `நன்றி! நீங்கள் எப்போது தருவீர்கள் என்று ${s} கடைக்குத் தெரிவித்துவிட்டோம்.`,
+  te: (s) => `ధన్యవాదాలు! మీరు ఎప్పుడు ఇస్తారో ${s} కి తెలియజేశాం.`,
+  ml: (s) => `നന്ദി! നിങ്ങൾ എപ്പോൾ തരുമെന്ന് ${s} നെ അറിയിച്ചു.`,
+  mr: (s) => `धन्यवाद! तुम्ही कधी द्याल ते ${s} ला कळवले आहे.`,
+  bn: (s) => `ধন্যবাদ! আপনি কবে দেবেন তা ${s}-কে জানিয়ে দিয়েছি।`,
+  gu: (s) => `આભાર! તમે ક્યારે આપશો તે ${s} ને જણાવી દીધું છે.`,
+  pa: (s) => `ਧੰਨਵਾਦ! ਤੁਸੀਂ ਕਦੋਂ ਦਿਓਗੇ, ਇਹ ${s} ਨੂੰ ਦੱਸ ਦਿੱਤਾ ਹੈ।`,
+}
+export const promiseNoted = (lang: string, shop: string): string => (isLang(lang) ? PROMISE_NOTED[lang] : PROMISE_NOTED.hi)(shop)

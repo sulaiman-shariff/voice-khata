@@ -31,7 +31,7 @@ export function wav16k(pcm: Buffer): Buffer {
  * Kannada with `detected_language_code: kn-IN` (probed 2026-11-21; realtime instead forces the
  * session language). That is what lets a turn in another language be rescued.
  */
-export async function transcribeRest(key: string, pcm: Buffer, locale: string, keyterms: string[] = [], previousText?: string): Promise<{ text: string; lang?: string }> {
+export async function transcribeRest(key: string, pcm: Buffer, locale: string, keyterms: string[] = [], previousText?: string, timeoutMs = REST_TIMEOUT_MS): Promise<{ text: string; lang?: string }> {
   const clip = pcm.length > MAX_BYTES ? pcm.subarray(pcm.length - MAX_BYTES) : pcm
   const fd = new FormData()
   fd.append('audio_file', new Blob([new Uint8Array(wav16k(clip))], { type: 'audio/wav' }), 'turn.wav')
@@ -46,7 +46,7 @@ export async function transcribeRest(key: string, pcm: Buffer, locale: string, k
     method: 'POST',
     headers: { 'X-API-Key-ID': key },
     body: fd,
-    signal: AbortSignal.timeout(REST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!res.ok) throw new Error(`stt rest ${res.status}: ${(await res.text()).slice(0, 120)}`)
   const body = (await res.json()) as { transcript?: string; detected_language_code?: string }

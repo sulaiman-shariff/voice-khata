@@ -64,6 +64,10 @@ export function ensureSchema(): Promise<void> {
       PRIMARY KEY (shop_id, cid)
     )`
     await sql`CREATE INDEX IF NOT EXISTS receivables_phone ON receivables (phone)`
+    // due dates and instalment plans (the phone computes them; the hourly sweep acts on them)
+    await sql`ALTER TABLE receivables ADD COLUMN IF NOT EXISTS due_day text`
+    await sql`ALTER TABLE receivables ADD COLUMN IF NOT EXISTS plan_next_day text`
+    await sql`ALTER TABLE receivables ADD COLUMN IF NOT EXISTS plan_part_paise bigint`
     await sql`CREATE TABLE IF NOT EXISTS payment_links (
       id text PRIMARY KEY,
       shop_id text NOT NULL,
@@ -76,6 +80,16 @@ export function ensureSchema(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     )`
     await sql`CREATE INDEX IF NOT EXISTS payment_links_open ON payment_links (shop_id, cid, status)`
+    // counter QR codes (single use, fixed amount, open 15 min); a payment's rzp_link_id holds the QR id
+    await sql`CREATE TABLE IF NOT EXISTS qr_codes (
+      id text PRIMARY KEY,
+      shop_id text NOT NULL,
+      cid text NOT NULL,
+      paise bigint NOT NULL,
+      status text NOT NULL DEFAULT 'active',
+      close_by timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`
     await sql`CREATE TABLE IF NOT EXISTS payments (
       rzp_payment_id text PRIMARY KEY,
       rzp_link_id text NOT NULL,
