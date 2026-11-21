@@ -12,6 +12,8 @@ import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, ServerMsg, SettingMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
 import { type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
+import { isSleepWord, spotWake } from '../shared/wake.js'
+import { Attention } from './attention.js'
 import { type Logger, nullLogger } from './log.js'
 import { type AgentContext, type ToolCall } from './agent/agent.js'
 import { attachTools, runTool } from './agent/tools.js'
@@ -116,6 +118,12 @@ export class Session {
   /** voice/tap turns handled so far (logged as `turn`) */
   private turnNo = 0
   private startedAt = 0
+  /** asleep / awake: only spoken finals are gated by it (typed text and card taps always count) */
+  private attention!: Attention
+  /** the phone's own detector woke us: the first transcript must carry the wake word, else back to sleep */
+  private phoneUnconfirmed = false
+  /** no `attention` message for changes made while handling hello (hello sends the state itself) */
+  private attnQuiet = false
 
   constructor(private deps: SessionDeps) {
     this.log = deps.log ?? nullLogger
@@ -129,6 +137,66 @@ export class Session {
     attachTools(this.ledger) // a tapped "which one" answer finishes the original tool
     this.ledger.sayBalance = true // a save says the customer's new balance
     this.ledger.dispatch = (intent, text, meta) => this.dispatch(intent, text, meta)
+    this.attention = new Attention({
+      hasPending: () => !!this.pending,
+      pendingAgeMs: () => this.now() - this.ledger.pendingAt,
+    })
+    this.attention.onChange((state) => {
+      this.log.info('attention', { state })
+      if (state === 'asleep') this.phoneUnconfirmed = false
+      if (!this.attnQuiet) this.deps.send({ type: 'attention', state })
+    })
+  }
+
+  /** Spoken final while asleep or awake: the text to handle, or null when it is not for us. */
+  private gate(text: string): string | null {
+    const asleep = this.attention.state === 'asleep'
+    if (asleep && this.isSpeaking()) return null // never wake on what we are saying ourselves
+    const wake = spotWake(text, this.phoneUnconfirmed)
+    if (asleep && !wake.found) {
+      this.log.debug('asleep_dropped', { text })
+      return null
+    }
+    if (!asleep && this.phoneUnconfirmed) {
+      this.phoneUnconfirmed = false
+      if (!wake.found) {
+        this.log.info('phone_wake_unconfirmed', { text })
+        this.sleepNow()
+        return null
+      }
+    }
+    const rest = wake.found ? wake.rest : text
+    if (isSleepWord(rest)) {
+      this.log.info('sleep_word', { text })
+      if (!asleep) {
+        this.sleepNow()
+      }
+      return null
+    }
+    if (wake.found) {
+      this.attention.wake('word')
+      if (!rest) {
+        this.attention.touch()
+        this.enqueue(async () => {
+          await this.speak(say(this.lang).awakeHello())
+          this.attention.touch()
+        })
+        return null
+      }
+    }
+    return rest
+  }
+
+  /** A typed or tapped turn: the window restarts after the reply; an open question keeps us awake for the spoken answer. */
+  private async typedTurn(text: string) {
+    await this.handleText(text, null, 'tap')
+    if (this.pending) this.attention.wake('tap')
+    else this.attention.touch()
+  }
+
+  private sleepNow() {
+    this.bargeIn()
+    this.attention.sleep()
   }
 
   /** the server's copy of the ledger snapshot, and the open question: held by the ledger core */
@@ -152,8 +220,14 @@ export class Session {
         this.speed = msg.speed === 0.8 || msg.speed === 1.2 ? msg.speed : 1
         this.readBackAll = msg.readBack === true
         if (msg.resume) this.ledger.importState(msg.resume)
+        // a new socket starts asleep, unless the resumed state had a question waiting for its answer
+        this.attnQuiet = true
+        this.attention.sleep()
+        if (this.pending) this.attention.wake('tap')
+        this.attnQuiet = false
         this.openStt()
         this.warmPhrases()
+        this.deps.send({ type: 'attention', state: this.attention.state })
         // always: the phone keeps showing its last question until told otherwise
         this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
         if (msg.resend && msg.resend.trim() && msg.resend.length <= 2000) {
@@ -176,25 +250,42 @@ export class Session {
         this.log.debug('ptt_start')
         this.ptt = true
         this.bargeIn()
+        this.attention.holdStart() // push-to-talk is deliberate: awake while the button is down
+        break
+      case 'wake':
+        this.log.info('wake', { source: msg.source })
+        if (msg.source === 'hold') this.attention.holdStart()
+        else {
+          if (msg.source === 'phone' && this.attention.state === 'asleep') this.phoneUnconfirmed = true
+          this.attention.wake(msg.source)
+        }
+        break
+      case 'hold_end':
+        this.attention.holdEnd()
+        break
+      case 'sleep':
+        this.log.info('sleep', { by: 'tap' })
+        this.sleepNow()
         break
       case 'ptt_end':
         this.log.debug('ptt_end', { partial: this.lastPartial })
         this.sendHeard()
         this.commit(false)
+        this.attention.holdEnd()
         break
       case 'tap':
         this.log.info('input', { kind: 'tap', action: msg.action })
-        this.enqueue(() => this.handleText(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo', null, 'tap'))
+        this.enqueue(() => this.typedTurn(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo'))
         break
       case 'text':
         this.log.info('input', { kind: 'typed', text: msg.text })
         // typed lists: one line per entry reads like a spoken list with pauses
         if (msg.text.trim() && msg.text.length <= 2000)
-          this.enqueue(() => this.handleText(msg.text.replace(/\s*[\r\n]+\s*/g, ', ').trim(), null, 'tap'))
+          this.enqueue(() => this.typedTurn(msg.text.replace(/\s*[\r\n]+\s*/g, ', ').trim()))
         break
       case 'answer':
         this.log.info('input', { kind: 'answer', text: msg.text })
-        if (msg.text.length <= 60) this.enqueue(() => this.handleText(msg.text, null, 'tap'))
+        if (msg.text.length <= 60) this.enqueue(() => this.typedTurn(msg.text))
         break
       case 'barge':
         this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
@@ -246,6 +337,7 @@ export class Session {
     const stream: SttLike = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
       onOpen: () => this.log.info('stt_ready', { reason, ms: this.now() - t0 }),
       onSpeechStart: () => {
+        this.attention.touch() // speaking keeps the window open
         if (this.isSpeaking() && this.speaking && !this.speaking.ducked) {
           this.speaking.ducked = true
           this.deps.send({ type: 'duck' })
@@ -352,6 +444,7 @@ export class Session {
   }
 
   private onPartial(text: string) {
+    this.attention.touch()
     this.lastPartial = text
     this.log.debug('partial', { text })
     this.deps.send({ type: 'partial', text })
@@ -405,6 +498,9 @@ export class Session {
       text, detectedLang, snrDb, noisy, early, pending: this.pending?.kind ?? null,
       finalAfterSpeechMs: finalAt - speechEnd, commitAfterSpeechMs: commitAt === null ? null : commitAt - speechEnd,
     })
+    const gated = this.gate(text)
+    if (gated === null) return // asleep and not addressed to us, or a wake / sleep word on its own
+    text = gated
     const heard = this.lastHeard ?? undefined
     this.lastHeard = null
     const t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang, heardAt, heard }
@@ -445,7 +541,11 @@ export class Session {
   private dispatchFinal(text: string, t: TurnTiming) {
     this.deps.send({ type: 'final', text })
     if (this.speaking?.ducked) this.bargeIn()
-    this.enqueue(() => this.handleText(text, t, 'voice'))
+    this.attention.touch()
+    this.enqueue(async () => {
+      await this.handleText(text, t, 'voice')
+      this.attention.touch() // the window runs from the end of our reply
+    })
   }
 
   private isEcho(text: string): boolean {
@@ -855,6 +955,7 @@ export class Session {
     if (this.unacked.size) this.log.warn('ops_unacked', { batches: this.unacked.size, ops: [...this.unacked.values()].reduce((a, b) => a + b, 0), seqs: [...this.unacked.keys()] })
     this.log.info('session_end', { turns: this.turnNo, lang: this.lang, durationMs: this.now() - this.startedAt, pendingLeft: this.pending?.kind ?? null })
     this.closed = true
+    this.attention.close()
     this.speaking?.ac.abort()
     this.stt?.close()
   }
