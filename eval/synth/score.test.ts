@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { scoreScene } from './score.js'
+import { alignFinal, scoreScene, textSim } from './score.js'
 import type { Scene } from './scenes.js'
 
 const scene: Scene = {
@@ -34,19 +34,32 @@ describe('score', () => {
     const ok = scoreScene(scene, [{ woke: false, calls: [] }, { woke: true, calls: [entry(100)] }], 60_000)
     expect(ok).toMatchObject({ unaddressedEntries: 0, falseWakes: 0, missedWakes: 0, wrong: 0 })
   })
+
+  it('counts an asked-back entry with the right name and amount separately from wrong', () => {
+    const r = scoreScene(scene, [{ woke: false, calls: [] }, { woke: true, calls: [], asked: true }], 60_000)
+    expect(r).toMatchObject({ askedCorrect: 1, wrong: 0, writtenCorrect: 0 })
+  })
+
+  it('keeps proposals apart from ledger writes for un-addressed lines', () => {
+    const r = scoreScene(scene, [{ woke: true, calls: [], proposed: [entry(100)] }, { woke: true, calls: [entry(100)] }], 60_000)
+    expect(r).toMatchObject({ unaddressedEntries: 0, proposedUnaddressed: 1 })
+  })
 })
 
-import { assignToLines } from './score.js'
-
-describe('assignToLines', () => {
-  const lines = [{ startMs: 1000, endMs: 3000 }, { startMs: 4000, endMs: 6000 }]
-  it('maps an event to the line that ended most recently, within the tail', () => {
-    expect(assignToLines(lines, 3500, 3000)).toBe(0) // a final lands after its line ended, even once the next began
-    expect(assignToLines(lines, 4200, 3000)).toBe(0)
-    expect(assignToLines(lines, 6400, 3000)).toBe(1)
+describe('alignFinal', () => {
+  const lines = [
+    { text: 'चीनी चालीस रुपये किलो है', startMs: 1000, endMs: 3000 },
+    { text: 'खाताभाई, रमेश के खाते में तीन सौ रुपये उधार लिखो', startMs: 4000, endMs: 7000 },
+    { text: 'ठीक है भैया कल पैसे दे दूँगा', startMs: 8000, endMs: 10000 },
+  ]
+  it('matches text across scripts', () => {
+    expect(textSim('Ramesh ke khate mein teen sau rupaye udhaar likho', lines[1]!.text)).toBeGreaterThan(0.4)
   })
-  it('drops events before any line ended or past the tail', () => {
-    expect(assignToLines(lines, 2500, 3000)).toBe(-1)
-    expect(assignToLines(lines, 12000, 3000)).toBe(-1)
+  it('assigns by order and text even when the final lands after the next line began', () => {
+    expect(alignFinal(lines, -1, 4300, 'chinee 40 rupaye kilo hai')).toBe(0)
+    expect(alignFinal(lines, 0, 8200, 'Katha bhai Ramesh ke khate mein 300 rupaye udhaar likho')).toBe(1)
+  })
+  it('never goes back to an earlier line', () => {
+    expect(alignFinal(lines, 1, 10500, 'thik hai bhaiya kal paise de dunga')).toBe(2)
   })
 })
