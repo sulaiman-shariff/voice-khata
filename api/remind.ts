@@ -1,5 +1,5 @@
 /**
- * POST /api/remind {to, body, vars?} -> sends one WhatsApp reminder through Twilio.
+ * POST /api/remind {to, body, vars?} -> sends one WhatsApp reminder through Vonage or Twilio.
  * GET  /api/remind -> {configured} so the app can fall back to a wa.me share link.
  *
  * The ledger stays on the phone: the phone builds the polite text (shared/replies.ts
@@ -11,6 +11,10 @@ import { cors } from '../server/http.js'
 import { log, logged } from '../server/log.js'
 import { json } from '../server/db.js'
 import { sendWhatsApp, toE164, twilioConfigured } from '../server/remind/twilio.js'
+import { sendVonageWhatsApp, vonageConfigured } from '../server/remind/vonage.js'
+
+/** Vonage when its keys are set (the free sandbox sends any text), else Twilio, else none. */
+export const remindProvider = (): 'vonage' | 'twilio' | null => (vonageConfigured() ? 'vonage' : twilioConfigured() ? 'twilio' : null)
 
 const MAX_PER_HOUR = 60
 const sent = new Map<string, number[]>()
@@ -25,9 +29,10 @@ function allow(ip: string): boolean {
 }
 
 export async function handle(req: Request): Promise<Response> {
-  if (req.method === 'GET') return json({ configured: twilioConfigured() })
+  const provider = remindProvider()
+  if (req.method === 'GET') return json({ configured: !!provider, provider })
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
-  if (!twilioConfigured()) return json({ error: 'twilio not configured' }, 503)
+  if (!provider) return json({ error: 'no WhatsApp sender configured (Vonage or Twilio)' }, 503)
   let b: { to?: unknown; body?: unknown; vars?: { name?: unknown; amount?: unknown; shop?: unknown } }
   try {
     b = (await req.json()) as typeof b
@@ -43,12 +48,12 @@ export async function handle(req: Request): Promise<Response> {
   const vars = v && typeof v.name === 'string' && typeof v.amount === 'string' && typeof v.shop === 'string'
     ? { name: v.name.slice(0, 60), amount: v.amount.slice(0, 20), shop: v.shop.slice(0, 80) } : undefined
   try {
-    const r = await sendWhatsApp(to, b.body.trim(), vars)
-    log.info('remind_sent', { ok: r.ok, status: r.status, code: r.code, error: r.error, to: `…${to.slice(-4)}` })
+    const r = provider === 'vonage' ? await sendVonageWhatsApp(to, b.body.trim()) : await sendWhatsApp(to, b.body.trim(), vars)
+    log.info('remind_sent', { provider, ok: r.ok, status: r.status, code: r.code, error: r.error, to: `…${to.slice(-4)}` })
     return json(r, r.ok ? 200 : 502)
   } catch (e) {
     log.error('remind_failed', { error: e })
-    return json({ ok: false, error: 'could not reach Twilio' }, 502)
+    return json({ ok: false, error: `could not reach ${provider}` }, 502)
   }
 }
 

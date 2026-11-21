@@ -14,6 +14,37 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 ---
 
+## 9. Vonage as a free WhatsApp sender (Twilio's new trial can't send our text)
+
+**Why:**
+- **Twilio's trial changed:** new Twilio trials (Nov 2026: "Twilio One Console", $0.00 credit, "free units") only send Twilio's own sample template from `+1 737 221 2163`. Our text fails with 21654, and templates can't be created on trial.
+- **Vonage's sandbox still works the old way:** its **Messages API sandbox** gives a shared WhatsApp number that sends **any text** to phones that opted in. Messages come from Vonage's number, never the shop's own WhatsApp.
+
+**How it works:**
+- `server/remind/vonage.ts`: one JSON POST to `messages-sandbox.nexmo.com/v1/messages` (sandbox), or `api.nexmo.com/v1/messages` with `VONAGE_SANDBOX=false` for a real approved number. Basic auth with API key and secret.
+- `api/remind.ts` `remindProvider()`: **Vonage when its three env vars are set, else Twilio, else none** (the app then offers the shop's own WhatsApp). `GET /api/remind` returns `{configured, provider}`. Logs say which provider sent.
+- App wording no longer says "Twilio": "Sent automatically from the WhatsApp API number" (5 languages).
+
+**Setup (free):**
+1. Sign up at dashboard.nexmo.com, then go to **Messaging → Messages Sandbox → WhatsApp**.
+2. From each phone that should receive reminders, send the passphrase shown there (for example "Join cross guru") to the sandbox number (`+1 415 738 6102`).
+3. In `voice-khata/.env`:
+   ```
+   VONAGE_API_KEY=<API key>
+   VONAGE_API_SECRET=<API secret, from dashboard → API Settings>
+   VONAGE_WHATSAPP_FROM=14157386102
+   ```
+4. Restart `npm run server`. The menu should show "✓ Sent automatically from the WhatsApp API number".
+
+**Sandbox limits:**
+- Only opted-in numbers receive messages.
+- WhatsApp's 24 h rule applies: free text arrives within 24 h of that phone's last message to the sandbox. Sending the passphrase again reopens the window.
+- Not for real customers. Production needs a real WhatsApp sender, with Vonage, Twilio or Meta, plus an approved template.
+
+**Files:** `server/remind/vonage.ts` (new), `api/remind.ts`, `src/ui/strings.ts`, `.env.example`.
+
+---
+
 ## 8. Reminders bell, customer numbers, top bar spacing
 
 **Owner's feedback:**
