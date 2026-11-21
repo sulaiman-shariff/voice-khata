@@ -1,37 +1,65 @@
 # KhataBhai
 
-KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice. The ledger lives encrypted on the phone. Version 2 replaced the rule-and-LLM turn loop with an agent that picks one of its tools (36 now), each of which runs through the same ledger safety layer, and added a wake word so the app only acts when called. Version 3 adds a clean single design, counter QR payments that book themselves, spoken payment announcements, due dates, instalment plans, a cashbook and a supplier khata.
+KhataBhai is a khata (credit ledger) for kirana shops that you keep by talking to it. While serving a customer, the shopkeeper says "Ramesh ka 340 udhaar" and the entry is written down. Asking "Ramesh ka total?" gets the balance read back. The app understands 10 Indian languages mixed with English. The ledger is encrypted and stays on the shopkeeper's phone. It was built for the Gnani Voice Hackathon (problem statement PS2).
 
-**Hosted prototype:** https://khatabhai-nine.vercel.app
+**Open it:** https://khatabhai-nine.vercel.app on any phone. An **Android app** is available on the [releases page](https://github.com/sulaiman-shariff/voice-khata/releases/latest).
 
-**Try it**
-1. Open the link on a phone and pick your language on the tile screen.
-2. Tap the mic and allow microphone access. The assistant introduces itself as an AI. It starts asleep.
-3. Say "KhataBhai" (or tap the mic), then "Ramesh ka 340 udhaar", then ask "Ramesh ka total?". It stays awake for 15 s after each exchange; "bas" or "that's all" puts it to sleep.
-4. Try "Ramesh ka QR dikhao", "aaj ka hisaab", "bijli 800", "Gupta ji ko 5000 dene hain" or "aaj kisse lena hai".
+<p>
+  <img src="docs/screens/10-today.png" width="200" alt="Today: summary card, 7-day chart and today's entries">
+  <img src="docs/screens/12-dues-customers.png" width="200" alt="Dues: who owes what, and for how long">
+  <img src="docs/screens/15-qr.png" width="200" alt="Counter QR for a customer's balance">
+  <img src="docs/screens/14-customer-plan.png" width="200" alt="A customer with an instalment plan">
+</p>
 
-## New in version 3
+## Why it exists
 
-Version 3 replaces the colour themes with one ivory design and turns the mic into a voice orb that shows which state it is in. It also adds collecting money at the counter and a few tools for running the shop.
+Most kirana shops still run on trust and a paper notebook. The shopkeeper has to stop serving, find the right page, write the amount and add it up, often with one hand busy and a queue at the counter. Ledger apps exist, but they expect someone to type into them. KhataBhai is meant to be spoken to the way you'd talk to a helper behind the counter, in whatever mix of Hindi, Kannada, Tamil or English comes naturally. It also brings in the money: customers get a polite WhatsApp reminder with a payment link, and when they pay, the khata updates itself.
 
-| Feature | What it does |
-|---|---|
-| Counter QR | Say "Ramesh ka QR dikhao" and a QR for the amount appears. It is a Razorpay Payment Link drawn as our own QR, or a native Razorpay UPI QR when the account has QR Codes. When the customer pays, the webhook books the payment into the khata, the QR turns into a tick, and the app says "Ramesh ne ₹340 jama kiye, baaki ₹900". Nobody types anything or reconciles afterwards. |
-| Payments announced aloud | Every Razorpay payment, whether it came from a reminder link or a counter QR, is spoken within a few seconds, the way a payments soundbox does. If the customer pays only part, the app asks "₹140 baaki — naya link bhejun?" |
-| Due dates and how old a due is | "Ramesh ka 340, Somvaar tak" sets a due date. Dues show an age pill (0–7, 8–30 and 30+ days), and you can ask "kiska 30 din se purana hai?". |
-| Collect today | A single list of everyone who is due, everyone who promised to pay today, and anyone 30 or more days overdue. One tap reminds them all, and each row ticks off when the payment lands. |
-| Instalment plans | "Ramesh ka 3000, teen hafte mein". The server sends a payment link for each instalment on its day, and the customer screen shows a progress bar. |
-| Daily summary | "Aaj ka hisaab" reports credit given, money collected, cash in hand, new customers, top dues and today's promises. The Today tab shows a 7-day chart. |
-| Cashbook (galla) | "Bijli 800" and "500 ka maal kharida" are recorded by category. Customer cash payments appear here too, worked out from the khata and never stored twice. |
-| Supplier khata | "Gupta ji ko 5000 dene hain" records money the shop owes, in its own colour ("dena hai"). Suppliers are never reminded and never counted as dues. |
-| Itemised bills | "Ramesh: do kilo chawal, ek Maggi, 340" keeps the items as chips on the entry. |
-| Statement image | The phone draws a statement PNG (last 15 entries, running balance and a pay QR) and shares it to WhatsApp. Only that one customer's entries leave the phone. |
-| Voice-note replies | When a customer replies on WhatsApp with a voice note such as "kal de dunga", it is transcribed and turned into a promise the shopkeeper can add with one tap. |
-| Two customers with one name | Adding a second Ramesh asks once for a nickname ("doodhwala", "Gali 3"), and skipping it is allowed. "Doodhwala Ramesh" then picks the right one. "Which one?" lists every Ramesh, and "doosra wala" is understood without the model. "Rakesh 200" when only Ramesh exists offers "Ramesh" or "+ naya Rakesh" and keeps the amount. |
+## What a day with it looks like
 
-**Android app:** `feat/android-capacitor` wraps the PWA in Capacitor. The APK is attached to the [latest release](https://github.com/sulaiman-shariff/voice-khata/releases/latest).
+- **Writing it down.**
+  - Say "KhataBhai" to wake it, or tap the mic. Then speak: "Ramesh ka 340 udhaar", "Suresh ne 500 diye", "Imran: do kilo chawal, ek Maggi, 120".
+  - It replies in one short sentence with the new balance, and the entry appears on screen.
+  - In a noisy shop, or when an amount is unusual for that customer, it reads the entry back and waits for a yes first.
+- **Fixing mistakes.** "Nahi, 430", "galat, jama tha" and "hata do" correct or remove the last entry. Nothing is ever erased: every change is kept as its own record.
+- **Asking questions.** "Ramesh ka total?", "aaj ka hisaab", "kiska 30 din se purana hai?" and "aaj kisse lena hai?" are answered aloud, and the matching screen opens.
+- **Getting paid.**
+  - **QR at the counter:** "Ramesh ka QR dikhao" shows a QR for what Ramesh owes. When he pays, the payment goes into the khata by itself and the app announces it: "Ramesh ne ₹340 jama kiye, baaki ₹900".
+  - **WhatsApp reminders:** customers who have agreed to reminders get one with a payment link. If someone pays only part, the app offers to send a link for the rest.
+- **Keeping track.**
+  - **Due dates and promises:** "Ramesh ka 340, Somvaar tak" sets a due date, and "kal de dega" records a promise. Old dues show their age (0–7, 8–30 and 30+ days).
+  - **Collect today:** one list of everyone who is due, everyone who promised to pay today, and anyone overdue. One tap reminds them all.
+  - **Instalments:** "Ramesh ka 3000, teen hafte mein" splits a large balance into weekly parts and sends a link for each part on its day.
+  - **The day's close:** a summary card shows credit given, money collected, cash in the drawer and a 7-day chart.
+- **Running the shop.**
+  - **Cashbook (galla):** "Bijli 800" or "500 ka maal kharida" records shop spending, so the day ends with a real cash-in-hand figure.
+  - **Supplier khata:** "Gupta ji ko 5000 dene hain" tracks what the shop owes its wholesalers, kept separate from what customers owe the shop.
+  - **Statements:** a statement image with a pay QR can be shared with one customer on WhatsApp.
+- **People with the same name.**
+  - Adding a second Ramesh makes the app ask once how to tell them apart, for example "doodhwala" or "Gali 3". After that, "doodhwala Ramesh" picks the right one.
+  - If it isn't sure, it asks "which one?", and "doosra wala" works as an answer.
+  - When a name only sounds close (Rakesh when only Ramesh exists), it offers both choices instead of guessing.
 
-## What it does well
+## Try it
+
+1. Open the link on a phone and pick your language.
+2. Set up the shop: name, and a UPI ID if you want to get paid.
+3. Tap the mic and allow microphone access. The assistant tells you it is an AI, then waits, asleep.
+4. Say "KhataBhai", then "Ramesh ka 340 udhaar", then "Ramesh ka total?". It stays awake for 15 s after each exchange. "Bas" or "that's all" puts it back to sleep.
+5. Try "Ramesh ka QR dikhao", "aaj ka hisaab", "bijli 800", "Gupta ji ko 5000 dene hain" and "aaj kisse lena hai".
+
+## Privacy, in short
+
+- The ledger lives on the phone, encrypted per customer. The server keeps no copy of it.
+- A backup is optional, and it is encrypted with the shopkeeper's PIN before it leaves the phone.
+- Reminders go only to adults who agreed to them, only between 9 am and 8 pm, and in a polite tone. Customers are never scored.
+- The details are in [Responsible AI and privacy](#responsible-ai-and-privacy) below.
+
+## How it understands speech
+
+KhataBhai uses Gnani's Prisma speech-to-text and Timbre text-to-speech. A plain entry about a known customer is written straight away by our own parser, with no AI model involved. Anything harder goes to an agent: Gemini and Claude Haiku are asked at the same time and the first good answer is used. The agent chooses from 36 tools. Every tool goes through the same ledger safety layer, so an amount nobody said is refused, and a direction nobody said is read back for confirmation.
+
+## How it scores against the PS2 rubric
 
 | Rubric area | What the app does |
 |---|---|
@@ -42,8 +70,6 @@ Version 3 replaces the colour themes with one ivory design and turns the mic int
 | Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A save is confirmed in one spoken sentence with the customer's new balance, so the screen and the voice always agree. The chime, highlight and toast no longer wait for the encrypted write. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
-
-A plain entry about a known customer (name, amount and a spoken credit or payment word) takes the instant path: the deterministic parser writes it with no model call. Everything else goes to the agent: Gemini and Claude Haiku 5.5 are asked at the same time and the first good answer is used. The agent only picks tools and fills arguments; the tools validate it (an amount that was not said is refused, a direction nobody said is read back).
 
 ## Architecture
 
@@ -59,7 +85,7 @@ flowchart LR
   end
   STT["Gnani Prisma v3.0 STT"]
   TTS["Gnani Timbre v3.0 TTS"]
-  LLM["Gemini on Vertex AI (asia-south1 + global)<br/>raced with Claude Haiku 5.5<br/>agent: first good answer wins, 29 tools"]
+  LLM["Gemini on Vertex AI (asia-south1 + global)<br/>raced with Claude Haiku 5.5<br/>agent: first good answer wins, 36 tools"]
   NEON[("Neon Postgres<br/>backup ciphertext,<br/>confirmation tokens")]
   UI <-- "WebSocket: 16 kHz PCM up,<br/>PCM and JSON ops down" --> S
   S <-- WebSocket --> STT
@@ -127,10 +153,10 @@ The app is asleep until it is called, so a shop's chatter is not acted on.
 
 **Two models race on every text turn.** `decide()` starts the Gemini race (Mumbai plus two `global` requests, `server/parse/gemini.ts`) and one Claude Haiku 5.5 call (`claude-haiku-5-5`, `server/parse/haiku.ts`) at the same moment, with the same prompt and tools. The first answer that names a tool we have wins and the other leg is cancelled. One deadline covers both (`LLM_TIMEOUT_MS`, 3 s, plus the session's own cut-off): if one side fails (an outage, a 429, a bad key, a refusal, no tool call) the other still has the rest of it; if both fail the turn ends in "didn't catch that", as before. Which model answers depends on timing, and `agent_call` in the logs says which one did (`model=`). Haiku runs with thinking off at effort `low`, a forced tool choice, no retries, and a cached system prompt. The audio second call stays Gemini only. Both models go through the same tools and the same safety rules below, so neither can write anything the other could not. `AGENT_HAIKU=off`, or no `ANTHROPIC_API_KEY`, turns Haiku off.
 
-The 29 tools (`server/agent/tools.ts`):
-- Entries: `add_entries`, `change_entry`, `remove_entry`, `undo_last`, `move_entry`, `settle`.
-- Show and ask: `show_customer`, `show_dues`, `show_history`, `show_today`, `search`, `top_debtors`, `close_view`, `query_balance`.
-- Customers: `add_customer`, `rename_customer`, `merge_customers`, `set_phone`, `send_reminder`, `send_statement`.
+The 36 tools (`server/agent/tools.ts`):
+- Entries: `add_entries` (with due dates, items and suppliers), `change_entry`, `remove_entry`, `undo_last`, `move_entry`, `settle`, `add_cash` (cashbook).
+- Show and ask: `show_customer`, `show_dues`, `show_history`, `show_today` (the daily summary), `show_overdue`, `collect_today`, `search`, `top_debtors`, `close_view`, `query_balance`.
+- Customers: `add_customer`, `rename_customer`, `merge_customers`, `set_phone`, `set_tag` (nickname), `send_reminder`, `send_statement`, `show_qr` (counter QR), `set_plan`, `cancel_plan`.
 - Settings: `set_language`, `set_speed` (slower, normal, faster), `set_shop_name`, `open_privacy`, `backup`, `erase_all`. Every save is spoken in full with the customer's new balance; there is no setting to shorten it.
 - Dialogue: `answer_question`, `not_for_me`, `unclear`.
 
@@ -254,7 +280,7 @@ Every production session in the logs becomes a replayable conversation: `eval/lo
 - turns with a name or an amount that got no reply;
 - questions asked.
 
-A read-back the logged user never got to answer is answered from the labels (yes only for an entry they meant). The logged model answers are from before v2; the v2 agent's answers are supplied from that cache or an oracle, so the replay checks the session's rules, not the model.
+A read-back the logged user never got to answer is answered from the labels (yes only for an entry they meant). The logged model answers come from an earlier build; the current agent's answers are supplied from a recorded cache or an oracle, so the replay checks the session's rules, not the model.
 
 28 sessions from 21 Nov (105 steps, 30 entries meant):
 
