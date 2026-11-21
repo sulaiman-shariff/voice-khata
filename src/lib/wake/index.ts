@@ -14,6 +14,8 @@ export interface WakeDetector {
   pause(): void
   resume(): void
   onWake(cb: () => void): void
+  /** Fires once if the worker fails after loading; the detector is then disposed. */
+  onFail(cb: () => void): void
   dispose(): void
 }
 
@@ -63,9 +65,18 @@ export async function createWakeDetector(opts: WakeOptions): Promise<WakeDetecto
   let cb: (() => void) | null = null
   let lastWake = -Infinity
 
-  worker.onerror = null
+  let failCb: (() => void) | null = null
+  const fail = () => {
+    if (disposed) return
+    disposed = true
+    worker.terminate()
+    failCb?.()
+  }
+  worker.onerror = fail
   worker.onmessage = (e) => {
-    if ((e.data as { type?: string } | null)?.type !== 'wake' || disposed) return
+    const type = (e.data as { type?: string } | null)?.type
+    if (type === 'error') return fail()
+    if (type !== 'wake' || disposed || paused) return
     const now = Date.now()
     if (now - lastWake < REFRACTORY_MS) return
     lastWake = now
@@ -88,6 +99,9 @@ export async function createWakeDetector(opts: WakeOptions): Promise<WakeDetecto
     },
     onWake(fn) {
       cb = fn
+    },
+    onFail(fn) {
+      failCb = fn
     },
     dispose() {
       disposed = true

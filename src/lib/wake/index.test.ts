@@ -77,6 +77,30 @@ describe('createWakeDetector', () => {
     expect(cb).toHaveBeenCalledTimes(2)
   })
 
+  it('a wake that arrives while paused is ignored', async () => {
+    const w = new FakeWorker('ready')
+    const d = (await createWakeDetector({ threshold: 0.5, createWorker: () => w }))!
+    const cb = vi.fn()
+    d.onWake(cb)
+    d.pause()
+    w.emit({ type: 'wake', score: 0.9 })
+    expect(cb).not.toHaveBeenCalled()
+  })
+
+  it('a worker error after ready disposes the detector and calls onFail', async () => {
+    const w = new FakeWorker('ready')
+    const d = (await createWakeDetector({ threshold: 0.5, createWorker: () => w }))!
+    const fail = vi.fn()
+    d.onFail(fail)
+    w.emit({ type: 'error', message: 'bad shape' })
+    expect(fail).toHaveBeenCalledTimes(1)
+    expect(w.terminated).toBe(true)
+    d.feed(frame())
+    expect(w.frames()).toHaveLength(0)
+    w.onerror?.({} as ErrorEvent)
+    expect(fail).toHaveBeenCalledTimes(1)
+  })
+
   it('dispose terminates the worker and stops feeding', async () => {
     const w = new FakeWorker('ready')
     const d = (await createWakeDetector({ threshold: 0.5, createWorker: () => w }))!
