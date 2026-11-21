@@ -20,7 +20,7 @@ export function cors(handle: (req: Request) => Promise<Response>): (req: Request
     const origin = req.headers.get('origin')
     if (!isAllowedOrigin(origin)) return new Response(JSON.stringify({ error: 'origin not allowed' }), { status: 403, headers: { 'content-type': 'application/json' } })
     const extra: Record<string, string> = origin
-      ? { 'access-control-allow-origin': origin, vary: 'Origin', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '86400' }
+      ? { 'access-control-allow-origin': origin, vary: 'Origin', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type, authorization', 'access-control-max-age': '86400' }
       : {}
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: extra })
     const res = await handle(req)

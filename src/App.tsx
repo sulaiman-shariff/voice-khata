@@ -27,6 +27,7 @@ import { ProfileForm } from '@/ui/Profile'
 import { applyTheme } from '@/ui/theme'
 import { Logo, Wordmark } from '@/ui/Logo'
 import { dueForReminder, runAutoReminders, sendReminder } from '@/lib/remind'
+import { startSync } from '@/lib/sync'
 
 const ConfirmPage = lazy(() => import('@/pages/ConfirmPage'))
 const PayPage = lazy(() => import('@/pages/PayPage'))
@@ -174,6 +175,14 @@ function Home({ store }: { store: KhataStore }) {
 
   // the saved scheme wins over the quick local copy used for the first paint
   useEffect(() => { applyTheme(store.settings.theme) }, [store])
+
+  // Razorpay payments and customer replies come back into the khata; opted-in customers go up for reminders
+  useEffect(() => startSync(store, (n) => {
+    const name = store.state.customers.get(n.cid)?.name ?? ''
+    if (n.kind === 'payment') toast.success(`${name}: ₹${((n.paise ?? 0) / 100).toLocaleString('en-IN')} paid online (Razorpay)`)
+    else if (n.kind === 'dispute') toast.warning(`${name} says an amount is wrong${n.text ? `: "${n.text}"` : ''}`)
+    else toast(`${name} stopped WhatsApp reminders`)
+  }), [store])
 
   // automatic WhatsApp reminders: on open and every 6 h while the app stays open
   useEffect(() => {
