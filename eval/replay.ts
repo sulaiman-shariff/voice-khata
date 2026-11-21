@@ -109,7 +109,9 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
     newId: () => `n${++ids}`,
   })
   s.onClient({ type: 'hello', lang: c.lang as never, snapshot: snapshot(), firstRun: false, ptt: false })
-  s.onClient({ type: 'wake', source: 'tap' }) // awake throughout: the sessions start asleep
+  // awake throughout (the sessions start asleep): held, so no real-time window can expire mid-replay
+  // (a live --record takes real seconds per call, and going to sleep drops an expired question)
+  s.onClient({ type: 'wake', source: 'hold' })
   await s.idle()
 
   const written: { name: string | null; rs: number; dir: string }[] = []
