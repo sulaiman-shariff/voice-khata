@@ -103,6 +103,8 @@ export interface PendingView {
   amounts?: number[]
   /** delete: a spoken yes is not enough, the on-screen button must be tapped */
   requireTap?: boolean
+  /** delete + requireTap: the spoken yes was heard, the button now erases */
+  armed?: boolean
 }
 
 /** A setting the agent changed by voice; the phone applies and stores it. */
@@ -142,10 +144,11 @@ export type ServerMsg =
   | { type: 'unduck' } // false alarm: restore volume
   | { type: 'stop_audio' } // real barge-in: stop playback now
   | { type: 'pending'; pending: PendingView | null }
-  | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' | 'today' | 'top_debtors' | 'settings' | 'close' }
+  | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' | 'today' | 'settings' | 'close' }
+  | { type: 'show'; view: 'top_debtors'; count?: number }
   /** entries between two days (YYYY-MM-DD, inclusive) */
-  | { type: 'show'; view: 'history'; from: string; to: string }
-  | { type: 'show'; view: 'search'; text: string }
+  | { type: 'show'; view: 'history'; from: string; to: string; cid?: string }
+  | { type: 'show'; view: 'search'; text: string; cids?: string[]; eids?: string[] }
   | SettingMsg
   /** one big button on the phone: open WhatsApp with `text` (to `cid`'s number) or start the backup */
   | { type: 'ready'; kind: 'whatsapp' | 'backup'; cid?: string; text?: string }

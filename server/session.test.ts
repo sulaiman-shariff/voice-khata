@@ -743,20 +743,45 @@ describe('turn taking', () => {
 })
 
 describe('save anyway', () => {
-  it('force{text} after a not_for_me writes the entry', async () => {
+  const text = 'bhaiya do kilo cheeni dena'
+  it('force{text} after a not_for_me goes to the model for the identical text, and is never silent', async () => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en', llm: () => { calls++; return llmEntry('Ramesh', 200, 'credit') } })
+    await h.turn(text)
+    expect(calls).toBe(0)
+    expect(h.out.some((m) => m.type === 'not_entry')).toBe(true)
+    h.said.length = 0
+    h.s.onClient({ type: 'force', text })
+    await h.s.idle()
+    expect(calls).toBe(1)
+    expect(h.said.length).toBe(1) // the model could not place an amount: it says so instead of staying silent
+  })
+
+  it('force{text} after the model took a line for chatter writes the entry after the read-back', async () => {
+    const line = 'wo Ramesh ke do sau likh dena kya'
     let calls = 0
     const h = harness([cust('r', 'Ramesh', 0)], {
       lang: 'en',
-      // the rules take the line for talk to someone else (no model call); a forced turn asks the model
-      llm: () => { calls++; return llmEntry('Ramesh', 200, 'credit') },
+      llm: () => (++calls === 1 ? { intent: 'chitchat', sure: true, entries: [] } : llmEntry('Ramesh', 200, 'credit')),
     })
-    await h.turn('bhaiya do kilo cheeni dena')
+    await h.turn(line)
     expect(h.ops()).toEqual([])
-    expect(h.out.some((m) => m.type === 'not_entry')).toBe(true)
-    h.s.onClient({ type: 'force', text: 'bhaiya do kilo cheeni dena, Ramesh 200 udhaar likh do' })
+    h.s.onClient({ type: 'force', text: line })
     await h.s.idle()
-    expect(calls).toBe(1)
+    expect(calls).toBe(2)
+    expect(h.asks).toBe('confirm') // addressed to the app: read back (no credit word was said), not dropped
+    await h.tap('yes')
     expect(h.written()).toEqual([['r', 200, 'credit']])
+  })
+
+  it('a forced line while a question is open is a new instruction, not the answer', async () => {
+    const h = harness([cust('r', 'Ramesh', 0), cust('s', 'Suresh', 0)], { lang: 'en' })
+    await h.turn('Ramesh 340')
+    expect(h.asks).toBe('direction')
+    h.s.onClient({ type: 'force', text: 'Suresh 100 credit' })
+    await h.s.idle()
+    expect(h.written()).toEqual([['s', 100, 'credit']])
+    expect(h.asks).toBeNull()
   })
 
   it('a tool reply with a show, a setting and a ready card reaches the phone', async () => {
@@ -766,5 +791,22 @@ describe('save anyway', () => {
     expect(h.out).toContainEqual({ type: 'show', view: 'today' })
     expect(h.out).toContainEqual({ type: 'setting', key: 'lang', value: 'kn' })
     expect(h.out).toContainEqual({ type: 'ready', kind: 'backup' })
+  })
+})
+
+describe('erase needs a spoken yes and then the tap', () => {
+  const armedOf = (out: ServerMsg[]) => (out.filter((m) => m.type === 'pending').at(-1) as { pending: PendingView | null }).pending
+  it('a tap alone does not erase; a spoken haan arms it and the next tap erases', async () => {
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en' })
+    h.s.pending = { kind: 'delete', requireTap: true }
+    await h.tap('yes')
+    expect(h.ops()).toEqual([])
+    h.s.onClient({ type: 'hello', lang: 'en', snapshot: h.s.snap, firstRun: false, ptt: false })
+    expect(armedOf(h.out)?.armed).toBe(false)
+    await h.turn('haan')
+    expect(h.ops()).toEqual([])
+    expect(armedOf(h.out)).toMatchObject({ kind: 'delete', requireTap: true, armed: true })
+    await h.tap('yes')
+    expect(h.ops()).toEqual([{ op: 'delete_all' }])
   })
 })

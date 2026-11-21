@@ -134,7 +134,7 @@ function Home({ store }: { store: KhataStore }) {
       },
       micError: () => { setMicReady(false); toast.error(t.micError) },
       partial: (x) => { newTurn(); setHeard(x); markIgnored(false) },
-      final: (x) => { newTurn(); setHeard(x); markIgnored(false) },
+      final: (x) => { setReady(null); newTurn(); setHeard(x); markIgnored(false) },
       notEntry: () => markIgnored(true),
       say: (x) => setSaid(x),
       ops: (ops) => onOps(ops),
@@ -142,10 +142,11 @@ function Home({ store }: { store: KhataStore }) {
       resent: (text) => toast(`${t.resent}: “${text.length > 60 ? `${text.slice(0, 60)}…` : text}”`, { duration: 6000 }),
       pending: (p) => {
         setPending(p)
-        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false); setListView(null) } // the question card must be visible
+        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false); setListView(null); setReady(null) } // the question card must be visible
       },
       show: (s) => {
         // one view at a time: the new one replaces whatever was open
+        setReady(null) // a card from an earlier turn must not stay tappable
         if (s.view !== 'customer') setCid(null)
         if (s.view !== 'history' && s.view !== 'search' && s.view !== 'top_debtors') setListView(null)
         if (s.view === 'customer') { setListView(null); setSheet(null); setCid(s.cid) }
@@ -153,9 +154,9 @@ function Home({ store }: { store: KhataStore }) {
         else if (s.view === 'summary' || s.view === 'today') { setSheet(null); setTab('today') }
         else if (s.view === 'privacy') setSheet('privacy')
         else if (s.view === 'settings') setSheet('settings')
-        else if (s.view === 'history') { setSheet(null); setListView({ k: 'history', from: s.from, to: s.to }) }
-        else if (s.view === 'search') { setSheet(null); setListView({ k: 'search', text: s.text }) }
-        else if (s.view === 'top_debtors') { setSheet(null); setListView({ k: 'top' }) }
+        else if (s.view === 'history') { setSheet(null); setListView({ k: 'history', from: s.from, to: s.to, cid: s.cid }) }
+        else if (s.view === 'search') { setSheet(null); setListView({ k: 'search', text: s.text, cids: s.cids, eids: s.eids }) }
+        else if (s.view === 'top_debtors') { setSheet(null); setListView({ k: 'top', count: s.count }) }
         else if (s.view === 'close') { setSheet(null); setListView(null); setEntry(null); setTyping(false); setReady(null) }
       },
       // settings changed by voice: stored here, and the voice client told (the language is applied by `lang`, the mic stays on)
@@ -186,6 +187,12 @@ function Home({ store }: { store: KhataStore }) {
     }
   }, [onOps, store, t])
 
+  /** who a WhatsApp card goes to: the customer's name and number, or a note that WhatsApp will ask */
+  const recipient = (c?: string) => {
+    const cu = c ? store.state.customers.get(c) : undefined
+    if (!cu) return t.noNumber
+    return cu.phone ? `${cu.name} · ${cu.phone}` : `${cu.name} · ${t.noNumber}`
+  }
   const sendTyped = async (text: string) => {
     if (!voice.current) await start(store.settings.lang!, false)
     if (!voice.current) return false
@@ -327,6 +334,7 @@ function Home({ store }: { store: KhataStore }) {
           {ready && !pending && (
             <ReadyCard
               t={t} text={ready.kind === 'whatsapp' ? ready.text : undefined}
+              to={ready.kind === 'whatsapp' ? recipient(ready.cid) : undefined}
               label={ready.kind === 'whatsapp' ? t.sendWhatsApp : t.openBackup}
               onDismiss={() => setReady(null)}
               onGo={() => {
@@ -351,9 +359,9 @@ function Home({ store }: { store: KhataStore }) {
           {(heard || said) && on && (
             <div className="space-y-1 text-center">
               {heard && (
-                <div className={cn('truncate text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
-                  “{heard}”{heardIgnored && <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
-                  {heardIgnored && <button onClick={() => { const x = heard; markIgnored(false); setHeard(''); voice.current?.force(x) }} className="ml-1.5 min-h-11 rounded-full px-3 text-xs font-semibold text-primary ring-1 ring-primary/30">{t.saveAnyway}</button>}
+                <div className={cn('flex items-center justify-center gap-1.5 text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
+                  <span className="min-w-0 truncate">“{heard}”</span>{heardIgnored && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
+                  {heardIgnored && <button onClick={() => { const x = heard; markIgnored(false); setHeard(''); voice.current?.force(x) }} className="min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold text-primary ring-1 ring-primary/30">{t.saveAnyway}</button>}
                 </div>
               )}
               {said && <div className="text-base font-medium">{said}</div>}

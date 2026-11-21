@@ -213,11 +213,17 @@ describe('agent tools', () => {
       expect(r.show).toEqual({ type: 'show', view: 'history', from: yesterday, to: yesterday })
     })
 
+    it('show_history with a name and a day carries the customer, so screen and voice agree', () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 100)])
+      const r = run('show_history', { name: 'Ramesh', day_offset: -1 }, 'Ramesh ka kal ka hisaab')
+      expect(r.show).toEqual({ type: 'show', view: 'history', from: yesterday, to: yesterday, cid: 'c1' })
+    })
+
     it('show_today, top_debtors, search and close_view each name their view', () => {
       const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 100)])
       expect(run('show_today', {}, 'aaj ka hisaab').show).toEqual({ type: 'show', view: 'today' })
-      expect(run('top_debtors', {}, 'sabse zyada kiska baaki').show).toEqual({ type: 'show', view: 'top_debtors' })
-      expect(run('search', { text: 'xyz' }, 'xyz dhundho').show).toEqual({ type: 'show', view: 'search', text: 'xyz' })
+      expect(run('top_debtors', {}, 'sabse zyada kiska baaki').show).toEqual({ type: 'show', view: 'top_debtors', count: 3 })
+      expect(run('search', { text: 'xyz' }, 'xyz dhundho').show).toEqual({ type: 'show', view: 'search', text: 'xyz', cids: [], eids: [] })
       expect(run('close_view', {}, 'band karo').show).toEqual({ type: 'show', view: 'close' })
     })
 
@@ -238,7 +244,7 @@ describe('agent tools', () => {
     it('the amount question offers the usual amounts of the customer as buttons', () => {
       const { core, run } = setup([cust('c1', 'Ramesh', 500, { typicalPaise: 20000 })], [ent('e1', 'c1', 300)])
       core.pending = { kind: 'amount', draft: { cid: 'c1', heardName: 'Ramesh', paise: 0 } as never, queue: [] }
-      expect(core.pendingView()?.amounts).toEqual([200, 300])
+      expect(core.pendingView()?.amounts).toEqual([300, 200])
     })
   })
 })

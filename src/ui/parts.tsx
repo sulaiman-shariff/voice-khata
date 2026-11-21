@@ -88,7 +88,7 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
       {p.kind === 'delete' ? (
         <div>
           <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
-          {p.requireTap && <div className="mt-1 text-sm text-muted-foreground">{t.eraseNeedsTap}</div>}
+          {p.requireTap && <div className="mt-1 text-sm text-muted-foreground">{p.armed ? t.eraseNeedsTap : t.sayHaanFirst}</div>}
         </div>
       ) : (
         <div className="flex items-end justify-between gap-3">
@@ -127,7 +127,7 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
           </>
         ) : p.kind === 'delete' && p.requireTap ? (
           <>
-            <Answer className="bg-destructive text-white" onClick={() => onAnswer('haan')}><Trash2 className="size-5" />{t.tapToErase}</Answer>
+            <button disabled={!p.armed} onClick={() => onAnswer('haan')} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-destructive text-lg font-semibold text-white active:scale-[.97] disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
             <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
           </>
         ) : (
@@ -142,10 +142,11 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
 }
 
 /** A tool made something ready: one big button does it (nothing is sent or saved before the tap). */
-export function ReadyCard({ label, text, onGo, onDismiss, t }: { label: string; text?: string; onGo: () => void; onDismiss: () => void; t: UiStrings }) {
+export function ReadyCard({ label, text, to, onGo, onDismiss, t }: { label: string; text?: string; to?: string; onGo: () => void; onDismiss: () => void; t: UiStrings }) {
   return (
     <div className="stamp rounded-3xl border-2 border-payment/40 bg-card p-4 shadow-lg">
-      {text && <pre className="mb-3 max-h-28 overflow-y-auto whitespace-pre-wrap font-sans text-sm text-muted-foreground">{text}</pre>}
+      {to && <div className="mb-1 text-base font-semibold">{t.toWho}: {to}</div>}
+      {text && <pre className="mb-3 max-h-40 overflow-y-auto whitespace-pre-wrap font-sans text-sm text-muted-foreground">{text}</pre>}
       <button onClick={onGo} className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-payment text-xl font-bold text-white active:scale-[.97]">{label}</button>
       <button onClick={onDismiss} className="mt-2 min-h-11 w-full rounded-2xl text-base text-muted-foreground">{t.dismiss}</button>
     </div>

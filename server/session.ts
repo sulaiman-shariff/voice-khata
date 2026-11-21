@@ -192,8 +192,6 @@ export class Session {
         break
       case 'tap':
         this.log.info('input', { kind: 'tap', action: msg.action })
-        // the on-screen erase button is the tap that erases: no spoken yes needed first
-        if (msg.action === 'yes' && this.pending?.kind === 'delete' && this.pending.requireTap) this.pending.spokenYes = true
         this.enqueue(() => this.handleText(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo', null, 'tap'))
         break
       case 'text':
@@ -521,6 +519,8 @@ export class Session {
   ): Promise<void> {
     const t0 = this.now()
     this.ledger.turnSrc = _src
+    // "Save anyway" is a new instruction to the app, never the answer to a question left open
+    if (forced) this.pending = null
     let intent: Intent = parseFast(text)
     let path: 'fast' | 'llm' | 'none' = 'fast'
     let llmMs: number | undefined
@@ -576,7 +576,7 @@ export class Session {
     let reply = this.pending
       ? this.ledger.answerPending(text, intent, meta)
       : this.dispatch(intent, text, meta)
-    if (!reply && unsureChange) reply = { parts: [say(this.lang).didNotCatch()], ops: [] }
+    if (!reply && (unsureChange || forced)) reply = { parts: [say(this.lang).didNotCatch()], ops: [] }
     // one confident save: the screen shows name and amount, so a short "noted" is enough
     if (reply && _src !== 'resend' && !this.readBackAll && reply.saved === 1 && reply.ackable === 1 && reply.parts.length === 1)
       reply.parts = [say(this.lang).ack()]

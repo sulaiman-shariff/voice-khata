@@ -846,7 +846,7 @@ export class LedgerCore {
     if (!cid) return undefined
     const c = this.snap.customers.find((x) => x.cid === cid)
     const recent = (this.snap.entries ?? []).filter((e) => e.cid === cid && !e.promise).map((e) => e.paise)
-    const out = [...new Set([c?.typicalPaise ?? 0, ...recent].filter((p) => p > 0))].slice(0, 3).map((p) => p / 100)
+    const out = [...new Set([...recent, c?.typicalPaise ?? 0].filter((p) => p > 0))].slice(0, 3).map((p) => p / 100)
     return out.length ? out : undefined
   }
 
@@ -854,7 +854,7 @@ export class LedgerCore {
     this.expireStale()
     const p = this.pending
     if (!p) return null
-    if (p.kind === 'delete') return p.requireTap ? { kind: 'delete', requireTap: true } : { kind: 'delete' }
+    if (p.kind === 'delete') return p.requireTap ? { kind: 'delete', requireTap: true, armed: p.spokenYes === true } : { kind: 'delete' }
     if (p.kind === 'modify') return p.view
     if (p.kind === 'batch') {
       const dir = p.drafts.find((d) => d.direction)?.direction ?? null

@@ -278,7 +278,7 @@ export function remindLink(store: KhataStore, cid: string, text: string) {
 export { MessageCircle }
 
 /** What a spoken "show ..." opens: a day's entries, a search, or the biggest dues. */
-export type ListView = { k: 'history'; from: string; to: string } | { k: 'search'; text: string } | { k: 'top' }
+export type ListView = { k: 'history'; from: string; to: string; cid?: string } | { k: 'search'; text: string; cids?: string[]; eids?: string[] } | { k: 'top'; count?: number }
 
 export function ListSheet({ store, view, t, onClose, onCustomer, onEntry }: {
   store: KhataStore; view: ListView | null; t: UiStrings; onClose: () => void; onCustomer: (cid: string) => void; onEntry: (eid: string) => void
@@ -291,18 +291,18 @@ export function ListSheet({ store, view, t, onClose, onCustomer, onEntry }: {
   let body: React.ReactNode = null
   if (view.k === 'top') {
     title = t.topDebtors
-    const top = dues(s).sort((a, b) => b.paise - a.paise).slice(0, 5)
+    const top = dues(s).sort((a, b) => b.paise - a.paise).slice(0, Math.min(5, view.count ?? 5))
     body = top.length ? top.map((d) => <PersonRow key={d.cid} name={name(d.cid)} paise={d.paise} onClick={() => onCustomer(d.cid)} />) : <Empty t={t} />
   } else if (view.k === 'history') {
-    title = view.from === view.to ? dayLabel(view.from) : `${dayLabel(view.from)} ${t.rangeTo} ${dayLabel(view.to)}`
-    const es = all.filter((e) => { const d = entryDay(e); return d >= view.from && d <= view.to }).sort((a, b) => b.ts - a.ts)
+    title = (view.cid ? `${name(view.cid)} · ` : '') + (view.from === view.to ? dayLabel(view.from) : `${dayLabel(view.from)} ${t.rangeTo} ${dayLabel(view.to)}`)
+    const es = all.filter((e) => { const d = entryDay(e); return d >= view.from && d <= view.to && (!view.cid || e.cid === view.cid) }).sort((a, b) => b.ts - a.ts)
     body = es.length ? es.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} onClick={() => onEntry(e.eid)} />) : <Empty t={t} />
   } else {
     title = `${t.searchResults}: ${view.text}`
     const q = view.text.trim().toLowerCase()
     const nums = (view.text.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
-    const people = [...s.customers.values()].filter((c) => q && (c.name.toLowerCase().includes(q) || c.aliases.some((a) => a.toLowerCase().includes(q))))
-    const es = nums.length ? all.filter((e) => nums.includes(e.paise)).sort((a, b) => b.ts - a.ts) : []
+    const people = [...s.customers.values()].filter((c) => view.cids ? view.cids.includes(c.cid) : q && (c.name.toLowerCase().includes(q) || c.aliases.some((a) => a.toLowerCase().includes(q))))
+    const es = view.eids ? all.filter((e) => view.eids!.includes(e.eid)) : nums.length ? all.filter((e) => nums.includes(e.paise)).sort((a, b) => b.ts - a.ts) : []
     body = people.length || es.length ? (
       <>
         {people.map((c) => <PersonRow key={c.cid} name={c.name} paise={balance(s, c.cid)} onClick={() => onCustomer(c.cid)} />)}

@@ -331,7 +331,7 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       const label = c ? c.name : dayStr ?? istDay(0)
       // a customer alone: their page; a day (with or without a customer): the entries of that day
       const show: Reply['show'] = c && !dayStr ? { type: 'show', view: 'customer', cid: c.cid }
-        : { type: 'show', view: 'history', from: dayStr ?? istDay(0), to: dayStr ?? istDay(0) }
+        : { type: 'show', view: 'history', from: dayStr ?? istDay(0), to: dayStr ?? istDay(0), ...(c ? { cid: c.cid } : {}) }
       return { parts: [R.showHistory(label, list.length)], ops: [], show }
     }
     case 'show_today': {
@@ -345,12 +345,12 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       const amounts = (q.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
       const hits = amounts.length ? entries.filter((e) => amounts.includes(e.paise)) : []
       const reply: Reply = { parts: [R.searchResult(q, found.length + hits.length)], ops: [] }
-      reply.show = found.length === 1 && !hits.length ? { type: 'show', view: 'customer', cid: found[0].cid } : { type: 'show', view: 'search', text: q }
+      reply.show = found.length === 1 && !hits.length ? { type: 'show', view: 'customer', cid: found[0].cid } : { type: 'show', view: 'search', text: q, cids: found.map((x) => x.cid), eids: hits.map((e) => e.eid) }
       return reply
     }
     case 'top_debtors': {
       const n = Math.min(5, Math.max(1, int(a.count) ?? 3))
-      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'top_debtors' } }
+      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'top_debtors', count: n } }
     }
     case 'close_view':
       return { parts: [R.closed()], ops: [], show: { type: 'show', view: 'close' } }
