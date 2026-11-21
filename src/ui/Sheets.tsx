@@ -133,8 +133,10 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
   const st = store.settings
   const [name, setName] = useState(st.shopName)
   const [debugLogs, setDebugLogs] = useState(clientLog.enabled)
+  /** first tap arms the full reset, a second tap (within 5 s) does it */
+  const [resetArmed, setResetArmed] = useState(false)
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setResetArmed(false); onClose() } }}>
       <SheetContent side="bottom" className="rounded-t-3xl pb-8">
         <SheetHeader><SheetTitle>{t.settings}</SheetTitle></SheetHeader>
         <div className="space-y-4 px-4 text-sm">
@@ -170,6 +172,22 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
                 {LANG_NAME[l]}
               </button>
             ))}
+          </div>
+          {/* tucked away: wipes this browser's ledger and settings and starts from the first screen */}
+          <div className="pt-2 text-center">
+            <button
+              onClick={() => {
+                if (!resetArmed) {
+                  setResetArmed(true)
+                  setTimeout(() => setResetArmed(false), 5000)
+                  return
+                }
+                location.assign(`${location.pathname}?reset=1`)
+              }}
+              className={cn('min-h-11 px-3 text-xs underline-offset-4', resetArmed ? 'font-semibold text-destructive' : 'text-muted-foreground/70 underline')}
+            >
+              {resetArmed ? t.resetConfirm : t.resetBrowser}
+            </button>
           </div>
         </div>
       </SheetContent>
