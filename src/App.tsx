@@ -1,4 +1,4 @@
-import { BellRing, BookOpen, Globe, Keyboard, Menu as MenuIcon, Plus, Search, WifiOff } from 'lucide-react'
+import { BellRing, BookOpen, Globe, Keyboard, Menu as MenuIcon, MessageCircle, Plus, Search, WifiOff } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { balance, daySummary, displayName, dues, promises } from '../shared/ledger.js'
@@ -198,6 +198,17 @@ function Home({ store }: { store: KhataStore }) {
     if (failed) toast.error(`${t.remindFailed} × ${failed}`)
   }
 
+  /** WhatsApp button on a dues row: send now, or open the customer to add the number / consent. */
+  const quickRemind = (cid: string) => {
+    const c = store.state.customers.get(cid)
+    if (!c?.phone || !c.adult || !c.remindersOptIn) {
+      setCid(cid)
+      toast(!c?.phone ? t.noPhone : t.notAllowed)
+      return
+    }
+    void sendReminder(store, cid, { interactive: true }).then((r) => toastRemind(t, r))
+  }
+
   /** Import "read aloud": the mic must be on and open (hands-free) while the book is read. */
   const importReading = async (on: boolean): Promise<boolean> => {
     if (on) {
@@ -254,23 +265,23 @@ function Home({ store }: { store: KhataStore }) {
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <header className="grid grid-cols-[6.5rem_1fr_6.5rem] items-center gap-2 px-3 pt-3">
-        <button aria-label={t.menu} onClick={() => setSheet('menu')} className="grid size-11 place-items-center rounded-lg bg-card shadow-sm ring-1 ring-foreground/10 active:scale-95">
-          <MenuIcon className="size-5" />
+      <header className="relative flex h-16 shrink-0 items-center justify-between border-b border-border px-3">
+        <button aria-label={t.menu} onClick={() => setSheet('menu')} className="grid size-11 place-items-center rounded-lg text-foreground hover:bg-muted active:scale-95">
+          <MenuIcon className="size-6" />
         </button>
-        <div className="min-w-0 text-center">
-          <div className="truncate font-display text-xl leading-tight font-semibold">{settings.shopName}</div>
-          <div className="text-[10px] font-bold tracking-[0.3em] text-gold uppercase">KhataBhai</div>
+        {/* centred on the bar itself, not between unequal neighbours */}
+        <div className="pointer-events-none absolute inset-x-30 text-center">
+          <div className="truncate text-lg leading-tight font-semibold tracking-tight">{settings.shopName}</div>
+          <div className="text-[10px] font-semibold tracking-[0.24em] text-gold uppercase">KhataBhai</div>
         </div>
         <Dropdown
-          label={t.language} align="right" panelClassName="w-60"
+          label={t.language} align="right" className="w-28" panelClassName="w-60"
           value={settings.autoLang !== false ? 'auto' : settings.lang}
           options={[{ value: 'auto', label: 'Auto', hint: t.autoAny }, ...LANGS.map((l) => ({ value: l as string, label: LANG_NAME[l] }))]}
           onChange={setLanguage}
-          button={<span className="flex min-w-0 items-center gap-1.5"><Globe className="size-4 shrink-0" /><span className="truncate">{settings.autoLang !== false ? 'Auto' : LANG_NAME[settings.lang]}</span></span>}
+          button={<span className="flex min-w-0 items-center gap-1.5"><Globe className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{settings.autoLang !== false ? 'Auto' : LANG_NAME[settings.lang]}</span></span>}
         />
       </header>
-      <div className="gold-rule mx-4 mt-3" />
 
       {on && status === 'offline' && (
         <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300">
@@ -326,15 +337,21 @@ function Home({ store }: { store: KhataStore }) {
               </div>
             </div>
             {shownDues.map((d) => (
-              <button key={d.cid} onClick={() => setCid(d.cid)} className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-foreground/5 active:bg-muted/60">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary">{initials(name(d.cid))}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-lg font-semibold leading-snug">{name(d.cid)}</span>
-                  {lastDay.get(d.cid) && <span className="block text-sm text-muted-foreground">{ago(lastDay.get(d.cid)!, t)}</span>}
-                </span>
-                {state.customers.get(d.cid)?.remindersOptIn && <BellRing className="size-4 shrink-0 text-muted-foreground" aria-label={t.reminders} />}
-                <span className="num text-2xl font-bold text-credit">{rs(d.paise)}</span>
-              </button>
+              <div key={d.cid} className="flex min-h-16 w-full items-center gap-1 rounded-lg bg-card pr-1.5 shadow-sm ring-1 ring-foreground/5">
+                <button onClick={() => setCid(d.cid)} className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left active:opacity-70">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 font-semibold text-primary">{initials(name(d.cid))}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-lg font-semibold leading-snug">{name(d.cid)}</span>
+                    {lastDay.get(d.cid) && <span className="block text-sm text-muted-foreground">{ago(lastDay.get(d.cid)!, t)}</span>}
+                  </span>
+                  {state.customers.get(d.cid)?.remindersOptIn && <BellRing className="size-4 shrink-0 text-muted-foreground" aria-label={t.reminders} />}
+                  <span className="num text-xl font-semibold text-credit">{rs(d.paise)}</span>
+                </button>
+                <button aria-label={`${t.remindNow}: ${name(d.cid)}`} onClick={() => quickRemind(d.cid)}
+                  className="grid size-11 shrink-0 place-items-center rounded-lg text-payment hover:bg-payment/10 active:scale-95">
+                  <MessageCircle className="size-5" />
+                </button>
+              </div>
             ))}
             {q && shownDues.length === 0 && <div className="py-6 text-center text-muted-foreground">{t.noMatch}</div>}
             {proms.length > 0 && <div className="pt-3 text-sm font-semibold text-muted-foreground">{t.promise}</div>}
@@ -397,7 +414,8 @@ function Home({ store }: { store: KhataStore }) {
       </footer>
 
       <CustomerSheet store={store} cid={cid} t={t} backup={backup} onClose={() => setCid(null)} onChanged={() => voice.current?.sendSnapshot()} onEntry={openEntry} />
-      <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
+      <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved}
+        onCustomer={(c) => { setEntry(null); setEntryFrom(null); setCid(c) }} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <ImportSheet store={store} open={sheet === 'import'} t={t} sink={importSink} onReading={importReading} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onImport={() => setSheet('import')} onRemindAll={() => void remindAll()}

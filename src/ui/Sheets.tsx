@@ -97,35 +97,24 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
           {c.aliases.length > 0 && <div className="text-sm text-muted-foreground">{c.aliases.join(' · ')}</div>}
         </SheetHeader>
         <div className="space-y-5 px-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <div className={cn('num text-5xl font-bold', bal > 0 ? 'text-credit' : 'text-payment')}>{rs(bal)}</div>
-              <div className="text-sm text-muted-foreground">{bal > 0 ? t.dues : bal < 0 ? t.payment : '✓'}</div>
-            </div>
-            <button onClick={() => void remind()} disabled={busy || bal <= 0}
-              className="flex min-h-12 shrink-0 items-center gap-2 rounded-lg bg-payment px-4 font-semibold text-white shadow-md disabled:opacity-40">
-              <MessageCircle className="size-5" />{t.remindNow}
-            </button>
+          <div>
+            <div className={cn('num text-5xl font-semibold tracking-tight', bal > 0 ? 'text-credit' : 'text-payment')}>{rs(bal)}</div>
+            <div className="text-sm text-muted-foreground">{bal > 0 ? t.dues : bal < 0 ? t.payment : '✓'}</div>
           </div>
-          {last && <div className="-mt-3 text-xs text-muted-foreground">{t.lastReminded}: {new Date(last).toLocaleString(t.loc, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</div>}
 
-          <div className="space-y-3 rounded-lg bg-card p-3 text-sm ring-1 ring-foreground/10">
+          {/* WhatsApp reminder: number, consent, send — all in one place */}
+          <section className="space-y-3 rounded-lg bg-card p-3 text-sm ring-1 ring-foreground/10">
+            <div className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-payment" />{t.waReminders}</div>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.phone}</span>
-              <input
-                inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone.trim() !== (c.phone ?? '') && phoneOk && void save({})}
-                aria-label={t.phone} aria-invalid={!phoneOk} placeholder="98xxxxxxxx"
-                className={cn('h-11 w-full rounded-lg bg-background px-3 text-base ring-1 ring-foreground/15', !phoneOk && 'ring-destructive')}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.tag}</span>
-              <input
-                value={tag} onChange={(e) => setTag(e.target.value)} onBlur={() => tag.trim() !== (c.tag ?? '') && void save({})} maxLength={30}
-                aria-label={t.tag} placeholder="Gali 3 / doodhwala"
-                className="h-11 w-full rounded-lg bg-background px-3 text-base ring-1 ring-foreground/15"
-              />
-              <span className="mt-1 block text-xs text-muted-foreground">{t.tagHint}</span>
+              <span className={cn('flex h-12 items-center rounded-lg bg-background ring-1 ring-foreground/15 focus-within:ring-2 focus-within:ring-primary', !phoneOk && 'ring-destructive')}>
+                <span className="num border-r border-border px-3 text-base text-muted-foreground">+91</span>
+                <input
+                  inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone.trim() !== (c.phone ?? '') && phoneOk && void save({})}
+                  aria-label={t.phone} aria-invalid={!phoneOk} placeholder="98765 43210"
+                  className="num h-full min-w-0 flex-1 bg-transparent px-3 text-base outline-none focus-visible:outline-none"
+                />
+              </span>
             </label>
             <label className="flex min-h-11 items-center justify-between gap-3">
               <span>{t.adult}</span>
@@ -135,7 +124,25 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
               <span>{t.reminders}</span>
               <Switch disabled={!c.adult} checked={c.remindersOptIn} onCheckedChange={(v) => void save({ remindersOptIn: v })} />
             </label>
-          </div>
+            <button onClick={() => void (phone.trim() !== (c.phone ?? '') && phoneOk ? save({}) : Promise.resolve()).then(remind)} disabled={busy || bal <= 0}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-payment font-semibold text-white shadow-sm disabled:opacity-40">
+              <MessageCircle className="size-5" />{t.remindNow}
+            </button>
+            <div className="text-xs text-muted-foreground">
+              {bal <= 0 ? t.nothingDue : !phone.trim() ? t.noPhone : !c.adult || !c.remindersOptIn ? t.notAllowed
+                : last ? `${t.lastReminded}: ${new Date(last).toLocaleString(t.loc, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
+            </div>
+          </section>
+
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.tag}</span>
+            <input
+              value={tag} onChange={(e) => setTag(e.target.value)} onBlur={() => tag.trim() !== (c.tag ?? '') && void save({})} maxLength={30}
+              aria-label={t.tag} placeholder="Gali 3 / doodhwala"
+              className="h-11 w-full rounded-lg bg-card px-3 text-base ring-1 ring-foreground/15"
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">{t.tagHint}</span>
+          </label>
 
           <div>
             <div className="mb-1 flex items-center justify-between">

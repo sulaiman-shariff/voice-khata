@@ -8,7 +8,7 @@ import { dueForReminder, twilioReady } from '@/lib/remind'
 import { Dropdown } from './Dropdown'
 import { ProfileForm } from './Profile'
 import type { UiStrings } from './strings'
-import { THEMES, applyTheme } from './theme'
+import { THEMES, applyTheme, themeId } from './theme'
 
 /** The hamburger menu (left side): shop profile, colour theme, WhatsApp reminders, voice, my data. */
 export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImport, onRemindAll }: {
@@ -60,8 +60,8 @@ export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImp
           <section>
             <Heading icon={<Palette className="size-4" />}>{t.theme}</Heading>
             <Dropdown
-              label={t.theme} value={st.theme ?? 'maroon'}
-              options={THEMES.map((x) => ({ value: x.id, label: x.name, swatch: x.swatch }))}
+              label={t.theme} value={themeId(st.theme)}
+              options={THEMES.map((x) => ({ value: x.id, label: x.name, hint: x.hint, swatch: x.swatch }))}
               onChange={(id) => { applyTheme(id); void store.updateSettings({ theme: id }) }}
             />
           </section>

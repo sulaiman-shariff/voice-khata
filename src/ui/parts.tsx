@@ -34,7 +34,7 @@ export function EntryRow({ e, name, t, onClick, fresh }: { e: Entry; name: strin
           {e.status === 'disputed' && <X className="size-3.5 text-destructive" aria-label={t.disputed} />}
         </div>
       </div>
-      <div className={cn('num text-2xl font-bold', e.voided ? 'line-through' : e.promise ? 'text-amber-700 dark:text-amber-300' : e.direction === 'credit' ? 'text-credit' : 'text-payment')}>
+      <div className={cn('num text-xl font-semibold', e.voided ? 'line-through' : e.promise ? 'text-amber-700 dark:text-amber-300' : e.direction === 'credit' ? 'text-credit' : 'text-payment')}>
         {e.direction === 'payment' && !e.promise ? '−' : ''}{rs(e.paise)}
       </div>
     </button>
@@ -99,7 +99,7 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
               {p.remove && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">{t.removeEntry}</span>}
             </div>
           </div>
-          {p.paise !== undefined && <div className={cn('num text-4xl font-extrabold', p.remove && 'line-through opacity-60')}>{rs(p.paise)}</div>}
+          {p.paise !== undefined && <div className={cn('num text-4xl font-semibold', p.remove && 'line-through opacity-60')}>{rs(p.paise)}</div>}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
@@ -118,7 +118,7 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
             <div className="truncate text-lg font-semibold">{p.name ?? '?'}</div>
             {p.direction && <DirChip dir={p.direction} t={t} />}
           </div>
-          {big && <div className="num text-4xl font-extrabold">{rs(p.paise!)}</div>}
+          {big && <div className="num text-4xl font-semibold">{rs(p.paise!)}</div>}
         </div>
       )}
       <div className="mt-4 grid grid-cols-2 gap-2">
@@ -176,12 +176,12 @@ export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRe
     <div className="relative grid size-28 place-items-center">
       {live && status === 'listening' && (
         <>
-          <span className="ripple absolute inset-0 rounded-full cut-octagon bg-primary/25" />
-          <span className="absolute inset-0 rounded-full cut-octagon bg-primary/20 transition-transform duration-75" style={{ transform: `scale(${s})` }} />
+          <span className="ripple absolute inset-0 rounded-full bg-primary/25" />
+          <span className="absolute inset-0 rounded-full bg-primary/20 transition-transform duration-75" style={{ transform: `scale(${s})` }} />
         </>
       )}
-      {live && status === 'speaking' && <span className="absolute inset-0 animate-pulse rounded-full cut-octagon bg-payment/25" />}
-      {live && status === 'thinking' && <span className="absolute -inset-1 animate-spin rounded-full cut-octagon border-4 border-primary/20 border-t-primary" />}
+      {live && status === 'speaking' && <span className="absolute inset-0 animate-pulse rounded-full bg-payment/25" />}
+      {live && status === 'thinking' && <span className="absolute -inset-1 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />}
       <button
         type="button"
         aria-label={label}
@@ -194,7 +194,7 @@ export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRe
         onPointerLeave={onRelease}
         onContextMenu={(e) => e.preventDefault()}
         className={cn(
-          'relative grid size-24 touch-none select-none place-items-center rounded-full cut-octagon shadow-xl transition-colors',
+          'relative grid size-24 touch-none select-none place-items-center rounded-full shadow-xl transition-colors',
           !on ? 'bg-card text-primary ring-4 ring-primary/40' : status === 'speaking' ? 'bg-payment text-white' : status === 'offline' ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
         )}
       >

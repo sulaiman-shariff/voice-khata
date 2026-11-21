@@ -94,7 +94,7 @@ _(to be filled in from the owner's testing)_
   The choice is saved, and applied from the first paint on the next open.
 - **Luxury styling**
   - **Cut corners:** every box, button, card and sheet has bevelled corners instead of curves (CSS `corner-shape: bevel`). The mic is an octagon. Browsers without `corner-shape` (Safari/Firefox today) show small rounded corners instead.
-  - **Fonts:** Playfair Display for the shop name, headings and every amount; Manrope for body text. Indian scripts keep the Noto fonts.
+  - **Fonts:** Playfair Display for headings and amounts, Manrope for body text (replaced by Inter in round 1, see "Feedback and fixes"). Indian scripts keep the Noto fonts.
   - **Accents:** thin gold rules under the header and in the menu.
 - **Sign-up step**
   - **New shops:** after picking a language, a "Set up your shop" form asks for shop name (required), owner name, address/area and shop phone.
@@ -182,7 +182,17 @@ _(to be filled in from the owner's testing)_
 - `shared/ledger.test.ts`: `displayName` for unique names, tag, phone digits, id.
 
 ### Feedback and fixes
-_(to be filled in from the owner's testing)_
+**Round 1 (owner, 21 Nov):**
+
+| Feedback | Fix |
+|---|---|
+| "Where do I enter the customer's number to send a reminder?" | **Customer screen:** a **WhatsApp reminder** box now comes right under the balance: phone (with a +91 prefix), Adult, Allow reminders, a **Send reminder** button, and a line saying what is missing ("Add a phone number first", …) or when the last reminder went. **Dues tab:** every row has its own WhatsApp button; if the number or consent is missing, it opens the customer screen and says what to add. **Edit-entry sheet:** the customer's name links to the customer screen, with a WhatsApp button beside it. |
+| Font is funky; ₹ and numbers look bad | Playfair Display and Manrope are gone. Everything is **Inter**, which has its own ₹ and tabular figures, so amounts line up and the symbol matches the digits. Heavy weights (extrabold/black) became semibold/bold. |
+| Shop name not aligned with the navbar | The header is now a 64 px bar with a bottom border. The menu button (left) and the language dropdown (right) are both 44 px high; the shop name and the small "KHATABHAI" are centred on the bar itself (absolutely positioned), not between unequal neighbours. |
+| "Everything looks like a road sign" | The octagon mic and the 12–30 % cuts caused it. Circles and pills (mic, avatars, switches, chips) are round again. Only boxes, cards, buttons and sheets keep a fine bevel, with radii 4–12 px. |
+| Better colours, dark themes, palettes | Five new low-saturation palettes, with no traffic-light red/green: **Ivory & Ink** (default: navy, brass, warm paper), **Sage** (forest, sand), **Rosewood** (wine, champagne), **Midnight Gold** (dark, champagne gold), **Graphite Teal** (dark, muted teal). Credit and paid are muted terracotta and sea green. The picker shows a swatch and a one-line description. Old saved theme ids map to the closest new one. The browser bar colour follows the theme. |
+
+Files: `src/index.css` (palettes, Inter, bevel only on box radii), `src/ui/theme.ts`, `src/App.tsx` (header, dues rows, quick remind), `src/ui/Sheets.tsx` (reminder box), `src/ui/EntrySheet.tsx` (customer link), `src/ui/Menu.tsx`, `src/ui/parts.tsx`, `index.html`. Dependencies: `@fontsource-variable/inter` added; Playfair Display and Manrope removed.
 
 ---
 

@@ -1,4 +1,4 @@
-import { CalendarDays, Check, Keyboard, Plus, Search, Send, Trash2, User } from 'lucide-react'
+import { CalendarDays, Check, Keyboard, MessageCircle, Plus, Search, Send, Trash2, User } from 'lucide-react'
 import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
 import { useMemo, useState } from 'react'
 import { type Direction, displayName } from '../../shared/ledger.js'
@@ -11,8 +11,10 @@ import type { UiStrings } from './strings'
 export type EntryMode = { kind: 'edit'; eid: string } | { kind: 'new' } | null
 type How = 'new' | 'edit' | 'removed'
 
-export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved }: {
+export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: {
   store: KhataStore; t: UiStrings; mode: EntryMode; onClose: () => void; onChanged: () => void
+  /** open the customer (phone number, WhatsApp reminder, full history) */
+  onCustomer?: (cid: string) => void
   /** after a save: eid + what happened, so the app can chime / toast */
   onSaved: (eid: string, how: How) => void
 }) {
@@ -20,7 +22,7 @@ export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved }: {
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-3xl pb-6">
-        <EntryForm key={mode.kind === 'edit' ? mode.eid : 'new'} store={store} t={t} mode={mode} onClose={onClose} onChanged={onChanged} onSaved={onSaved} />
+        <EntryForm key={mode.kind === 'edit' ? mode.eid : 'new'} store={store} t={t} mode={mode} onClose={onClose} onChanged={onChanged} onSaved={onSaved} onCustomer={onCustomer} />
       </SheetContent>
     </Sheet>
   )
@@ -42,8 +44,9 @@ function Chip({ on, dashed, children, onClick }: { on: boolean; dashed?: boolean
   )
 }
 
-function EntryForm({ store, t, mode, onClose, onChanged, onSaved }: {
+function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: {
   store: KhataStore; t: UiStrings; mode: NonNullable<EntryMode>; onClose: () => void; onChanged: () => void; onSaved: (eid: string, how: How) => void
+  onCustomer?: (cid: string) => void
 }) {
   const s = store.state
   const e = mode.kind === 'edit' ? s.entries.get(mode.eid) : undefined
@@ -153,7 +156,14 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved }: {
           {!picking && chosen ? (
             <div className="flex min-h-12 items-center gap-3 rounded-lg bg-card px-3 ring-1 ring-foreground/15">
               <User className="size-5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-lg font-semibold">{chosen}</span>
+              {cid && !newName && onCustomer
+                ? <button type="button" onClick={() => onCustomer(cid)} className="min-w-0 flex-1 truncate text-left text-lg font-semibold underline decoration-gold/60 underline-offset-4">{chosen}</button>
+                : <span className="min-w-0 flex-1 truncate text-lg font-semibold">{chosen}</span>}
+              {cid && !newName && onCustomer && (
+                <button type="button" aria-label={t.remindNow} onClick={() => onCustomer(cid)} className="grid size-11 shrink-0 place-items-center rounded-lg text-payment hover:bg-payment/10">
+                  <MessageCircle className="size-5" />
+                </button>
+              )}
               {!removed && <button type="button" onClick={() => setPicking(true)} className="min-h-11 shrink-0 px-2 text-sm font-semibold text-primary">{t.change}</button>}
             </div>
           ) : (
