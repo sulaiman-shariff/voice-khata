@@ -43,6 +43,12 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 **Files:** `server/remind/vonage.ts` (new), `api/remind.ts`, `src/ui/strings.ts`, `.env.example`.
 
+**Demo UPI:** `VITE_DEMO_UPI=khatabhai.demo@example` (in `.env`) fills the pay line while the shop profile has no UPI ID, so the demo shows the whole message.
+- No bank handles `@example`, so UPI apps reject it and a customer can never pay a stranger by mistake.
+- The shop's own UPI ID always wins.
+- Remove the variable for real use.
+- `src/lib/remind.ts` (`demoUpi`), test in `src/lib/remind.test.ts`.
+
 **Verified (22 Nov):** with the owner's phone joined to the sandbox, `POST /api/remind` went through Vonage (`provider: vonage`, status `accepted`), and the WhatsApp message **arrived** on the phone from `+1 415 738 6102`.
 
 ---

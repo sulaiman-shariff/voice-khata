@@ -12,7 +12,7 @@ const state = reduce(([
 const emojis = (s: string) => s.match(/\p{Extended_Pictographic}/gu) ?? []
 
 describe('WhatsApp reminder message', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
   it('businesslike: shop header, bold balance, settle or pay online, thanks, signature, opt-out', () => {
     vi.stubGlobal('location', { origin: 'https://khatabhai.example' })
@@ -35,11 +35,20 @@ describe('WhatsApp reminder message', () => {
   })
 
   it('without a UPI ID: settle on the next visit, no pay line', () => {
+    vi.stubEnv('VITE_DEMO_UPI', '')
     const msg = reminderMessage(state, { ...defaultSettings(), lang: 'hi', shopName: 'Sharma Kirana' }, 'r')
     expect(msg).not.toContain('UPI')
     expect(msg).toContain('*₹500*')
     expect(msg).toContain('अगली बार आने पर चुका दें।')
     expect(msg).toContain('"बंद"')
+  })
+
+  it('demo UPI fills in only when the shop has none, and never over a real one', () => {
+    vi.stubGlobal('location', { origin: 'https://khatabhai.example' })
+    vi.stubEnv('VITE_DEMO_UPI', 'khatabhai.demo@example')
+    const base = { ...defaultSettings(), lang: 'en' as const, shopName: 'Sharma Kirana' }
+    expect(reminderMessage(state, base, 'r')).toContain('UPI: *khatabhai.demo@example*')
+    expect(reminderMessage(state, { ...base, shopUpi: 'sharma@okaxis' }, 'r')).toContain('UPI: *sharma@okaxis*')
   })
 
   it('every language: no pleading or pressing words, at most one emoji', () => {

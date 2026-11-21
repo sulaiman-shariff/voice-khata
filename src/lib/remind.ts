@@ -51,6 +51,16 @@ export const canRemind = (state: LedgerState, cid: string): boolean => {
 }
 
 /**
+ * Demo only: VITE_DEMO_UPI stands in when the shop has not entered its own UPI ID, so the pay line
+ * can be shown off. Use an ID no bank handles (e.g. khatabhai.demo@example): UPI apps reject it,
+ * so a customer can never pay a stranger by mistake. The shop's real UPI ID always wins.
+ */
+const demoUpi = (): string | null => {
+  const v = (import.meta.env as Record<string, string | undefined>).VITE_DEMO_UPI?.trim()
+  return v && isUpiId(v) ? v : null
+}
+
+/**
  * The WhatsApp reminder, in the shop's language (shared/replies.ts reminderWords): businesslike,
  * bold for what matters, one emoji at most.
  *
@@ -71,7 +81,7 @@ export function reminderMessage(state: LedgerState, settings: Settings, cid: str
   const owed = Math.max(0, balance(state, cid)) / 100
   const w = reminderWords(settings.lang ?? 'hi')
   const amount = `₹${owed.toLocaleString('en-IN')}`
-  const upi = isUpiId(settings.shopUpi) ? settings.shopUpi!.trim() : null
+  const upi = isUpiId(settings.shopUpi) ? settings.shopUpi!.trim() : demoUpi()
   const pay = upi && owed > 0
     ? [w.settleOnline, payPageUrl({ pa: upi, pn: settings.shopName, am: owed, tn: `Khata: ${c.name}` }), `UPI: *${upi}*`]
     : [w.settle]
