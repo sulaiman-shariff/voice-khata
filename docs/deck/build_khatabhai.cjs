@@ -269,12 +269,12 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: 'KB Content', sectionTitle: 'Results' })
     s.addText('How it performs', { placeholder: 'title' })
-    text(s, 'Measured on the live app (servers in Mumbai) with recorded test sentences in Hindi, Kannada, Tamil and Telugu.', { x: 0.5, y: 1.0, w: 9, h: 0.3, fontSize: 12, color: C.text2, objectName: 'results intro' })
+    text(s, 'Timed on the live app, servers in Mumbai, in Hindi, Kannada, Tamil and Telugu.', { x: 0.5, y: 1.0, w: 9, h: 0.3, fontSize: 12, color: C.text2, objectName: 'results intro' })
     const stats = [
-      ['0.8 s', 'from when you stop speaking to hearing the reply', HEX.red],
+      ['0.8 s', 'from when you stop speaking to hearing the reply (typical)', HEX.red],
+      ['1.3 s', 'for the slowest 1 in 20 replies, quiet shop or street noise', HEX.red],
       ['0.3 s', 'until the tick that tells you it heard you', HEX.red],
-      ['60 of 60', 'amounts written correctly in a quiet shop', HEX.red],
-      ['56 of 60', 'amounts written correctly with street noise', HEX.red],
+      ['0 ms', 'to read a normal entry: our own parser, no AI call', HEX.red],
     ]
     const w = (9 - 3 * 0.2) / 4
     stats.forEach(([b, l, fill], i) => {
@@ -285,8 +285,8 @@ async function main() {
     })
     s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.5, y: 3.3, w: 9, h: 1.25, rectRadius: 0.12, fill: { color: HEX.white }, line: { color: HEX.line, width: 1 }, objectName: 'safety card' })
     text(s, [
-      { text: 'No wrong amount was saved', options: { bold: true, fontSize: 15, color: HEX.green, fontFace: THEME.headFontFace, breakLine: true } },
-      { text: 'When it is noisy, the amount is large or the sentence is unclear, KhataBhai reads the entry back and waits for a yes. In the 4 noisy misses it asked again instead of saving.', options: { fontSize: 12, color: HEX.ink } },
+      { text: 'It asks instead of guessing', options: { bold: true, fontSize: 15, color: HEX.green, fontFace: THEME.headFontFace, breakLine: true } },
+      { text: 'When it is noisy, the amount is large or two numbers sound alike (60 and 7), KhataBhai reads the entry back and waits for a yes. The AI model can only pick an amount that was actually said.', options: { fontSize: 12, color: HEX.ink } },
     ], { x: 0.75, y: 3.46, w: 8.5, h: 0.95, paraSpaceAfter: 6, objectName: 'safety text' })
   }
 
