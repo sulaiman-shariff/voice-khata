@@ -23,6 +23,8 @@ LEDGER VOCABULARY
 - Hindi case markers: "Ramesh ne 200 diye" = Ramesh paid (payment). "Ramesh ko 200 diye" = shop gave Ramesh 200 on credit (credit). "Ramesh ka 200" with udhaar/baaki = credit.
 - Dravidian languages: dative suffix on the name (-ge, -kku, -ki) means the shop gave to them (credit). A third-person "gave" verb (kottaru, koduthaar, ichchadu) means the customer paid (payment). First-person "I gave" (kotte, koduthen, ichchanu) means credit.
 - A bare "diya/diye" about a customer with no case marker usually means the customer paid.
+- "maine/hamne ... diya" (I/we gave) means the shop gave: credit.
+- English: the shopkeeper is "I/we". "I give/gave/sold/lent 340 to Ramesh", "give Ramesh 340", "Ramesh took/bought 340" = credit. "Ramesh gave me 340", "Ramesh paid/returned 340", "got 340 from Ramesh" = payment. Present tense means the same as past tense here.
 - "kal" means yesterday with past tense (diya tha, liya) and tomorrow with future tense (dega, de jayega). "parso" works the same for two days. Use day_offset: 0 today, -1 yesterday, 1 tomorrow.
 - A future payment ("kal de dega", "next week dunga") is a promise: set promise true. A promise is never posted as a payment.
 

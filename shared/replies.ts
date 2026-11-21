@@ -435,6 +435,8 @@ export function guardReply(text: string): string | null {
 export interface MoreReplies {
   /** "Ramesh 200, Suresh 300, Geeta 150: all on credit?" */
   batchAsk: (items: { name: string; amt: number }[], dir: Dir) => string
+  /** several complete lines read back together: one yes saves them all */
+  batchConfirm: (items: { name: string; amt: number; dir: Dir }[]) => string
   /** read back a change to an older entry before applying it */
   removeAsk: (name: string, amt: number, dir: Dir) => string
   removed: (name: string, amt: number) => string
@@ -445,63 +447,75 @@ export const PAUSE = '<pauses>'
 /** Spoken-only markup (Timbre audio tags) removed, for the screen and for echo matching. */
 export const stripTags = (s: string) => s.replace(/\s*<[a-z][a-z ]*>\s*/g, ' ').replace(/ +([,.?!।])/g, '$1').replace(/ {2,}/g, ' ').trim()
 const list = (items: { name: string; amt: number }[]) => items.map((i) => `${i.name} ${r(i.amt)}`).join(`, ${PAUSE} `)
+const listDir = (items: { name: string; amt: number; dir: Dir }[], credit: string, paid: string) =>
+  items.map((i) => `${i.name} ${r(i.amt)} ${i.dir === 'credit' ? credit : paid}`).join(`, ${PAUSE} `)
 const MORE: Record<Lang, MoreReplies> = {
   hi: {
     batchAsk: (i, d) => `${list(i)}, सब ${d === 'credit' ? 'उधार' : 'जमा'}?`,
+    batchConfirm: (i) => `${listDir(i, 'उधार', 'जमा')}. सब सही है?`,
     removeAsk: (n, a, d) => `${n} की ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} वाली एंट्री हटाऊँ?`,
     removed: (n, a) => `ठीक है, ${n} की ${r(a)} रुपये वाली एंट्री हटा दी।`,
     changeAsk: (n, a, d) => `बदल कर ${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} कर दूँ?`,
   },
   en: {
     batchAsk: (i, d) => `${list(i)}. All ${d === 'credit' ? 'on credit' : 'paid'}?`,
+    batchConfirm: (i) => `${listDir(i, 'on credit', 'paid')}. All correct?`,
     removeAsk: (n, a, d) => `Remove ${n}'s ${r(a)} rupees ${d === 'credit' ? 'credit' : 'payment'}?`,
     removed: (n, a) => `Okay, removed ${n}'s ${r(a)} rupees entry.`,
     changeAsk: (n, a, d) => `Change it to ${n}, ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}?`,
   },
   kn: {
     batchAsk: (i, d) => `${list(i)}, ಎಲ್ಲಾ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}ನಾ?`,
+    batchConfirm: (i) => `${listDir(i, 'ಸಾಲ', 'ಜಮಾ')}. ಎಲ್ಲಾ ಸರಿನಾ?`,
     removeAsk: (n, a, d) => `${n} ಅವರ ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'} ಎಂಟ್ರಿ ತೆಗೆಯಲಾ?`,
     removed: (n, a) => `ಸರಿ, ${n} ಅವರ ${r(a)} ರೂಪಾಯಿ ಎಂಟ್ರಿ ತೆಗೆದಿದ್ದೇನೆ.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'} ಅಂತ ಬದಲಾಯಿಸಲಾ?`,
   },
   ta: {
     batchAsk: (i, d) => `${list(i)}, எல்லாம் ${d === 'credit' ? 'கடனா' : 'வரவா'}?`,
+    batchConfirm: (i) => `${listDir(i, 'கடன்', 'வரவு')}. எல்லாம் சரியா?`,
     removeAsk: (n, a, d) => `${n} ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'} பதிவை நீக்கவா?`,
     removed: (n, a) => `சரி, ${n} ${r(a)} ரூபாய் பதிவை நீக்கினேன்.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'} என்று மாற்றவா?`,
   },
   te: {
     batchAsk: (i, d) => `${list(i)}, అన్నీ ${d === 'credit' ? 'అప్పు' : 'జమ'}నా?`,
+    batchConfirm: (i) => `${listDir(i, 'అప్పు', 'జమ')}. అన్నీ సరేనా?`,
     removeAsk: (n, a, d) => `${n} ${r(a)} రూపాయల ${d === 'credit' ? 'అప్పు' : 'జమ'} ఎంట్రీ తీసేయనా?`,
     removed: (n, a) => `సరే, ${n} ${r(a)} రూపాయల ఎంట్రీ తీసేశాను.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'} అని మార్చనా?`,
   },
   ml: {
     batchAsk: (i, d) => `${list(i)}, എല്ലാം ${d === 'credit' ? 'കടം' : 'വരവ്'} ആണോ?`,
+    batchConfirm: (i) => `${listDir(i, 'കടം', 'വരവ്')}. എല്ലാം ശരിയാണോ?`,
     removeAsk: (n, a, d) => `${n}-ന്റെ ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'} എൻട്രി മാറ്റട്ടെ?`,
     removed: (n, a) => `ശരി, ${n}-ന്റെ ${r(a)} രൂപ എൻട്രി മാറ്റി.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'} എന്ന് മാറ്റട്ടെ?`,
   },
   mr: {
     batchAsk: (i, d) => `${list(i)}, सगळे ${d === 'credit' ? 'उधार' : 'जमा'}?`,
+    batchConfirm: (i) => `${listDir(i, 'उधार', 'जमा')}. सगळं बरोबर?`,
     removeAsk: (n, a, d) => `${n} ची ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} नोंद काढू?`,
     removed: (n, a) => `ठीक आहे, ${n} ची ${r(a)} रुपयांची नोंद काढली.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} असे बदलू?`,
   },
   bn: {
     batchAsk: (i, d) => `${list(i)}, সব ${d === 'credit' ? 'বাকি' : 'জমা'}?`,
+    batchConfirm: (i) => `${listDir(i, 'বাকি', 'জমা')}. সব ঠিক তো?`,
     removeAsk: (n, a, d) => `${n}-এর ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'} এন্ট্রি মুছব?`,
     removed: (n, a) => `ঠিক আছে, ${n}-এর ${r(a)} টাকার এন্ট্রি মুছে দিলাম।`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'} করে দিই?`,
   },
   gu: {
     batchAsk: (i, d) => `${list(i)}, બધું ${d === 'credit' ? 'ઉધાર' : 'જમા'}?`,
+    batchConfirm: (i) => `${listDir(i, 'ઉધાર', 'જમા')}. બધું બરાબર?`,
     removeAsk: (n, a, d) => `${n} ની ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'} એન્ટ્રી કાઢું?`,
     removed: (n, a) => `બરાબર, ${n} ની ${r(a)} રૂપિયાની એન્ટ્રી કાઢી નાખી.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'} કરી દઉં?`,
   },
   pa: {
     batchAsk: (i, d) => `${list(i)}, ਸਾਰੇ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}?`,
+    batchConfirm: (i) => `${listDir(i, 'ਉਧਾਰ', 'ਜਮ੍ਹਾ')}. ਸਭ ਠੀਕ ਹੈ?`,
     removeAsk: (n, a, d) => `${n} ਦੀ ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'} ਵਾਲੀ ਐਂਟਰੀ ਹਟਾਵਾਂ?`,
     removed: (n, a) => `ਠੀਕ ਹੈ, ${n} ਦੀ ${r(a)} ਰੁਪਏ ਵਾਲੀ ਐਂਟਰੀ ਹਟਾ ਦਿੱਤੀ।`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'} ਕਰ ਦਿਆਂ?`,

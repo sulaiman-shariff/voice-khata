@@ -45,6 +45,31 @@ export function EntryRow({ e, name, t, onClick, fresh }: { e: Entry; name: strin
 export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; onAnswer: (a: string) => void }) {
   const big = p.paise !== undefined && p.kind !== 'delete'
   const kind = p.kind as string
+  if (kind === 'batch' && p.rows) {
+    // several complete lines read back together: one yes saves them all
+    return (
+      <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
+        <ul className="max-h-48 space-y-1.5 overflow-y-auto">
+          {p.rows.map((r, i) => (
+            <li key={i} className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-lg font-semibold">{r.name}</span>
+                {r.newCustomer && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{t.newCustomer}</span>}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <DirChip dir={r.direction} t={t} />
+                <span className={cn('num text-xl font-bold', r.direction === 'credit' ? 'text-credit' : 'text-payment')}>{rs(r.paise)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes} × {p.rows.length}</Answer>
+          <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+        </div>
+      </div>
+    )
+  }
   if (kind === 'batch') {
     return (
       <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">

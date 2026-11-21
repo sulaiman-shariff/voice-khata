@@ -88,6 +88,8 @@ export interface PendingView {
   paise?: number
   direction?: Direction | null
   options?: string[]
+  /** batch read-back: every line with its own direction; one yes saves them all */
+  rows?: { name: string; paise: number; direction: Direction; newCustomer?: boolean }[]
 }
 
 export interface TurnMetrics {

@@ -7,7 +7,7 @@
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */
-import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasNameWord, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasNameWord, hasOtherWords, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
@@ -108,8 +108,9 @@ type Pending =
   | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
   | { kind: 'which'; draft: Draft; queue: Draft[]; options: SnapCustomer[] }
   | { kind: 'delete' }
-  /** one question for a list that shared a single direction word */
-  | { kind: 'batch'; drafts: Draft[] }
+  /** one question for a list that shared a single direction word, or (mode 'confirm') one
+   *  read-back for several complete lines: one yes saves them all; `queue` waits behind it */
+  | { kind: 'batch'; drafts: Draft[]; mode?: 'confirm'; queue?: Draft[] }
   /** read-back before changing or removing an older entry */
   | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string }
 
@@ -830,8 +831,12 @@ export class Session {
       const unsure = intent.entries.some((e) => e.reasons.includes('no-name') || e.reasons.includes('no-direction-cue'))
       // "uska 100 aur udhaar": the conversation already says who
       if (this.focusCid && refersBack(text) && !intent.entries.some((e) => e.reasons.includes('no-direction-cue'))) return false
+      const names = intent.entries.map((e) => e.name)
+      // no credit/paid word found: any other word ("I give 340 to Ramesh") may carry it, so a model
+      // reading (about 1 s) beats a spoken question and its answer (several seconds)
+      if (intent.entries.some((e) => e.reasons.includes('no-direction-cue')) && hasOtherWords(text, names)) return true
       // "Ramesh, 300": nothing for a model to read; asking the missing part is faster
-      return unsure && hasUnplacedWords(text, intent.entries.map((e) => e.name))
+      return unsure && hasUnplacedWords(text, names)
     }
     if (intent.type === 'query' && !intent.name && this.focusCid && refersBack(text)) return false
     if (intent.type !== 'unknown') return false
@@ -1121,9 +1126,35 @@ export class Session {
     return d.newName ?? this.snap.customers.find((c) => c.cid === d.cid)?.name ?? d.heardName ?? ''
   }
 
+  /**
+   * Several complete lines in one turn that each want a yes (new names, noise, big amounts): save
+   * the sure lines now and read the rest back together, so one yes saves them all instead of a
+   * question per line. Lines still missing a part (name, direction, which customer) wait behind.
+   */
+  private confirmBatch(drafts: Draft[], acc: Reply): Reply | null {
+    if (drafts.length < 2) return null
+    const complete = drafts.filter((d) =>
+      d.paise > 0 && !!(d.heardName || d.cid || d.newName) && !!d.direction && d.alt === null && !Array.isArray(this.resolveName(d)))
+    const ask = complete.filter((d) => this.needsConfirm(d))
+    if (ask.length < 2) return null
+    for (const d of complete) if (!ask.includes(d)) this.save(d, acc)
+    this.pending = { kind: 'batch', mode: 'confirm', drafts: ask, queue: drafts.filter((d) => !complete.includes(d)) }
+    acc.parts.push(sayMore(this.lang).batchConfirm(this.batchRows(ask).map((x) => ({ name: x.name, amt: x.paise / 100, dir: x.direction }))))
+    return acc
+  }
+
+  private batchRows(drafts: Draft[]) {
+    return drafts.map((d) => ({
+      name: this.customerName(d) || '?', paise: d.paise, direction: d.direction!,
+      newCustomer: this.opensAccount(d) ? true : undefined,
+    }))
+  }
+
   /** Walk drafts in order: save the sure ones, stop at the first that needs a question. */
-  private processDrafts(drafts: Draft[], acc: Reply): Reply {
+  private processDrafts(drafts: Draft[], acc: Reply, batch = true): Reply {
     const R = say(this.lang)
+    const grouped = batch ? this.confirmBatch(drafts, acc) : null
+    if (grouped) return grouped
     while (drafts.length) {
       const d = drafts.shift()!
       if (d.paise <= 0) {
@@ -1199,6 +1230,13 @@ export class Session {
 
   private save(d: Draft, acc: Reply) {
     const R = say(this.lang)
+    // a batch resolves names before any is saved: the second line for a new name joins the account
+    // the first line just opened
+    const opened = d.newName && !d.cid ? this.snap.customers.find((c) => c.name === d.newName) : undefined
+    if (opened) {
+      d.cid = opened.cid
+      d.newName = null
+    }
     if (d.newName && !d.cid) {
       d.cid = this.newId()
       const add: LedgerOp = { op: 'add_customer', cid: d.cid, name: d.newName }
@@ -1380,6 +1418,45 @@ export class Session {
       this.pending = null
       return { parts: [R.notSaved()], ops: [] }
     }
+    const p = this.pending as Extract<Pending, { kind: 'batch' }>
+    if (p.mode === 'confirm') {
+      const queue = p.queue ?? []
+      if (intent.type === 'yes') {
+        // the lines were just read back: one short ack, not every line again
+        const acc: Reply = { parts: [], ops: [] }
+        for (const d of drafts) {
+          d.readBack = true
+          d.confirmed = true
+          this.save(d, acc)
+        }
+        acc.parts = [R.ack()]
+        return this.processDrafts(queue, acc)
+      }
+      if (intent.type === 'no') {
+        // something is wrong: go line by line so only the wrong one is dropped
+        return this.processDrafts([...drafts, ...queue], { parts: [], ops: [] }, false)
+      }
+      // "Suresh ka 250" / "Suresh jama tha": fixes one line of the list, the rest stand
+      if (intent.type === 'entries' && intent.entries.every((e) => e.name)) {
+        const hits = intent.entries.map((e) => {
+          const c = this.lookup(e.name!)
+          return { e, d: drafts.find((d) => (c ? d.cid === c.cid : !!d.newName && d.newName === titleCase(e.name!))) }
+        })
+        if (hits.every((h) => h.d)) {
+          for (const { e, d } of hits) {
+            d.paise = Math.round(e.amount.value * 100)
+            if (e.direction) d.direction = e.direction
+          }
+          return { parts: [sayMore(this.lang).batchConfirm(this.batchRows(drafts).map((x) => ({ name: x.name, amt: x.paise / 100, dir: x.direction })))], ops: [] }
+        }
+      }
+      if (intent.type === 'entries') {
+        this.pending = null
+        const r = this.dispatch(intent, text, snrDb, noisy, path)
+        return { parts: [R.notSaved(), ...(r?.parts ?? [])], ops: r?.ops ?? [] }
+      }
+      return { parts: [sayMore(this.lang).batchConfirm(this.batchRows(drafts).map((x) => ({ name: x.name, amt: x.paise / 100, dir: x.direction })))], ops: [] }
+    }
     const clear = (d: Draft) => {
       d.reasons = d.reasons.filter((r) => r !== 'dir-shared')
       if (!d.reasons.some((r) => r !== 'name-inherited' && r !== 'llm' && r !== 'from-context')) d.confidence = 'high'
@@ -1503,6 +1580,10 @@ export class Session {
     if (!p) return null
     if (p.kind === 'delete') return { kind: 'delete' }
     if (p.kind === 'modify') return p.view
+    if (p.kind === 'batch' && p.mode === 'confirm') {
+      const rows = this.batchRows(p.drafts)
+      return { kind: 'batch', direction: null, rows, options: rows.map((x) => `${x.name} ₹${x.paise / 100}`) }
+    }
     if (p.kind === 'batch') {
       const dir = p.drafts.find((d) => d.direction)?.direction ?? null
       return { kind: 'batch', direction: dir, options: this.batchItems(p.drafts).map((i) => `${i.name} ₹${i.amt}`) }

@@ -232,6 +232,63 @@ describe('session dialogue', () => {
     expect(h.entries()[1]).toMatchObject({ cid: 'r', paise: 120000, direction: 'payment' })
   })
 
+  it('several lines that each need a yes are read back together: one yes saves all', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('Pinky ka 200 udhaar, Ramesh ka 50 udhaar, Sonu ne 300 diye')
+    // Ramesh is known and clear: saved at once; the two new names wait for one yes
+    expect(h.entries()).toHaveLength(1)
+    expect(h.entries()[0]).toMatchObject({ cid: 'r', paise: 5000 })
+    expect(h.s.pending?.kind).toBe('batch')
+    expect(h.said.join(' ')).toMatch(/Pinky 200 उधार.*Sonu 300 जमा.*सब सही है/)
+    const view = h.out.filter((m) => m.type === 'pending').at(-1) as { pending: { rows?: { name: string; newCustomer?: boolean }[] } }
+    expect(view.pending.rows?.map((r) => r.name)).toEqual(['Pinky', 'Sonu'])
+    expect(view.pending.rows?.every((r) => r.newCustomer)).toBe(true)
+    await h.turn('haan')
+    expect(h.entries()).toHaveLength(3)
+    expect(h.entries().slice(1)).toMatchObject([{ paise: 20000, direction: 'credit' }, { paise: 30000, direction: 'payment' }])
+    expect(h.s.pending).toBeNull()
+    expect(h.said).toHaveLength(1) // one short ack, not every line again
+  })
+
+  it('a batch read-back takes a fix to one line, then one yes', async () => {
+    const h = harness([])
+    await h.turn('Pinky ka 200 udhaar, Sonu ka 300 udhaar')
+    expect(h.s.pending?.kind).toBe('batch')
+    await h.turn('Sonu ka 350 udhaar')
+    expect(h.entries()).toHaveLength(0)
+    expect(h.said.join(' ')).toMatch(/Sonu 350/)
+    await h.turn('haan')
+    expect(h.entries().map((e) => e.paise)).toEqual([20000, 35000])
+  })
+
+  it('"no" to a batch read-back goes line by line', async () => {
+    const h = harness([])
+    await h.turn('Pinky ka 200 udhaar, Sonu ka 300 udhaar')
+    await h.turn('nahi')
+    expect(h.s.pending?.kind).toBe('confirm')
+    await h.turn('haan')
+    await h.turn('nahi')
+    expect(h.entries()).toHaveLength(1)
+    expect(h.entries()[0]).toMatchObject({ paise: 20000 })
+  })
+
+  it('two lines for one new name open one account', async () => {
+    const h = harness([])
+    await h.turn('Pinky ka 200 udhaar, Pinky ne 50 diye')
+    await h.turn('haan')
+    expect(h.ops().filter((o) => o.op === 'add_customer')).toHaveLength(1)
+    expect(new Set(h.entries().map((e) => e.cid)).size).toBe(1)
+  })
+
+  it('no direction word: the model reads it before the shopkeeper is asked', async () => {
+    const h = harness([cust('r', 'Ramesh')], {
+      llm: () => ({ intent: 'entries', sure: true, entries: [{ name: 'Ramesh', amount: 340, direction: 'credit', day_offset: 0, promise: false }] }),
+    })
+    await h.turn('Ramesh ka 340 hai')
+    expect(h.s.pending).toBeNull()
+    expect(h.entries()[0]).toMatchObject({ cid: 'r', paise: 34000, direction: 'credit' })
+  })
+
   it('LLM path is used for hard turns, but an invented amount is never saved', async () => {
     const h = harness([cust('r', 'Ramesh')], {
       llm: () => ({ intent: 'entries', sure: true, entries: [{ name: 'Ramesh', amount: 999, direction: 'credit', day_offset: 0, promise: false }] }),

@@ -33,6 +33,13 @@ const CASES: [string, Exp[]][] = [
   ['Sunita took 1,500 rupees on credit.', [{ name: 'sunita', amount: 1500, dir: 'credit' }]],
   ['Mehta ne two sau diye aaj', [{ name: 'Mehta', amount: 200, dir: 'payment', day: 0 }]],
   ['सुरेश ने 60 रुपये जमा किए।', [{ name: 'सुरेश', amount: 60, dir: 'payment' }]],
+  // English word order: the shopkeeper is "I"; present tense reads like past
+  ['I give 340 to Ramesh.', [{ name: 'ramesh', amount: 340, dir: 'credit' }]],
+  ['I gave 340 to Ramesh', [{ name: 'ramesh', amount: 340, dir: 'credit' }]],
+  ['I have given Ramesh 500', [{ name: 'ramesh', amount: 500, dir: 'credit' }]],
+  ['We sold 250 to Geeta', [{ name: 'geeta', amount: 250, dir: 'credit' }]],
+  ['Ramesh gave me 200', [{ name: 'ramesh', amount: 200, dir: 'payment' }]],
+  ['Maine Ramesh ko 200 diye', [{ name: 'Ramesh', amount: 200, dir: 'credit' }]],
   // multi-clause
   ['Ramesh ka 340 udhaar, kal 200 diya tha', [
     { name: 'Ramesh', amount: 340, dir: 'credit', day: 0 },

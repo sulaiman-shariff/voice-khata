@@ -44,7 +44,7 @@ const S = (...w: string[]): Set<string> => new Set(w.map((x) => fold(x)))
 // ----------------------------------------------------------------- lexicons
 const CREDIT = S('udhaar', 'udhar', 'udhari', 'उधार', 'उधारी', 'baaki', 'baki', 'बाकी', 'बाक़ी', 'bakaya', 'बकाया',
   'khate', 'खाते', 'khata', 'खाता', 'chadha', 'चढ़ा', 'चढ़ाओ', 'credit', 'owes', 'owe', 'due', 'loan',
-  'put', 'write', 'note', 'record', 'enter', 'tab', 'account', 'borrowed', 'borrow', 'bought', 'buy', 'purchased', 'spent', 'tab', 'outstanding', 'unpaid', 'dues', 'add', 'added',
+  'put', 'write', 'note', 'record', 'enter', 'tab', 'account', 'lent', 'lend', 'sold', 'borrowed', 'borrow', 'bought', 'buy', 'purchased', 'spent', 'tab', 'outstanding', 'unpaid', 'dues', 'add', 'added',
   'ಸಾಲ', 'ಉದ್ರಿ', 'ಬಾಕಿ', 'saala', 'sala', 'udri', 'கடன்', 'கடனுக்கு', 'பாக்கி', 'kadan', 'అప్పు', 'బాకీ', 'ఉద్దెర', 'appu',
   'उधारी', 'ধার', 'বাকি', 'ઉધાર', 'બાકી', 'ਉਧਾਰ', 'ਬਾਕੀ', 'കടം', 'ബാക്കി', 'उधार')
 const PAYMENT = S('jama', 'जमा', 'chuka', 'चुका', 'chukaya', 'चुकाया', 'chukta', 'चुकता', 'wapas', 'वापस', 'vapas',
@@ -53,7 +53,7 @@ const PAYMENT = S('jama', 'जमा', 'chuka', 'चुका', 'chukaya', 'च�
   'ಕಟ್ಟಿದ', 'ಕಟ್ಟಿದರು', 'ಕಟ್ಟಿದ್ರು', 'ತೀರಿಸಿದ', 'ತೀರಿಸಿದರು', 'ಜಮಾ', 'கட்டினார்', 'கட்டினான்', 'செலுத்தினார்', 'அடைத்தார்',
   'வரவு', 'కట్టాడు', 'కట్టారు', 'తీర్చాడు', 'తీర్చారు', 'జమ', 'জমা', 'শোধ', 'જમા', 'ચૂકવ્યા', 'ਜਮ੍ਹਾ', 'ജമ')
 // verbs of giving: direction then comes from who gave (case marker / person ending)
-const GIVE = S('diya', 'diye', 'di', 'de', 'दिया', 'दिए', 'दिये', 'दी', 'दे', 'gave', 'given', 'दिले', 'दिलं', 'দিয়েছে',
+const GIVE = S('diya', 'diye', 'di', 'de', 'दिया', 'दिए', 'दिये', 'दी', 'दे', 'gave', 'given', 'give', 'gives', 'giving', 'handed', 'दिले', 'दिलं', 'দিয়েছে',
   'আপ્યા', 'આપ્યા', 'ਦਿੱਤੇ', 'ਦਿੱਤਾ',
   // Kannada "having given" / "give" (Latin too: an English session hears "300 rupees kottu")
   'ಕೊಟ್ಟು', 'kottu', 'ಕೊಡು', 'kodu', 'ಕೊಡಿ', 'kodi')
@@ -63,6 +63,8 @@ const GAVE_3P = S('ಕೊಟ್ಟ', 'ಕೊಟ್ಟರು', 'ಕೊಟ್ರ�
   'തന്നു', 'thannu', 'দিয়েছে')
 // shopkeeper-gave forms (1st person / away) -> credit
 const GAVE_1P = S('ಕೊಟ್ಟೆ', 'ಕೊಟ್ಟಿದ್ದೇನೆ', 'கொடுத்தேன்', 'ఇచ్చాను', 'ఇచ్చా', 'കൊടുത്തു', 'দিয়েছি')
+// "maine diya" / "hamne diye": the shop gave (credit), whatever the case marker on the name
+const SHOP_SUBJ = S('maine', 'मैंने', 'मैने', 'hamne', 'हमने', 'humne')
 const TOOK = S('liya', 'liye', 'लिया', 'लिए', 'took', 'taken', 'घेतले', 'ತಗೊಂಡ', 'ತೆಗೆದುಕೊಂಡ', 'வாங்கினார்', 'తీసుకున్నాడు')
 const GAYA = S('gaya', 'gayi', 'gaye', 'गया', 'गई', 'गए', 'gai')
 
@@ -116,7 +118,7 @@ const BACKREF = S('uska', 'uski', 'uske', 'usko', 'usne', 'उसका', 'उ�
 const MONTH = S('mahine', 'mahina', 'महीने', 'महीना', 'month', 'monthly', 'ತಿಂಗಳ', 'மாத', 'నెల')
 const SUMMARY = S('summary', 'report', 'sales', 'saransh', 'सारांश', 'ಸಾರಾಂಶ', 'சுருக்கம்', 'సారాంశం')
 const WHO = S('kaun', 'कौन', 'who', 'kisko', 'किसको', 'kiska', 'किसका')
-const FILLER = S('hua', 'हुआ', 'hui', 'हुई', 'hue', 'हुए', 'bana', 'बना', 'banta', 'बनता', 'bhai', 'भाई', 'bhaiya', 'भैया', 'arre', 'अरे', 'achha', 'अच्छा', 'haan', 'to', 'तो', 'toh', 'ab', 'अब',
+const FILLER = S('maine', 'मैंने', 'मैने', 'hamne', 'हमने', 'humne', 'hua', 'हुआ', 'hui', 'हुई', 'hue', 'हुए', 'bana', 'बना', 'banta', 'बनता', 'bhai', 'भाई', 'bhaiya', 'भैया', 'arre', 'अरे', 'achha', 'अच्छा', 'haan', 'to', 'तो', 'toh', 'ab', 'अब',
   'please', 'zara', 'ज़रा', 'jara', 'likh', 'लिख', 'likho', 'लिखो', 'lo', 'लो', 'do', 'दो', 'rupaye', 'रुपये', 'रुपए',
   'rs', '₹', 'ಅವರು', 'avaru', 'அவர்', 'ఆయన', 'mein', 'में', 'ka', 'hai', 'है', 'ho', 'kar', 'कर', 'gaya', 'diya',
   'ji', 'जी', 'customer', 'naya', 'नया', 'batao', 'bata', 'बताओ', 'बता', 'bolo', 'बोलो', 'sunao', 'सुनाओ', 'dikhao',
@@ -230,7 +232,14 @@ function resolveDirection(toks: string[], marker: NameHit['marker']): { dir: Dir
   if (/(?:^| )(?:has|have|needs?|must|should) to (?:pay|give|return)/.test(toks.join(' '))) return { dir: 'credit', why: 'has-to-pay' }
   if (at('from') > 0 && ['got', 'get', 'received', 'collected', 'came', 'took'].some((w) => toks.includes(w)))
     return { dir: 'payment', why: 'received-from' }
-  if (['i', 'we'].some((w) => ['gave', 'given', 'sold'].includes(toks[at(w) + 1] ?? ''))) return { dir: 'credit', why: 'shop-gave' }
+  // "I gave / I give / we have given / I sold / I lent ... to Ramesh": the shop gave -> credit
+  const SHOP_VERBS = ['gave', 'given', 'give', 'giving', 'sold', 'sell', 'lent', 'lend', 'handed']
+  if (toks.some((w, i) => (w === 'i' || w === 'we') && [1, 2, 3].some((k) => SHOP_VERBS.includes(toks[i + k] ?? ''))))
+    return { dir: 'credit', why: 'shop-gave' }
+  // "Ramesh gave me 200" / "he gave us 500": the customer gave -> payment
+  if (toks.some((w, i) => ['gave', 'given', 'gives', 'give', 'handed', 'paid'].includes(w) && (toks[i + 1] === 'me' || toks[i + 1] === 'us')))
+    return { dir: 'payment', why: 'gave-me' }
+  if (has(SHOP_SUBJ, toks) && has(GIVE, toks)) return { dir: 'credit', why: 'maine-diya' }
   const credit = has(CREDIT, toks)
   const payment = has(PAYMENT, toks)
   // "udhaar chuka diya" / "baaki jama kiya": clearing words win
@@ -583,4 +592,14 @@ export function mentionsMoney(text: string): boolean {
 export function hasUnplacedWords(text: string, names: (string | null)[]): boolean {
   const nameToks = new Set(names.filter((n): n is string => !!n).flatMap((n) => tokenize(n)))
   return tokenize(text).some((t) => !stopWord(t) && !nameToks.has(t) && !nameToks.has(stripSuffix(t).base))
+}
+
+/**
+ * Any word at all besides the names, numbers and currency words ("I give 340 to Ramesh" has "I",
+ * "give", "to"). Looser than hasUnplacedWords: small words often carry the direction in English
+ * word order, so a missing credit/paid is worth a model's reading before asking the shopkeeper.
+ */
+export function hasOtherWords(text: string, names: (string | null)[]): boolean {
+  const nameToks = new Set(names.filter((n): n is string => !!n).flatMap((n) => tokenize(n)))
+  return tokenize(text).some((t) => !nameToks.has(t) && !nameToks.has(stripSuffix(t).base) && !isNumberish(t) && !isNumberWord(t) && !isCurrencyWord(t) && !CONJ.has(t))
 }
