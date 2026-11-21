@@ -283,7 +283,19 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
     setConfirmation: (eid, status) => enqueue(() => append([{ type: 'confirmation', eid, status }])),
     forgetCustomer: (cid) =>
       enqueue(async () => {
-        await shred(cid, p.keys)
+        // every account merged into this one (and into those, recursively) is this person too:
+        // their own keys still seal the entries that moved over, so they are shredded as well
+        const merges: { into: string; from: string }[] = []
+        for (const r of records) {
+          const ev = await open(r, p.keys).catch(() => null)
+          if (ev?.type === 'customers_merged') merges.push({ into: ev.cid, from: ev.from })
+        }
+        const gone = new Set([cid])
+        for (let grew = true; grew;) {
+          grew = false
+          for (const m of merges) if (gone.has(m.into) && !gone.has(m.from)) { gone.add(m.from); grew = true }
+        }
+        for (const id of gone) await shred(id, p.keys)
         state = await rebuild()
         notify()
       }),

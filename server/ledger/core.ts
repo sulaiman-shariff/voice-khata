@@ -64,6 +64,22 @@ export type Pending =
    * on a yes the ops are written, `done` is said, and `ready` (if any) goes to the phone
    */
   | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string; ready?: Reply['ready'] }
+  /**
+   * "Which one?" for an agent tool (two customers fit a name): the chosen option's args finish the
+   * original tool call through the `choose` hook, against the sentence that asked for it.
+   */
+  | { kind: 'choose'; ask: string; tool: string; transcript: string; options: ChooseOption[] }
+
+export interface ChooseOption {
+  /** shown on screen and matched exactly when tapped */
+  label: string
+  /** the customer's name, matched when spoken */
+  name: string
+  /** the customer's balance in rupees: "the 300 one" */
+  rupees?: number
+  /** the tool's args with this option filled in */
+  args: Record<string, unknown>
+}
 
 interface SavedState {
   v: 1
@@ -138,6 +154,15 @@ export class LedgerCore {
    * of the short read-back. The agent's tools turn this on for the duration of a tool call.
    */
   sayBalance = false
+  /** Finishes an agent tool once a `choose` question is answered (set by server/agent/tools.ts). */
+  choose: (tool: string, args: Record<string, unknown>, transcript: string, meta: TurnMeta) => Reply | null = () => null
+  /** when each entry was written in this session (eid -> ms): only these can be undone without a question */
+  writtenAt = new Map<string, number>()
+  /** was this entry written in this session, within the last `ms`? */
+  wroteRecently(eid: string, ms: number): boolean {
+    const t = this.writtenAt.get(eid)
+    return t !== undefined && this.deps.now() - t <= ms
+  }
 
   constructor(private deps: LedgerDeps) {}
 
@@ -181,7 +206,7 @@ export class LedgerCore {
       if (Array.isArray(st.history)) this.history = st.history.filter((h): h is string => typeof h === 'string').slice(-8)
       if (typeof st.focusCid === 'string' || st.focusCid === null) this.focusCid = st.focusCid
       const pendingAge = age + (typeof st.pendingAgeMs === 'number' ? st.pendingAgeMs : 0)
-      const kinds = ['confirm', 'name', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify']
+      const kinds = ['confirm', 'name', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify', 'choose']
       const pendingOk = !!st.pending && typeof st.pending === 'object' && kinds.includes((st.pending as { kind?: string }).kind ?? '')
       if (pendingOk && pendingAge < PENDING_TTL_MS) {
         this.pending = st.pending
@@ -520,6 +545,28 @@ export class LedgerCore {
     return !!d.readBack || (!d.noisy && d.nameSure && d.confidence === 'high')
   }
 
+  /**
+   * Which option an answer picks: the label exactly (a tap), "first / pehla / doosra", the
+   * balance ("300 wala"), or the name when only one option has it. -1 when it is not clear.
+   */
+  static chooseIndex(options: ChooseOption[], text: string): number {
+    const t = text.trim()
+    const exact = options.findIndex((o) => o.label === t)
+    if (exact >= 0) return exact
+    const ords: [RegExp, number][] = [
+      [/\b(pehl|pahl|first|1st)|पहल|ಮೊದಲ|முதல்|మొదట/i, 0],
+      [/\b(doosr|dusr|second|2nd)|दूसर|ಎರಡನೇ|இரண்டாவது|రెండో/i, 1],
+      [/\b(teesr|tisr|third|3rd)|तीसर|ಮೂರನೇ|மூன்றாவது|మూడో/i, 2],
+    ]
+    for (const [re, i] of ords) if (re.test(t) && i < options.length) return i
+    const amts = parseAmounts(t).map((a) => a.value)
+    const byAmt = options.map((o, i) => (o.rupees !== undefined && amts.includes(o.rupees) ? i : -1)).filter((i) => i >= 0)
+    if (byAmt.length === 1) return byAmt[0]
+    const m = matchName(nameAnswer(t) ?? t, options.map((o, i) => ({ id: String(i), names: [o.name] })))
+    if (m.length && m[0].score >= NAME_NEAR && !(m[1] && m[1].score >= m[0].score - 0.01)) return Number(m[0].id)
+    return -1
+  }
+
   answerPending(text: string, intent: Intent, meta: TurnMeta): Reply | null {
     const R = say(this.lang)
     // a question left hanging expires instead of catching a later "haan": this is a fresh turn
@@ -527,6 +574,20 @@ export class LedgerCore {
     const p = this.pending
     const acc: Reply = { parts: [], ops: [] }
     if (p.kind === 'batch') return this.answerBatch(p.drafts, text, intent, meta)
+    if (p.kind === 'choose') {
+      if (intent.type === 'undo' || intent.type === 'no') {
+        this.pending = null
+        return { parts: [R.notSaved()], ops: [] }
+      }
+      if (intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)) {
+        this.pending = null
+        return this.dispatch(intent, text, meta)
+      }
+      const i = intent.type === 'yes' && p.options.length === 1 ? 0 : LedgerCore.chooseIndex(p.options, text)
+      if (i < 0) return { parts: [p.ask], ops: [] }
+      this.pending = null
+      return this.choose(p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
+    }
     if (intent.type === 'undo' || (intent.type === 'no' && p.kind !== 'confusable')) {
       this.pending = null
       if (p.kind === 'delete') return { parts: [R.notSaved()], ops: [] }
@@ -846,6 +907,7 @@ export class LedgerCore {
     const p = this.pending
     if (!p) return null
     if (p.kind === 'delete') return p.requireTap ? { kind: 'delete', requireTap: true } : { kind: 'delete' }
+    if (p.kind === 'choose') return { kind: 'which', options: p.options.map((o) => o.label) }
     if (p.kind === 'modify') return p.view
     if (p.kind === 'batch') {
       const dir = p.drafts.find((d) => d.direction)?.direction ?? null
@@ -874,6 +936,7 @@ export class LedgerCore {
       case 'entry': {
         const day = istDay(op.dayOffset)
         s.last = { eid: op.eid, cid: op.cid, paise: op.paise, direction: op.direction, day, promise: op.promise || undefined }
+        this.writtenAt.set(op.eid, this.now())
         s.entries = [{ ...s.last }, ...(s.entries ?? [])]
         if (op.promise) break // a promise is remembered, never posted to the balance
         const c = s.customers.find((x) => x.cid === op.cid)

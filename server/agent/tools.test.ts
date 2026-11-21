@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseFast } from '../../shared/intent.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { say } from '../../shared/replies.js'
+import { say, sayMore } from '../../shared/replies.js'
 import { LedgerCore, PENDING_TTL_MS, type TurnMeta } from '../ledger/core.js'
 import { nullLogger } from '../log.js'
 import { TOOL_SCHEMAS, type ToolCall, runTool } from './tools.js'
@@ -85,6 +85,10 @@ describe('agent tools', () => {
     expect(r.ops).toEqual([])
     expect(s.core.pending?.kind).toBe('modify')
     expect(r.parts).toEqual([R.mergeAsk('Suresh', 'Ramesh')])
+    s = mk() // an entry this session did not write, so even "hata do" asks
+    r = s.run('undo_last', {}, 'hata do')
+    expect(r.ops).toEqual([])
+    expect(s.core.pending?.kind).toBe('modify')
     s = mk()
     r = s.run('settle', { name: 'Ramesh' }, 'Ramesh ka hisaab clear')
     expect(r.ops).toEqual([])
@@ -163,16 +167,109 @@ describe('agent tools', () => {
     expect(r.ops).toEqual([])
   })
 
-  it('rename_customer and set_phone write their ops at once', () => {
-    const { core, run } = setup([cust('c1', 'Ramesh', 200)])
+  it('rename_customer needs a sure match; set_phone needs the heard digits and is read back first', () => {
+    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
     const a = run('rename_customer', { name: 'Ramesh', new_name: 'Ramesh Kumar' }, 'Ramesh ka naam Ramesh Kumar karo')
     expect(a.ops).toEqual([{ op: 'rename_customer', cid: 'c1', name: 'Ramesh Kumar' }])
-    const b = run('set_phone', { name: 'Ramesh', phone: '98450 12345' }, 'Ramesh ka number 98450 12345')
-    expect(b.ops).toEqual([{ op: 'set_phone', cid: 'c1', phone: '9845012345' }])
-    const bad = run('set_phone', { name: 'Ramesh', phone: '123' }, 'Ramesh ka number 123')
-    expect(bad.ops).toEqual([])
-    for (const o of [...a.ops, ...b.ops]) core.applyLocal(o)
-    expect(core.snap.customers[0]).toMatchObject({ name: 'Ramesh Kumar', phone: '9845012345' })
+    for (const o of a.ops) core.applyLocal(o)
+    const near = run('rename_customer', { name: 'Rajesh', new_name: 'Suresh' }, 'Rajesh ka naam Suresh karo')
+    expect(near.ops).toEqual([])
+    core.pending = null
+    const b = run('set_phone', { name: 'Ramesh Kumar', phone: '98450 12345' }, 'Ramesh ka number 98450 12345')
+    expect(b.ops).toEqual([])
+    expect(core.pending?.kind).toBe('modify')
+    expect(b.parts).toEqual([sayMore('en').phoneAsk('Ramesh Kumar', '98450 12345')])
+    const y = core.answerPending('haan', parseFast('haan'), meta('haan'))!
+    expect(y.ops).toEqual([{ op: 'set_phone', cid: 'c1', phone: '9845012345' }])
+    // digits the model wrote but nobody said
+    const invented = run('set_phone', { name: 'Ramesh Kumar', phone: '9845012345' }, 'Ramesh ka number likho')
+    expect(invented.ops).toEqual([])
+    expect(core.pending).toBeNull()
+    expect(run('set_phone', { name: 'Ramesh Kumar', phone: '123' }, 'Ramesh ka number 123').ops).toEqual([])
+  })
+
+  it('add_customer: a new heard name is asked first, a near name asks which', () => {
+    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
+    const r = run('add_customer', { name: 'pinky' }, 'Pinky naam ka naya khata kholo')
+    expect(r.ops).toEqual([])
+    expect(core.pendingView()).toMatchObject({ kind: 'modify', name: 'Pinky', newCustomer: true })
+    core.turnSrc = 'tap'
+    const y = core.answerPending('yes', { type: 'yes' }, meta('yes'))!
+    expect(y.ops).toEqual([{ op: 'add_customer', cid: 'id1', name: 'Pinky' }])
+    core.turnSrc = 'voice'
+    const n = run('add_customer', { name: 'Ramesha' }, 'Ramesha ka khata kholo')
+    expect(n.ops).toEqual([])
+    expect(core.pending?.kind).toBe('choose')
+    expect(core.pendingView()?.options).toEqual(['Ramesh', 'Ramesha'])
+    // choosing the existing one writes nothing
+    const pick = core.answerPending('Ramesh', parseFast('Ramesh'), meta('Ramesh'))!
+    expect(pick.ops).toEqual([])
+    expect(core.pending).toBeNull()
+  })
+
+  it('two customers with one name, for any other tool: all are offered and the answer finishes the tool', () => {
+    const { core, run, meta } = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200), cust('c3', 'Suresh', 50)])
+    const r = run('show_customer', { name: 'Suresh' }, 'Suresh ka khata dikhao')
+    expect(r.show).toBeUndefined()
+    expect(core.pendingView()?.options).toEqual(['Suresh · ₹300', 'Suresh · ₹1,200', 'Suresh · ₹50'])
+    const a = core.answerPending('doosra wala', parseFast('doosra wala'), meta('doosra wala'))!
+    expect(a.show).toEqual({ type: 'show', view: 'customer', cid: 'c2' })
+    // a tapped label works the same, and the original sentence is kept for the finished call
+    run('send_statement', { name: 'Suresh' }, 'Suresh ko statement bhejo')
+    core.turnSrc = 'tap'
+    const t = core.answerPending('Suresh · ₹50', { type: 'unknown' }, meta('Suresh · ₹50'))!
+    expect(t.parts).toEqual([R.noConsent('Suresh')])
+  })
+
+  it('answer_question never takes yes, an option or an amount from the model', () => {
+    // yes from the model, "hmm" heard: nothing written, asked again
+    let s = setup([cust('c1', 'Ramesh', 300)])
+    s.run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit' }] }, 'Ramesh 200')
+    let r = s.run('answer_question', { kind: 'yes' }, 'hmm')
+    expect(r.ops).toEqual([])
+    expect(r.parts).toEqual([R.didNotCatch()])
+    expect(s.core.pending?.kind).toBe('confirm')
+    // an option that is not on screen
+    s = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200)])
+    s.run('add_entries', { entries: [{ name: 'Suresh', amount: 100, direction: 'credit' }] }, 'Suresh ko 100 udhaar')
+    r = s.run('answer_question', { kind: 'option', value: 'haan' }, 'haan')
+    expect(r.ops).toEqual([])
+    expect(s.core.pending?.kind).toBe('which')
+    // a "name" that is an amount, for the amount question
+    s = setup([cust('c1', 'Ramesh', 300)])
+    s.core.processDrafts([{
+      heardName: 'Ramesh', cid: null, newName: null, nameSure: false, spoken: true, paise: 0, alt: null, direction: 'credit', dayOffset: 0,
+      promise: false, confidence: 'low', reasons: ['no-amount'], path: 'llm', transcript: 'Ramesh udhaar', snrDb: null, noisy: false,
+    }])
+    expect(s.core.pending?.kind).toBe('amount')
+    r = s.run('answer_question', { kind: 'name', value: '500' }, 'Ramesh')
+    expect(r.ops).toEqual([])
+    expect(s.core.pending?.kind).toBe('amount')
+  })
+
+  it('answer_question with nothing open says it did not catch that', () => {
+    const { run } = setup([cust('c1', 'Ramesh', 300)])
+    expect(run('answer_question', { kind: 'yes' }, 'haan').parts).toEqual([R.didNotCatch()])
+  })
+
+  it('undo_last is instant only right after this session wrote the entry', () => {
+    const { core, run, tick } = setup([cust('c1', 'Ramesh', 300)])
+    const w = run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit' }] }, 'Ramesh ko 200 udhaar')
+    for (const o of w.ops) core.applyLocal(o)
+    const eid = (w.ops[0] as { eid: string }).eid
+    const u = run('undo_last', {}, 'hata do')
+    expect(u.ops).toEqual([{ op: 'void', eid, reason: 'spoken undo' }])
+    tick(61_000)
+    const late = run('undo_last', {}, 'hata do')
+    expect(late.ops).toEqual([])
+    expect(core.pending?.kind).toBe('modify')
+  })
+
+  it('search counts each result once; topDebtors with nobody is a full sentence', () => {
+    const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 200)], [ent('e1', 'c1', 200), ent('e2', 'c2', 200)])
+    expect(run('search', { text: 'Ramesh 200' }, 'Ramesh 200 dhundo').parts).toEqual([R.searchResult('Ramesh 200', 1)])
+    expect(run('search', { text: '200' }, '200 dhundo').parts).toEqual([R.searchResult('200', 2)])
+    expect(R.topDebtors([])).toBe(R.noDues())
   })
 
   it('settings produce a setting message, the language reply is in the new language', () => {

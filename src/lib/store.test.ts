@@ -25,6 +25,17 @@ describe('store', () => {
     expect(snap.entries.every((e) => e.cid === 'c1')).toBe(true)
   })
 
+  it('forgetting a customer also forgets every account merged into it', async () => {
+    const s = await createStore(memoryPersistence())
+    await s.applyOps([cust('c1', 'Ramesh'), cust('c2', 'Rmesh'), cust('c3', 'Ramu'), entry('e1', 'c1', 100, 'credit'),
+      entry('e2', 'c2', 200, 'credit'), entry('e3', 'c3', 300, 'credit'),
+      { op: 'merge_customers', from: 'c3', into: 'c2' }, { op: 'merge_customers', from: 'c2', into: 'c1' }])
+    await s.forgetCustomer('c1')
+    const snap = s.snapshot()
+    expect(snap.customers).toEqual([])
+    expect(snap.entries).toEqual([])
+  })
+
   it('server ops give the right balances, totals and last entry (promise, amend, void)', async () => {
     const s = await createStore(memoryPersistence())
     await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 50000, 'credit'), entry('e2', 'c1', 20000, 'payment'),

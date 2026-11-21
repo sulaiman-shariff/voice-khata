@@ -5,19 +5,27 @@
  * Rules:
  *  - add_entries builds Drafts with path 'llm' and reasons from validate(), so amounts not heard
  *    are dropped, and direction-guessed / name-changed lead to confirm.
- *  - Remove, move, merge, settle and erase always go through a pending question.
+ *  - Remove, move, merge, settle and erase always go through a pending question. undo_last is
+ *    instant only for a heard "hata do" within 60 s of this session writing that entry.
  *  - erase_all creates pending.kind === 'delete' with view.requireTap = true: a spoken yes only
  *    arms it, the on-screen button tap erases.
  *  - send_reminder refuses unless remindersOptIn && adult, and asks for confirmation; nothing is
  *    sent by the server, the phone gets a `ready` card and the shopkeeper taps to send.
+ *  - A heard name not in the ledger is never written without a yes (add_customer asks; a near
+ *    name asks which). rename needs a sure match. A phone number must be heard and is read back.
+ *  - Two customers who fit a name: a 'choose' question lists all of them; the answer finishes the
+ *    same tool call.
+ *  - answer_question never takes yes / no / an amount from the model: only from what was heard.
+ *    A name or option from the model counts only when it is exactly one on screen or a customer.
  *  - Answers for show and query tools are computed from core.snap (balances; history via
  *    entries filtered by day).
  */
-import { type Intent, directionAnswer, parseFast } from '../../shared/intent.js'
+import { parseFast } from '../../shared/intent.js'
+import { NAME_SURE, matchName } from '../../shared/names.js'
 import { formatINR } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
 import { LANGS, LANG_NAME, type Lang, guardReply, say, sayMore } from '../../shared/replies.js'
-import { LedgerCore, type Reply, type TurnMeta } from '../ledger/core.js'
+import { type ChooseOption, LedgerCore, type Reply, type TurnMeta } from '../ledger/core.js'
 import type { GeminiTool } from '../parse/gemini.js'
 import { type LlmReading, validate } from '../parse/llm.js'
 
@@ -112,7 +120,11 @@ const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase())
 /** YYYY-MM-DD in India, offset by n days (the shop's calendar). */
 const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
 
-export function runTool(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: string }): Reply {
+/** The sentence the tool was called for, and every language stream's reading of it (when there are several). */
+export type ToolMeta = TurnMeta & { transcript: string; heard?: string[] }
+
+export function runTool(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
+  attachTools(core)
   const before = core.sayBalance
   core.sayBalance = true // a confident save says the new balance (savedWithBalance)
   try {
@@ -123,60 +135,102 @@ export function runTool(core: LedgerCore, call: ToolCall, meta: TurnMeta & { tra
   }
 }
 
-function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: string }): Reply {
+/**
+ * Let a "which one?" (pending 'choose') finish the tool call that asked it, also when the answer
+ * arrives as a tap through the turn loop. runTool does this itself; call it once per session too.
+ */
+export function attachTools(core: LedgerCore) {
+  core.choose = (tool, args, transcript, meta) => (isToolName(tool) ? runTool(core, { name: tool, args }, { ...meta, transcript }) : null)
+}
+
+/** only an entry written in this session within this long is undone without a question */
+const UNDO_INSTANT_MS = 60_000
+
+function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
   const lang = core.lang
   const R = say(lang)
+  const M = sayMore(lang)
   const a = call.args ?? {}
   const text = meta.transcript
+  const heard = [text, ...(meta.heard ?? [])].filter((t) => t && t.trim())
   const tm: TurnMeta = { snrDb: meta.snrDb, noisy: meta.noisy, path: 'llm' }
   const speak = (...parts: string[]): Reply => ({ parts, ops: [] })
   const notCaught = () => speak(meta.noisy ? R.noisyRepeat() : R.didNotCatch())
   const entries = core.snap.entries ?? []
   const recent = entries.slice(0, 12)
   const contextAmounts = recent.map((e) => e.paise / 100)
+  const isReply = (x: unknown): x is Reply => !!x && typeof x === 'object' && 'parts' in x
 
-  /** One customer for a name, or 'many' when two fit equally (then the agent is told which ones). */
-  const resolve = (name: string | null): SnapCustomer | 'many' | null => {
+  /**
+   * The customer a name argument means: one customer, several (two who fit equally: asked), or
+   * none. A "which one" answer pins the choice as `<slot>__cid`. `exact` needs a sure match.
+   */
+  const resolve = (slot: string, exact = false): SnapCustomer | SnapCustomer[] | null => {
+    const pinned = str(a[`${slot}__cid`])
+    if (pinned) return core.snap.customers.find((c) => c.cid === pinned) ?? null
+    const name = str(a[slot])
     if (!name) return null
     // a "which one" option sent back exactly as shown ("Suresh · ₹300")
-    const byLabel = core.snap.customers.find((c) => core.label(c) === name)
-    if (byLabel) return byLabel
+    const byLabel = core.snap.customers.filter((c) => core.label(c) === name)
+    if (byLabel.length === 1) return byLabel[0]
     const c = core.lookup(name)
-    if (!c) return null
-    const twins = core.snap.customers.filter((x) => x.name.toLowerCase() === c.name.toLowerCase())
-    return twins.length > 1 ? 'many' : c
+    if (c) {
+      const twins = core.snap.customers.filter((x) => x.name.toLowerCase() === c.name.toLowerCase())
+      if (twins.length > 1) return twins
+    }
+    if (!exact) return c
+    const best = matchName(name, core.snap.customers.map((x) => ({ id: x.cid, names: [x.name, ...x.aliases] })))[0]
+    if (best && best.score >= NAME_SURE) return core.snap.customers.find((x) => x.cid === best.id) ?? null
+    const near = core.candidates(name).map((x) => x.c)
+    return near.length ? near.slice(0, 3) : null
   }
-  const twinsAsk = (name: string): Reply => {
-    const t = core.snap.customers.filter((x) => x.name.toLowerCase() === core.lookup(name)?.name.toLowerCase())
-    return speak(R.askWhich(core.label(t[0]), core.label(t[1])))
+  /** Ask which customer (all of them as options); the answer finishes this same tool call. */
+  const askWhich = (slot: string, options: SnapCustomer[], extra: ChooseOption[] = []): Reply => {
+    const opts: ChooseOption[] = [
+      ...options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, args: { ...a, [`${slot}__cid`]: c.cid } })),
+      ...extra,
+    ]
+    const labels = opts.map((o) => o.label)
+    const ask = labels.length === 1 ? `${labels[0]}?` : R.askWhich(labels.slice(0, -1).join(', '), labels[labels.length - 1])
+    core.pending = { kind: 'choose', ask, tool: call.name, transcript: text, options: opts }
+    return speak(ask)
   }
-  /** resolve or answer: not found / which one */
-  const customer = (name: string | null): SnapCustomer | Reply => {
-    const c = resolve(name)
-    if (c === 'many') return twinsAsk(name!)
-    if (!c) return name ? speak(R.notFound(name)) : notCaught()
-    return c
+  /** resolve, or the reply to give instead: not found / which one */
+  const need = (slot: string, exact = false): SnapCustomer | Reply => {
+    const r = resolve(slot, exact)
+    if (Array.isArray(r)) return askWhich(slot, r)
+    if (r) return r
+    const name = str(a[slot])
+    return name ? speak(R.notFound(name)) : notCaught()
   }
-  const isReply = (x: SnapCustomer | Reply): x is Reply => 'parts' in x
-  /** the entry the model pointed at: its number, else the newest that fits name / amount / day */
-  const findRef = (): number | null => {
+  /** the entry the model pointed at: its number in snap.entries (1 = newest), else the newest that fits name / amount / day */
+  const findRef = (): number | Reply => {
     const ref = int(a.ref)
-    if (ref !== null) return ref >= 1 && ref <= entries.length ? ref : null
-    const name = str(a.name)
-    const c = name ? resolve(name) : null
-    if (name && (!c || c === 'many')) return null
+    if (ref !== null) return ref >= 1 && ref <= entries.length ? ref : notCaught()
+    let c: SnapCustomer | null = null
+    if (str(a.name) || str(a.name__cid)) {
+      const r = need('name')
+      if (isReply(r)) return r
+      c = r
+    }
     const amt = num(a.amount)
     const day = int(a.day_offset)
-    if (!c && amt === null && day === null) return null
-    const i = entries.findIndex((e) => (!c || c === 'many' || e.cid === c.cid) &&
+    if (!c && amt === null && day === null) return notCaught()
+    const i = entries.findIndex((e) => (!c || e.cid === c.cid) &&
       (amt === null || e.paise === Math.round(amt * 100)) && (day === null || e.day === istDay(day)))
-    return i >= 0 ? i + 1 : null
+    return i >= 0 ? i + 1 : notCaught()
   }
   const lastOf = (cid: string): { amt: number; dir: SnapEntry['direction'] } | undefined => {
     const e = entries.find((x) => x.cid === cid && !x.promise)
     return e ? { amt: e.paise / 100, dir: e.direction } : undefined
   }
   const owing = () => core.snap.customers.filter((c) => c.balancePaise > 0).sort((x, y) => y.balancePaise - x.balancePaise)
+  const duesReply = (): Reply => {
+    const o = owing()
+    const show = { type: 'show', view: 'dues' } as const
+    if (!o.length) return { parts: [R.noDues()], ops: [], show }
+    return { parts: [R.showDues(o.length, o.reduce((s, c) => s + c.balancePaise, 0) / 100)], ops: [], show }
+  }
 
   switch (call.name) {
     // ------------------------------------------------------------------ writes
@@ -194,7 +248,7 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
     }
     case 'change_entry': {
       const ref = findRef()
-      if (ref === null) return notCaught()
+      if (isReply(ref)) return ref
       const reading: Partial<LlmReading> = {
         intent: 'modify',
         modify: { ref, amount: num(a.new_amount), direction: a.new_direction === 'credit' || a.new_direction === 'payment' ? a.new_direction : null, name: null, remove: false },
@@ -206,64 +260,97 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
     }
     case 'remove_entry': {
       const ref = findRef()
-      if (ref === null) return notCaught()
+      if (isReply(ref)) return ref
       return core.modifyEntry({ type: 'modify', ref, remove: true }, { ask: true })
     }
     case 'undo_last': {
       const last = core.snap.last
       if (!last) return speak(R.nothingToUndo())
-      return { parts: [R.undone()], ops: [{ op: 'void', eid: last.eid, reason: 'spoken undo' }] }
+      // at once only for "hata do" heard right after this session wrote the entry; otherwise asked
+      const saidUndo = heard.some((t) => parseFast(t).type === 'undo')
+      if (saidUndo && core.wroteRecently(last.eid, UNDO_INSTANT_MS))
+        return { parts: [R.undone()], ops: [{ op: 'void', eid: last.eid, reason: 'spoken undo' }] }
+      const ref = entries.findIndex((e) => e.eid === last.eid) + 1
+      if (ref < 1) return notCaught()
+      return core.modifyEntry({ type: 'modify', ref, remove: true }, { ask: true })
     }
     case 'move_entry': {
       const ref = findRef()
+      if (isReply(ref)) return ref
       const to = str(a.to_name)
-      if (ref === null || !to) return notCaught()
-      if (resolve(to) === 'many') return twinsAsk(to)
-      const target = resolve(to)
-      return core.modifyEntry({ type: 'modify', ref, name: target && target !== 'many' ? target.name : to }, { ask: true })
+      if (!to && !str(a.to_name__cid)) return notCaught()
+      const target = resolve('to_name')
+      if (Array.isArray(target)) return askWhich('to_name', target)
+      if (!target) return core.modifyEntry({ type: 'modify', ref, name: to! }, { ask: true }) // a new name: read back as a new customer
+      const e = entries[ref - 1]
+      if (e.cid === target.cid) return notCaught()
+      core.pending = {
+        kind: 'modify', ops: [{ op: 'amend', eid: e.eid, cid: target.cid }], done: R.corrected(target.name, e.paise / 100, e.direction),
+        focus: target.cid, view: { kind: 'modify', name: core.label(target), paise: e.paise, direction: e.direction },
+      }
+      return speak(M.changeAsk(core.label(target), e.paise / 100, e.direction))
     }
     case 'settle': {
       const name = str(a.name)
       return core.settleFor(name, text, tm) ?? (name ? speak(R.notFound(name)) : notCaught())
     }
     case 'add_customer': {
+      const pinned = resolve('name')
+      if (str(a.name__cid) && pinned && !Array.isArray(pinned)) return speak(R.showCustomer(pinned.name, pinned.balancePaise / 100, lastOf(pinned.cid)))
       const name = str(a.name)
       if (!name) return notCaught()
       const same = core.snap.customers.find((c) => [c.name, ...c.aliases].some((n) => n.toLowerCase() === name.toLowerCase()))
       if (same) return speak(R.showCustomer(same.name, same.balancePaise / 100, lastOf(same.cid)))
+      const newName = titleCase(name)
+      // a name close to one we have is probably that customer, misheard: ask which
+      if (a._new !== true) {
+        const near = [...new Map([...(core.lookup(name) ? [core.lookup(name)!] : []), ...core.candidates(name).map((x) => x.c)].map((c) => [c.cid, c])).values()]
+        if (near.length) return askWhich('name', near.slice(0, 3), [{ label: newName, name: newName, args: { ...a, _new: true } }])
+      }
+      // a heard name not in the ledger is never written without a yes (a tap on the card counts)
       const cid = core.freshId()
-      return { parts: [R.customerAdded(titleCase(name))], ops: [{ op: 'add_customer', cid, name: titleCase(name) }] }
+      core.pending = {
+        kind: 'modify', ops: [{ op: 'add_customer', cid, name: newName }], done: R.customerAdded(newName), focus: cid,
+        view: { kind: 'modify', name: newName, newCustomer: true },
+      }
+      return speak(M.addAsk(newName))
     }
     case 'rename_customer': {
-      const c = customer(str(a.name))
+      // the account to rename must be named surely; a near name is asked about first
+      const c = need('name', true)
       if (isReply(c)) return c
       const to = str(a.new_name)
       if (!to || to.length > 40 || to === c.name) return notCaught()
       return { parts: [R.renamed(c.name, titleCase(to))], ops: [{ op: 'rename_customer', cid: c.cid, name: titleCase(to) }] }
     }
     case 'merge_customers': {
-      const from = customer(str(a.name))
+      const from = need('name')
       if (isReply(from)) return from
-      const into = customer(str(a.into))
+      const into = need('into')
       if (isReply(into)) return into
       if (from.cid === into.cid) return notCaught()
       core.pending = {
         kind: 'modify', ops: [{ op: 'merge_customers', from: from.cid, into: into.cid }], done: R.merged(from.name, into.name), focus: into.cid,
         view: { kind: 'modify', name: `${core.label(from)} → ${core.label(into)}` },
       }
-      return speak(R.mergeAsk(from.name, into.name))
+      return speak(R.mergeAsk(core.label(from), core.label(into)))
     }
     case 'set_phone': {
-      const c = customer(str(a.name))
+      const c = need('name')
       if (isReply(c)) return c
       let digits = String(a.phone ?? '').replace(/\D/g, '')
       if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2)
       if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)
-      if (!/^[6-9]\d{9}$/.test(digits)) return notCaught()
-      return { parts: [R.phoneSet(c.name)], ops: [{ op: 'set_phone', cid: c.cid, phone: digits }] }
+      // a valid mobile, every digit of it heard, and read back before it is saved
+      if (!/^[6-9]\d{9}$/.test(digits) || !heard.some((t) => t.replace(/\D/g, '').includes(digits))) return notCaught()
+      core.pending = {
+        kind: 'modify', ops: [{ op: 'set_phone', cid: c.cid, phone: digits }], done: R.phoneSet(c.name), focus: c.cid,
+        view: { kind: 'modify', name: core.label(c) },
+      }
+      return speak(M.phoneAsk(core.label(c), `${digits.slice(0, 5)} ${digits.slice(5)}`))
     }
     case 'send_reminder': {
-      const c = customer(str(a.name))
+      const c = need('name')
       if (isReply(c)) return c
       if (c.balancePaise <= 0) return speak(R.balance(c.name, c.balancePaise / 100))
       // only customers who agreed to messages, and adults
@@ -272,20 +359,20 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       if (!msg) return notCaught()
       core.pending = {
         kind: 'modify', ops: [], done: R.remindReady(c.name), focus: c.cid,
-        view: { kind: 'modify', name: c.name, paise: c.balancePaise }, ready: { kind: 'whatsapp', cid: c.cid, text: msg },
+        view: { kind: 'modify', name: core.label(c), paise: c.balancePaise }, ready: { kind: 'whatsapp', cid: c.cid, text: msg },
       }
-      return speak(sayMore(lang).reminderAsk(c.name))
+      return speak(M.reminderAsk(core.label(c)))
     }
     case 'send_statement': {
-      const c = customer(str(a.name))
+      const c = need('name')
       if (isReply(c)) return c
       if (!c.remindersOptIn || !c.adult) return speak(R.noConsent(c.name))
       const lines = entries.filter((e) => e.cid === c.cid && !e.promise).slice(0, 10)
         .map((e) => `${e.day}  ${e.direction === 'credit' ? '+' : '-'}₹${formatINR(e.paise / 100)}`)
-      const text = guardReply([core.snap.shopName, R.balance(c.name, c.balancePaise / 100), ...lines].join('\n'))
-      if (!text) return notCaught()
+      const body = guardReply([core.snap.shopName, R.balance(c.name, c.balancePaise / 100), ...lines].join('\n'))
+      if (!body) return notCaught()
       core.focusCid = c.cid
-      return { parts: [R.statementReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text } }
+      return { parts: [R.statementReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text: body } }
     }
     case 'erase_all':
       // a spoken yes arms it, then only the on-screen button erases (LedgerCore.answerPending)
@@ -295,33 +382,25 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
     // ------------------------------------------------------------------ show and ask
     case 'show_customer':
     case 'query_balance': {
-      const name = str(a.name)
-      if (!name && call.name === 'query_balance') {
-        const focus = core.focusCid ? core.snap.customers.find((c) => c.cid === core.focusCid) : undefined
-        if (!focus) {
-          const o = owing()
-          const show = { type: 'show', view: 'dues' } as const
-          return o.length ? { parts: [R.showDues(o.length, o.reduce((s, c) => s + c.balancePaise, 0) / 100)], ops: [], show } : { parts: [R.noDues()], ops: [], show }
-        }
+      let c: SnapCustomer | Reply
+      if (str(a.name) || str(a.name__cid)) c = need('name')
+      else {
+        const focus = core.focusCid ? core.snap.customers.find((x) => x.cid === core.focusCid) : undefined
+        if (!focus) return call.name === 'query_balance' ? duesReply() : notCaught()
+        c = focus
       }
-      const c = name ? customer(name) : core.snap.customers.find((x) => x.cid === core.focusCid) ?? notCaught()
       if (isReply(c)) return c
       core.focusCid = c.cid
       const part = call.name === 'show_customer' ? R.showCustomer(c.name, c.balancePaise / 100, lastOf(c.cid)) : R.balance(c.name, c.balancePaise / 100)
       return { parts: [part], ops: [], show: { type: 'show', view: 'customer', cid: c.cid } }
     }
-    case 'show_dues': {
-      const o = owing()
-      const show = { type: 'show', view: 'dues' } as const
-      if (!o.length) return { parts: [R.noDues()], ops: [], show }
-      return { parts: [R.showDues(o.length, o.reduce((s, c) => s + c.balancePaise, 0) / 100)], ops: [], show }
-    }
+    case 'show_dues':
+      return duesReply()
     case 'show_history': {
-      const name = str(a.name)
       const day = int(a.day_offset)
       let c: SnapCustomer | null = null
-      if (name) {
-        const r = customer(name)
+      if (str(a.name) || str(a.name__cid)) {
+        const r = need('name')
         if (isReply(r)) return r
         c = r
         core.focusCid = c.cid
@@ -341,8 +420,11 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       if (!q) return notCaught()
       const found = core.candidates(q).map((x) => x.c)
       const amounts = (q.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
-      const hits = amounts.length ? entries.filter((e) => amounts.includes(e.paise)) : []
-      const reply: Reply = { parts: [R.searchResult(q, found.length + hits.length)], ops: [] }
+      // "Ramesh 200": Ramesh's 200 entries; "200": every 200 entry; "Ramesh": the customer
+      const count = amounts.length
+        ? entries.filter((e) => amounts.includes(e.paise) && (!found.length || found.some((c) => c.cid === e.cid))).length
+        : found.length
+      const reply: Reply = { parts: [R.searchResult(q, count)], ops: [] }
       if (found.length === 1) reply.show = { type: 'show', view: 'customer', cid: found[0].cid }
       return reply
     }
@@ -380,16 +462,20 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
 
     // ------------------------------------------------------------------ the dialogue
     case 'answer_question': {
-      if (!core.pending) return speak()
+      // nothing open (or it expired): say so rather than stay silent
+      if (!core.pending) return notCaught()
       const kind = a.kind
       const value = str(a.value)
-      // a name or a tapped option may come from the model (any script); amounts and the rest only
-      // from what was heard
-      const said = (kind === 'name' || kind === 'option') && value ? value : text
-      let intent: Intent = parseFast(said)
-      if ((kind === 'yes' || kind === 'no') && intent.type === 'unknown') intent = { type: kind }
-      if (kind === 'direction' && (value === 'credit' || value === 'payment') && !directionAnswer(said)) intent = { type: 'correct', direction: value }
-      return core.answerPending(said, intent, tm) ?? speak()
+      // a name or an option from the model only when it is exactly one on screen or a customer's name
+      const view = core.pendingView()
+      if ((kind === 'name' || kind === 'option') && value &&
+        (view?.options?.includes(value) || core.snap.customers.some((c) => c.name === value)))
+        return core.answerPending(value, { type: 'unknown' }, tm) ?? notCaught()
+      // everything else (yes, no, amounts, directions) only from what was heard
+      const read = heard.map((t) => ({ t, i: parseFast(t) })).find((x) => x.i.type !== 'unknown')
+      if (!read && (kind === 'yes' || kind === 'no')) return notCaught() // the question stays open
+      const said = read ?? { t: text, i: parseFast(text) }
+      return core.answerPending(said.t, said.i, tm) ?? notCaught()
     }
     case 'not_for_me':
       return { parts: [], ops: [], notForMe: true }

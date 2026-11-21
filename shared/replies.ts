@@ -753,6 +753,10 @@ export interface MoreReplies {
   changeAsk: (name: string, amt: number, dir: Dir) => string
   /** ask before making a reminder message for a customer who agreed to them */
   reminderAsk: (name: string) => string
+  /** read a phone number back before saving it (digits spaced 5 + 5) */
+  phoneAsk: (name: string, phone: string) => string
+  /** ask before opening an account with no entry for a name not in the ledger */
+  addAsk: (name: string) => string
 }
 /** Timbre v3.0 audio tag for a short silence; stripped before text reaches the screen. */
 export const PAUSE = '<pauses>'
@@ -766,6 +770,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `ठीक है, ${n} की ${r(a)} रुपये वाली एंट्री हटा दी।`,
     changeAsk: (n, a, d) => `बदल कर ${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} कर दूँ?`,
     reminderAsk: (n) => `${n} को याद दिलाने वाला संदेश भेजूँ?`,
+    phoneAsk: (n, p) => `${n} का नंबर ${p}, सही है?`,
+    addAsk: (n) => `नया ग्राहक ${n}, खाता खोलूँ?`,
   },
   en: {
     batchAsk: (i, d) => `${list(i)}. All ${d === 'credit' ? 'on credit' : 'paid'}?`,
@@ -773,6 +779,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `Okay, removed ${n}'s ${r(a)} rupees entry.`,
     changeAsk: (n, a, d) => `Change it to ${n}, ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}?`,
     reminderAsk: (n) => `Send ${n} a reminder message?`,
+    phoneAsk: (n, p) => `${n}'s number is ${p}, correct?`,
+    addAsk: (n) => `Open a new account for ${n}?`,
   },
   kn: {
     batchAsk: (i, d) => `${list(i)}, ಎಲ್ಲಾ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}ನಾ?`,
@@ -780,6 +788,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `ಸರಿ, ${n} ಅವರ ${r(a)} ರೂಪಾಯಿ ಎಂಟ್ರಿ ತೆಗೆದಿದ್ದೇನೆ.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'} ಅಂತ ಬದಲಾಯಿಸಲಾ?`,
     reminderAsk: (n) => `${n} ಅವರಿಗೆ ನೆನಪಿನ ಸಂದೇಶ ಕಳುಹಿಸಲಾ?`,
+    phoneAsk: (n, p) => `${n} ಅವರ ನಂಬರ್ ${p}, ಸರಿನಾ?`,
+    addAsk: (n) => `ಹೊಸ ಗ್ರಾಹಕ ${n}, ಖಾತೆ ತೆರೆಯಲಾ?`,
   },
   ta: {
     batchAsk: (i, d) => `${list(i)}, எல்லாம் ${d === 'credit' ? 'கடனா' : 'வரவா'}?`,
@@ -787,6 +797,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `சரி, ${n} ${r(a)} ரூபாய் பதிவை நீக்கினேன்.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'} என்று மாற்றவா?`,
     reminderAsk: (n) => `${n} அவர்களுக்கு நினைவூட்டல் செய்தி அனுப்பட்டுமா?`,
+    phoneAsk: (n, p) => `${n} அவர்களின் எண் ${p}, சரியா?`,
+    addAsk: (n) => `புதிய வாடிக்கையாளர் ${n}, கணக்கு திறக்கட்டுமா?`,
   },
   te: {
     batchAsk: (i, d) => `${list(i)}, అన్నీ ${d === 'credit' ? 'అప్పు' : 'జమ'}నా?`,
@@ -794,6 +806,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `సరే, ${n} ${r(a)} రూపాయల ఎంట్రీ తీసేశాను.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'} అని మార్చనా?`,
     reminderAsk: (n) => `${n} గారికి రిమైండర్ సందేశం పంపనా?`,
+    phoneAsk: (n, p) => `${n} గారి నంబర్ ${p}, సరేనా?`,
+    addAsk: (n) => `కొత్త కస్టమర్ ${n}, ఖాతా తెరవనా?`,
   },
   ml: {
     batchAsk: (i, d) => `${list(i)}, എല്ലാം ${d === 'credit' ? 'കടം' : 'വരവ്'} ആണോ?`,
@@ -801,6 +815,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `ശരി, ${n}-ന്റെ ${r(a)} രൂപ എൻട്രി മാറ്റി.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'} എന്ന് മാറ്റട്ടെ?`,
     reminderAsk: (n) => `${n} ന് ഓർമ്മപ്പെടുത്തൽ സന്ദേശം അയക്കട്ടെ?`,
+    phoneAsk: (n, p) => `${n} ന്റെ നമ്പർ ${p}, ശരിയാണോ?`,
+    addAsk: (n) => `പുതിയ ഉപഭോക്താവ് ${n}, അക്കൗണ്ട് തുറക്കട്ടെ?`,
   },
   mr: {
     batchAsk: (i, d) => `${list(i)}, सगळे ${d === 'credit' ? 'उधार' : 'जमा'}?`,
@@ -808,6 +824,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `ठीक आहे, ${n} ची ${r(a)} रुपयांची नोंद काढली.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'} असे बदलू?`,
     reminderAsk: (n) => `${n} यांना आठवण संदेश पाठवू का?`,
+    phoneAsk: (n, p) => `${n} यांचा नंबर ${p}, बरोबर?`,
+    addAsk: (n) => `नवीन ग्राहक ${n}, खाते उघडू का?`,
   },
   bn: {
     batchAsk: (i, d) => `${list(i)}, সব ${d === 'credit' ? 'বাকি' : 'জমা'}?`,
@@ -815,6 +833,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `ঠিক আছে, ${n}-এর ${r(a)} টাকার এন্ট্রি মুছে দিলাম।`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'} করে দিই?`,
     reminderAsk: (n) => `${n}-কে মনে করানোর বার্তা পাঠাব?`,
+    phoneAsk: (n, p) => `${n}-এর নম্বর ${p}, ঠিক আছে?`,
+    addAsk: (n) => `নতুন গ্রাহক ${n}, খাতা খুলব?`,
   },
   gu: {
     batchAsk: (i, d) => `${list(i)}, બધું ${d === 'credit' ? 'ઉધાર' : 'જમા'}?`,
@@ -822,6 +842,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `બરાબર, ${n} ની ${r(a)} રૂપિયાની એન્ટ્રી કાઢી નાખી.`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'} કરી દઉં?`,
     reminderAsk: (n) => `${n} ને યાદ અપાવવાનો સંદેશ મોકલું?`,
+    phoneAsk: (n, p) => `${n} નો નંબર ${p}, બરાબર?`,
+    addAsk: (n) => `નવા ગ્રાહક ${n}, ખાતું ખોલું?`,
   },
   pa: {
     batchAsk: (i, d) => `${list(i)}, ਸਾਰੇ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}?`,
@@ -829,6 +851,8 @@ const MORE: Record<Lang, MoreReplies> = {
     removed: (n, a) => `ਠੀਕ ਹੈ, ${n} ਦੀ ${r(a)} ਰੁਪਏ ਵਾਲੀ ਐਂਟਰੀ ਹਟਾ ਦਿੱਤੀ।`,
     changeAsk: (n, a, d) => `${n}, ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'} ਕਰ ਦਿਆਂ?`,
     reminderAsk: (n) => `${n} ਨੂੰ ਯਾਦ ਕਰਾਉਣ ਵਾਲਾ ਸੁਨੇਹਾ ਭੇਜਾਂ?`,
+    phoneAsk: (n, p) => `${n} ਦਾ ਨੰਬਰ ${p}, ਠੀਕ ਹੈ?`,
+    addAsk: (n) => `ਨਵਾਂ ਗਾਹਕ ${n}, ਖਾਤਾ ਖੋਲ੍ਹਾਂ?`,
   },
 }
 export const sayMore = (lang: Lang): MoreReplies => MORE[lang]
