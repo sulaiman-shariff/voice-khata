@@ -141,3 +141,13 @@ export class WakeStream {
     this.lastWake = -Infinity
   }
 }
+
+/**
+ * Inference fell behind: keep only the newest `max` chunks. Returns how many were dropped; when
+ * any were, the audio is no longer continuous and the streaming state must be reset.
+ */
+export function dropBacklog<T>(queue: T[], max: number): number {
+  const n = Math.max(0, queue.length - max)
+  if (n) queue.splice(0, n)
+  return n
+}

@@ -5,7 +5,7 @@
 //  - Stateful: inputs `chunk` [1,1280] + state tensors; every output `<name>_out` is fed back as
 //    input `<name>` on the next call. Initial state is zeros (shapes from the model's input
 //    metadata), then 25 silent chunks of warm-up; the warmed-up state is what reset() restores.
-//  - Read `score` [1]; wake at >= 0.5, at most once per 2 s (and the state is reset after a wake).
+//  - Read `score` [1]; wake at >= threshold (0.6, below), at most once per 2 s (and the state is reset after a wake).
 
 export const MODEL_CONTRACT = {
   sampleRate: 16000,

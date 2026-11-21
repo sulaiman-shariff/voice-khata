@@ -5,7 +5,7 @@
 // The per-chunk inference (state feedback, warm-up, threshold, debounce) lives in stream.ts.
 import * as ort from 'onnxruntime-web/wasm'
 import { Chunker, MODEL_CONTRACT, toModelInput } from './features'
-import { WakeStream, type MakeTensor, type SessionLike } from './stream'
+import { WakeStream, dropBacklog, type MakeTensor, type SessionLike } from './stream'
 
 ort.env.wasm.numThreads = 1
 ort.env.wasm.proxy = false
@@ -38,8 +38,9 @@ async function drain() {
   busy = true
   try {
     while (queue.length) {
-      // If inference falls behind, keep only the newest chunks.
-      if (queue.length > 8) queue.splice(0, queue.length - 8)
+      // If inference falls behind, keep only the newest chunks; the state no longer matches the
+      // audio (a gap), so start again from the warmed-up state
+      if (dropBacklog(queue, 8)) stream.reset()
       const { data } = toModelInput(queue.shift()!)
       const { score, wake } = await stream.step(data)
       if (wake) postMessage({ type: 'wake', score })

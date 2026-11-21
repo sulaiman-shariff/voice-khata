@@ -1,8 +1,8 @@
 /**
  * KhataBhai session endpoint (Vercel Function, Node, region bom1, WebSocket).
- * Phone <-> this function <-> Gnani Prisma (STT, realtime + REST second reading) / Timbre (TTS),
- * with Claude Haiku for hard turns. All dialogue logic lives in
- * server/session.ts.
+ * Phone <-> this function <-> Gnani Prisma (realtime STT, several languages at once) / Timbre (TTS),
+ * with the agent (Gemini on Vertex AI, server/agent) reading every turn the instant path cannot.
+ * All dialogue logic lives in server/session.ts.
  */
 import fs from 'node:fs'
 import http from 'node:http'

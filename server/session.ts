@@ -3,7 +3,8 @@
  *
  *   audio -> energy tracker (pause, SNR)  ─┐
  *        -> Prisma STT (partials, final) ──┼─> end of turn: text complete + 300 ms pause -> commit
- *                                          └─> final -> fast parser (or Haiku) -> dialogue -> ops + reply -> Timbre
+ *                                          └─> final -> attention gate -> instant path or the agent (Gemini tools)
+ *                                              -> ledger safety layer -> ops + reply -> Timbre
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */

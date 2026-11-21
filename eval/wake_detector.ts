@@ -6,7 +6,8 @@
  *  2. Synthetic counter scenes (eval/data/synth): wakes on "KhataBhai ..." lines, on chatter that
  *     merely mentions KhataBhai (reported separately), and false wakes on everything else.
  *  3. Pure noise (eval/data/noise/*.pcm, DEMAND street/cafeteria/square + babble): false wakes/hour.
- * Usage: npx tsx eval/wake_detector.ts   (WAKE_DATA=<trainer data dir>, THRESHOLD=0.5)
+ * Usage: npx tsx eval/wake_detector.ts   (WAKE_DATA=<trainer data dir with pos/ and neg/, default
+ *        wakeword/data>, THRESHOLD=0.6 by default, the app's own MODEL_CONTRACT.threshold)
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import * as ort from 'onnxruntime-web'
@@ -14,7 +15,8 @@ import { Chunker, MODEL_CONTRACT, toModelInput } from '../src/lib/wake/features.
 import { WakeStream, type MakeTensor, type SessionLike } from '../src/lib/wake/stream.js'
 
 const MODEL = 'public/wakeword/khatabhai.onnx'
-const WAKE_DATA = process.env.WAKE_DATA ?? '.claude/worktrees/agent-a0ed002bab25ebaac/wakeword/data'
+/** the trainer's clips (wakeword/train.py writes them under wakeword/data); not in git */
+const WAKE_DATA = process.env.WAKE_DATA ?? 'wakeword/data'
 const SYNTH = 'eval/data/synth'
 const NOISE = 'eval/data/noise'
 const THRESHOLD = Number(process.env.THRESHOLD ?? MODEL_CONTRACT.threshold)
@@ -81,7 +83,7 @@ if (existsSync(WAKE_DATA)) {
       `max score ${f2(maxes[0])}..${f2(maxes.at(-1)!)}${fails.length ? `  FAIL: ${fails.join(' ')}` : ''}`,
     )
   }
-} else console.log(`(no trainer data at ${WAKE_DATA}; skipping held-out clips)`)
+} else console.log(`(no trainer data at ${WAKE_DATA}: set WAKE_DATA=<dir with pos/ and neg/ .pcm clips from wakeword/train.py>; skipping held-out clips)`)
 
 // 2. synthetic scenes
 type SynthLine = { text: string; addressed: boolean; startMs: number; endMs: number }

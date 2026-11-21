@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WakeStream, type InputMetaLike, type MakeTensor, type SessionLike, type TensorLike } from './stream'
+import { WakeStream, dropBacklog, type InputMetaLike, type MakeTensor, type SessionLike, type TensorLike } from './stream'
 
 const makeTensor: MakeTensor = (_type, data, dims) => ({ data, dims })
 
@@ -87,5 +87,15 @@ describe('WakeStream', () => {
     const s = new FakeSession()
     ;(s as { outputNames: string[] }).outputNames = ['score', 'acc_out']
     await expect(WakeStream.open(s, makeTensor)).rejects.toThrow(/step_out/)
+  })
+})
+
+describe('dropBacklog', () => {
+  it('keeps the newest chunks and says how many were dropped (the stream state must then be reset)', () => {
+    const q = [1, 2, 3, 4, 5]
+    expect(dropBacklog(q, 8)).toBe(0)
+    expect(q).toEqual([1, 2, 3, 4, 5])
+    expect(dropBacklog(q, 2)).toBe(3)
+    expect(q).toEqual([4, 5])
   })
 })
