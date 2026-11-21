@@ -144,3 +144,27 @@ describe('formatINR', () => {
     expect(formatINR(3.5)).toBe('3.5')
   })
 })
+
+describe('Dravidian combining hundreds (600-900)', () => {
+  it.each([
+    ['ಏಳುನೂರ ಐವತ್ತು', 750], ['ಎಂಟುನೂರ ಐವತ್ತು', 850], ['ಆರುನೂರ ಇಪ್ಪತ್ತು', 620], ['ಒಂಬೈನೂರ ಹತ್ತು', 910],
+    ['எழுநூற்று ஐம்பது', 750], ['எண்ணூற்று இருபது', 820], ['அறுநூற்று பத்து', 610],
+  ])('%s -> %d', (t, want) => expect(parseAmounts(t)[0]?.value).toBe(want))
+})
+
+describe('Marathi / Bengali / Gujarati / Punjabi teens and hundreds (from the Timbre round trip)', () => {
+  it.each([
+    ['एक हजार आठशे सत्तर', 1870], ['रमेश सतरा रुपये', 17], ['এক হাজার আটশো সত্তর টাকা', 1870], ['সতেরো টাকা', 17],
+    ['સત્તર રૂપિયા', 17], ['સિત્તેર રૂપિયા', 70], ['ਸਤਾਰਾਂ ਰੁਪਏ', 17], ['ஆயிரத்தி எண்ணூற்று எழுபது', 1870],
+    ['सातशे पन्नास', 750], ['નવસો', 900], ['এক হাজার আটশ সত্তর', 1870], ['ਸਤਾਰ੍ਹਾਂ ਰੁਪਏ', 17],
+    ['പതിനേഴ് രൂപ', 17], ['ഏഴു രൂപ', 7], ['മുന്നൂറ്റി നാല്പത് രൂപ', 340], ['ആയിരത്തി എണ്ണൂറ്റി എഴുപത്', 1870],
+    ['முன்னூற்று நாற்பது', 340],
+  ])('%s -> %d', (t, want) => expect(parseAmounts(t)[0]?.value).toBe(want))
+  it('Gujarati 17 and 70 are flagged as confusable with each other', () => {
+    expect(parseAmounts('સત્તર રૂપિયા')[0].alternatives).toEqual([70])
+    expect(parseAmounts('સિત્તેર રૂપિયા')[0].alternatives).toEqual([17])
+  })
+  it('Hindi "तेरा" (your) is not a number', () => {
+    expect(parseAmounts('तेरा हिसाब')).toEqual([])
+  })
+})

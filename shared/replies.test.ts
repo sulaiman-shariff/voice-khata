@@ -55,3 +55,12 @@ describe('replies', () => {
     expect(guardReply('Ramesh owes 500 rupees in total.')).not.toBeNull()
   })
 })
+
+describe('stripTags', () => {
+  it('removes Timbre audio tags and tidies spacing', async () => {
+    const { stripTags } = await import('./replies.js')
+    expect(stripTags('रमेश 340, <pauses> सुरेश 200, सब उधार?')).toBe('रमेश 340, सुरेश 200, सब उधार?')
+    expect(stripTags('<pauses>नमस्ते')).toBe('नमस्ते')
+    expect(stripTags('no tags here')).toBe('no tags here')
+  })
+})

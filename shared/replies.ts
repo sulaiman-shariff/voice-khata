@@ -392,7 +392,11 @@ export interface MoreReplies {
   removed: (name: string, amt: number) => string
   changeAsk: (name: string, amt: number, dir: Dir) => string
 }
-const list = (items: { name: string; amt: number }[]) => items.map((i) => `${i.name} ${r(i.amt)}`).join(', ')
+/** Timbre v3.0 audio tag for a short silence; stripped before text reaches the screen. */
+export const PAUSE = '<pauses>'
+/** Spoken-only markup (Timbre audio tags) removed, for the screen and for echo matching. */
+export const stripTags = (s: string) => s.replace(/\s*<[a-z][a-z ]*>\s*/g, ' ').replace(/ +([,.?!।])/g, '$1').replace(/ {2,}/g, ' ').trim()
+const list = (items: { name: string; amt: number }[]) => items.map((i) => `${i.name} ${r(i.amt)}`).join(`, ${PAUSE} `)
 const MORE: Record<Lang, MoreReplies> = {
   hi: {
     batchAsk: (i, d) => `${list(i)}, सब ${d === 'credit' ? 'उधार' : 'जमा'}?`,

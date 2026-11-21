@@ -7,11 +7,11 @@
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */
-import { type Direction, type EntryIntent, type Intent, directionAnswer, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, guardReply, say, sayMore } from '../shared/replies.js'
+import { type Lang, LOCALE, guardReply, langFromLocale, say, sayMore, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import type { LlmContext, LlmReading } from './parse/llm.js'
 import { validate } from './parse/llm.js'
@@ -20,20 +20,28 @@ export interface SttLike {
   send(pcm: Buffer): void
   commit(): void
   setKeyterms(terms: string[]): void
+  setLanguage?(locale: string): void
   close(): void
 }
 export interface SttCallbacks {
   onSpeechStart?: () => void
   onSpeechEnd?: () => void
   onPartial?: (text: string) => void
-  onFinal?: (text: string) => void
+  onFinal?: (text: string, detectedLang?: string) => void
   onError?: (msg: string) => void
   onClose?: (code: number) => void
 }
 export interface SessionDeps {
   openStt: (locale: string, keyterms: string[], cb: SttCallbacks) => SttLike
-  speak: (text: string, locale: string, onAudio: (pcm: Buffer) => void, signal: AbortSignal) => Promise<{ firstAudioMs: number | null; bytes: number }>
+  speak: (text: string, locale: string, onAudio: (pcm: Buffer) => void, signal: AbortSignal, speed?: 0.8 | 1 | 1.2) => Promise<{ firstAudioMs: number | null; bytes: number }>
   llm: (text: string, ctx: LlmContext) => Promise<Partial<LlmReading>>
+  /**
+   * Optional second, independent transcription of a noisy turn's audio (Prisma REST,
+   * verbatim). Returns the transcript; any error or timeout means "no second opinion".
+   */
+  transcribe2?: (pcm: Buffer, locale: string, keyterms: string[], previousText?: string) => Promise<{ text: string; lang?: string }>
+  /** Also cross-check the amount of noisy money turns with transcribe2 (opt-in: it adds latency). */
+  secondReading?: boolean
   send: (msg: ServerMsg) => void
   sendAudio: (pcm: Buffer) => void
   now?: () => number
@@ -55,7 +63,15 @@ const TTS_TIMEOUT_MS = 10_000
 const POINTS_BACK = /wal[aei]\b|वाल[ाीे]|badl|बदल|change|galat|गलत|asal|असल|actually|instead|entry|एंट्री|\bkal\b|कल|yesterday|parso|परसों/i
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
 
-type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean }
+type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean; pcm?: Buffer; lang?: string }
+/** Audio kept for the second reading of a noisy turn (16 kHz s16le): the last 20 s at most. */
+const UTT_AUDIO_MAX = 20 * 16000 * 2
+/** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
+const STT_REFRESH_MS = 14 * 60_000
+/** How long an unreadable turn waits for Prisma REST to hear it in another language. */
+const RESCUE_WAIT_MS = 1500
+/** How long a noisy turn waits for the second reading before going on without it. */
+export const SECOND_READ_WAIT_MS = 1200
 const minSnr = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b))
 
 interface Draft {
@@ -99,9 +115,15 @@ export class Session {
     today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   }
   private ptt = false
+  private speed: 0.8 | 1 | 1.2 = 1
   private stt: SttLike | null = null
   private energy = newEnergyState()
   private frameCarry = Buffer.alloc(0)
+  /** mic audio since the last final, for the second reading of a noisy turn */
+  private uttAudio: Buffer[] = []
+  private uttBytes = 0
+  /** amounts the second reading heard for the turn being handled (null: none asked or none usable) */
+  private secondAmounts: number[] | null = null
   private lastPartial = ''
   private committed = false
   private commitAt: number | null = null
@@ -119,6 +141,7 @@ export class Session {
   /** what we said last and until when it may echo back through the mic */
   private lastSaid: { text: string; until: number } | null = null
   private sttRetries = 0
+  private sttOpenedAt = 0
   private closed = false
   private speaking: { ac: AbortController; text: string; ducked: boolean; until: number } | null = null
   private chain: Promise<void> = Promise.resolve()
@@ -138,6 +161,7 @@ export class Session {
         this.snap = msg.snapshot
         this.snap.recent ??= []
         this.ptt = msg.ptt
+        this.speed = msg.speed === 0.8 || msg.speed === 1.2 ? msg.speed : 1
         this.openStt()
         if (msg.firstRun)
           this.enqueue(async () => {
@@ -170,6 +194,9 @@ export class Session {
       case 'barge':
         this.bargeIn()
         break
+      case 'speed':
+        this.speed = msg.speed
+        break
       case 'playback_done':
         if (this.speaking?.ducked) this.deps.send({ type: 'unduck' })
         this.speaking = null
@@ -182,8 +209,11 @@ export class Session {
   }
 
   private openStt() {
-    this.stt?.close()
-    this.stt = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
+    const old = this.stt
+    this.stt = null
+    old?.close()
+    this.sttOpenedAt = this.now()
+    const stream: SttLike = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
       onSpeechStart: () => {
         if (this.isSpeaking() && this.speaking && !this.speaking.ducked) {
           this.speaking.ducked = true
@@ -197,10 +227,11 @@ export class Session {
           this.deps.send({ type: 'unduck' })
         }
       },
-      onFinal: (t) => this.onFinal(t),
+      onFinal: (t, l) => this.onFinal(t, l),
       onError: (m) => this.deps.send({ type: 'error', message: `stt: ${m}` }),
       onClose: () => {
         // Prisma dropped the stream (idle timeout, session cap, network): reopen, with backoff
+        if (this.stt !== stream) return // a stream we replaced on purpose
         if (this.closed || this.sttRetries >= 5) return
         const wait = 250 * 2 ** this.sttRetries++
         setTimeout(() => {
@@ -208,11 +239,24 @@ export class Session {
         }, wait).unref?.()
       },
     })
+    this.stt = stream
+  }
+
+  /** Prisma ends every stream at 15 min (close 1001): swap to a fresh one at a quiet moment before that. */
+  private maybeRefreshStt() {
+    if (this.now() - this.sttOpenedAt < STT_REFRESH_MS || this.closed) return
+    if (this.energy.inUtterance || this.committed || this.held || this.lastPartial) return
+    this.openStt()
   }
 
   // ------------------------------------------------------------------ audio + end of turn
   onAudio(pcm: Buffer): void {
     this.stt?.send(pcm)
+    if (this.deps.transcribe2) {
+      this.uttAudio.push(pcm)
+      this.uttBytes += pcm.length
+      while (this.uttBytes - this.uttAudio[0].length > UTT_AUDIO_MAX) this.uttBytes -= this.uttAudio.shift()!.length
+    }
     let buf = this.frameCarry.length ? Buffer.concat([this.frameCarry, pcm]) : pcm
     const FB = FRAME_SAMPLES * 2
     while (buf.length >= FB) {
@@ -221,6 +265,7 @@ export class Session {
       buf = buf.subarray(FB)
       this.maybeEarlyCommit()
     }
+    this.maybeRefreshStt()
     this.frameCarry = Buffer.from(buf)
   }
 
@@ -268,13 +313,14 @@ export class Session {
     return !!this.speaking && this.now() < this.speaking.until
   }
 
-  private onFinal(text: string) {
+  private onFinal(text: string, detectedLang?: string) {
     const snrDb = utteranceSnrDb(this.energy)
     const noisy = tooNoisy(this.energy)
     const speechEnd = this.lastSpeechAt
     const commitAt = this.commitAt
     const early = this.earlyCommit
     const finalAt = this.now()
+    const pcm = this.takeUttAudio()
     resetUtterance(this.energy)
     this.committed = false
     this.commitAt = null
@@ -283,14 +329,17 @@ export class Session {
     if (!text.trim()) return
     this.sttRetries = 0
     if (this.isEcho(text)) return // our own reply heard back through the phone speaker
-    let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy }
+    let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang }
     if (this.held) {
       // the rest of a list the recogniser split at a breath: one turn, as spoken
       clearTimeout(this.held.timer)
-      text = `${this.held.text.trim().replace(/[।.]$/, '')}, ${text.trim()}`
-      t = { ...t, noisy: t.noisy || this.held.t.noisy, snrDb: minSnr(t.snrDb, this.held.t.snrDb) }
+      // a list continues after a comma; a sentence cut after "रमेश का" continues with a space
+      const sep = dangling(this.held.text.replace(/[।.]\s*$/, '')) ? ' ' : ', '
+      text = `${this.held.text.trim().replace(/[।.]$/, '')}${sep}${text.trim()}`
+      const both = this.held.t.pcm && pcm ? Buffer.concat([this.held.t.pcm, pcm]) : pcm
+      t = { ...t, noisy: t.noisy || this.held.t.noisy, snrDb: minSnr(t.snrDb, this.held.t.snrDb), pcm: both }
       this.held = null
-    } else if (commitAt === null && !this.ptt && !this.pending && midList(text)) {
+    } else if (commitAt === null && !this.ptt && !this.pending && (midList(text) || dangling(text))) {
       const since = this.now()
       this.held = { text, t, since, timer: setTimeout(() => this.releaseHeld(), MID_LIST_HOLD_MS) }
       this.held.timer.unref?.()
@@ -298,6 +347,96 @@ export class Session {
       return
     }
     this.dispatchFinal(text, t)
+  }
+
+  private takeUttAudio(): Buffer | undefined {
+    if (!this.uttAudio.length) return undefined
+    const pcm = Buffer.concat(this.uttAudio)
+    this.uttAudio = []
+    this.uttBytes = 0
+    return pcm
+  }
+
+  /**
+   * Second, independent reading of a noisy money turn: Prisma REST in verbatim format (numbers
+   * spelled out, read by our own number parser) on the same audio. Resolves to the amounts it
+   * heard (rupees), or null when there is no usable second opinion.
+   */
+  private secondReading(read: Promise<{ text: string; lang?: string } | null>, text: string): Promise<number[] | null> {
+    const amounts = read
+      .then((r) => {
+        // heard in another language: that is the rescue's business, not a second opinion on the amount
+        if (!r || (r.lang && r.lang !== LOCALE[this.lang])) return null
+        const t2 = r.text
+        if (process.env.VK_DEBUG) console.log('[second]', JSON.stringify({ text, t2 }))
+        const v = parseAmounts(t2).map((a) => a.value)
+        return v.length ? v : null
+      })
+    const wait = new Promise<null>((resolve) => setTimeout(() => resolve(null), SECOND_READ_WAIT_MS).unref?.())
+    return Promise.race([amounts, wait])
+  }
+
+  /**
+   * A voice turn nobody could read: maybe the shopkeeper spoke another language than the one
+   * picked (realtime Prisma forces the session language and returns garble). Prisma REST follows
+   * the spoken language; when it hears another supported language AND that text reads as a
+   * ledger turn, switch the session to it and use that reading.
+   */
+  /** One Prisma REST reading of this turn's audio, shared by the second reading and the rescue (REST allows one request at a time). */
+  private restRead(pcm: Buffer | undefined): Promise<{ text: string; lang?: string } | null> | null {
+    if (!pcm || !this.deps.transcribe2 || pcm.length < 16000) return null
+    const prev = this.history.length ? this.history[this.history.length - 1].replace(/^\w+: /, '') : undefined
+    return Promise.race([
+      this.deps.transcribe2(pcm, LOCALE[this.lang], this.keyterms(), prev).catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), RESCUE_WAIT_MS).unref?.()),
+    ])
+  }
+
+  /**
+   * Unreadable, or money with no readable direction AND words we could not place: the verbs may
+   * be in another language. A plain "Ramesh, 400" has nothing unplaced, so it asks at once
+   * instead of waiting for Prisma REST (that wait cost 0.5-1.4 s per turn in the e2e suite).
+   */
+  private static rescuable(intent: Intent, text: string): boolean {
+    if (intent.type === 'unknown') return true
+    return intent.type === 'entries' && intent.entries.some((e) => !e.direction && !e.promise) &&
+      hasUnplacedWords(text, intent.entries.map((e) => e.name))
+  }
+
+  private async languageRescue(read: Promise<{ text: string; lang?: string } | null>): Promise<{ text: string; intent: Intent } | null> {
+    const r = await read
+    if (!r?.lang || !r.text.trim()) return null
+    const lang = langFromLocale(r.lang)
+    if (lang === this.lang || LOCALE[lang] !== r.lang) return null
+    const intent = parseFast(r.text)
+    if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return null
+    if (intent.type === 'entries' && intent.entries.some((e) => !e.direction && !e.promise)) return null // no better than what we had
+    if (process.env.VK_DEBUG) console.log('[rescue]', JSON.stringify({ from: this.lang, to: lang, text: r.text }))
+    this.switchLang(lang)
+    this.deps.send({ type: 'final', text: r.text })
+    return { text: r.text, intent }
+  }
+
+  /** Replies, and the realtime stream (update_settings, no reconnect), follow the shopkeeper's language. */
+  private switchLang(lang: Lang) {
+    if (process.env.VK_DEBUG) console.log('[switch-lang]', this.lang, '->', lang)
+    this.lang = lang
+    this.stt?.setLanguage?.(LOCALE[lang])
+    this.deps.send({ type: 'lang', lang })
+  }
+
+  /**
+   * Realtime Prisma tagged this turn with another language and it reads as a ledger turn: switch.
+   * Never on English (Hinglish code-mixing is normal) and never Hindi <-> Marathi (same script;
+   * the docs warn short clips are tagged hi-IN).
+   */
+  private followDetectedLang(detected: string | undefined, intent: Intent) {
+    if (!detected) return
+    const lang = langFromLocale(detected)
+    if (LOCALE[lang] !== detected || lang === this.lang || lang === 'en') return
+    if ((lang === 'hi' && this.lang === 'mr') || (lang === 'mr' && this.lang === 'hi')) return
+    if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return
+    this.switchLang(lang)
   }
 
   private dispatchFinal(text: string, t: TurnTiming) {
@@ -339,10 +478,11 @@ export class Session {
   // ------------------------------------------------------------------ the turn
   async handleText(
     text: string,
-    t: { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean } | null,
+    t: TurnTiming | null,
     _src: 'voice' | 'tap',
   ): Promise<void> {
     const t0 = this.now()
+    // started now so it runs alongside parsing; only noisy money turns ask for it
     let intent: Intent = parseFast(text)
     let path: 'fast' | 'llm' | 'none' = 'fast'
     let llmMs: number | undefined
@@ -350,6 +490,13 @@ export class Session {
     const noisy = t?.noisy ?? false
     // a question left hanging (shopkeeper turned to a customer) expires instead of catching a later "haan"
     if (this.pending && this.now() - this.pendingAt > PENDING_TTL_MS) this.pending = null
+    // a turn that does not read may be in another language: ask Prisma REST now, decide after parsing
+    const wantRescue = !this.pending && Session.rescuable(intent, text)
+    const wantSecond = !!this.deps.secondReading && !!t?.noisy && mentionsMoney(text)
+    const rest = wantRescue || wantSecond ? this.restRead(t?.pcm) : null
+    // started now so they run alongside parsing
+    const second = rest && wantSecond ? this.secondReading(rest, text) : null
+    const rescue = wantRescue ? rest : null
 
     let unsureChange = false
     if (!this.pending && this.needsLlm(text, intent)) {
@@ -371,7 +518,12 @@ export class Session {
       if (unsureChange && intent.type !== 'modify') intent = { type: 'unknown' }
       llmMs = this.now() - l0
     }
+    if (rescue && !this.pending && Session.rescuable(intent, text)) {
+      const rescued = await this.languageRescue(rescue)
+      if (rescued) ({ text, intent } = rescued)
+    } else if (!this.pending) this.followDetectedLang(t?.lang, intent)
     const parseMs = this.now() - t0
+    this.secondAmounts = second ? await second : null
 
     const before = this.pending
     let reply = this.pending
@@ -379,6 +531,7 @@ export class Session {
       : this.dispatch(intent, text, snrDb, noisy, path === 'llm' ? 'llm' : 'fast')
     if (!reply && unsureChange) reply = { parts: [say(this.lang).didNotCatch()], ops: [] }
     if (this.pending && this.pending !== before) this.pendingAt = this.now()
+    this.secondAmounts = null
     if (!reply) path = 'none'
     this.remember(`Shopkeeper: ${text}`)
     if (reply?.parts.length) this.remember(`Agent: ${reply.parts.join(' ')}`)
@@ -406,6 +559,7 @@ export class Session {
         snrDb,
       }
       this.deps.send({ type: 'metrics', turn: m })
+      if (process.env.VK_DEBUG) console.log('[metrics]', JSON.stringify({ ...m, text }))
     }
     this.deps.send({ type: 'turn_done' })
   }
@@ -628,18 +782,29 @@ export class Session {
   }
 
   private draftFrom(e: EntryIntent, transcript: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Draft {
+    let alt = e.reasons.includes('confusable') && e.amount.alternatives.length ? e.amount.alternatives[0] : null
+    const reasons = [...e.reasons]
+    const sec = this.secondAmounts
+    if (alt === null && sec && !sec.includes(e.amount.value)) {
+      // the second reading of this noisy audio heard a different number: ask which, never guess
+      const other = sec.length === 1 ? sec[0] : null
+      if (other !== null && other > 0) {
+        alt = other
+        reasons.push('second-reading-differs')
+      }
+    } else if (sec?.includes(e.amount.value)) reasons.push('second-reading-agrees')
     return {
       heardName: e.name,
       cid: null,
       newName: null,
       nameSure: false,
       paise: Math.round(e.amount.value * 100),
-      alt: e.reasons.includes('confusable') && e.amount.alternatives.length ? e.amount.alternatives[0] : null,
+      alt,
       direction: e.direction,
       dayOffset: e.dayOffset,
       promise: e.promise,
       confidence: e.confidence,
-      reasons: e.reasons,
+      reasons,
       path,
       transcript,
       snrDb,
@@ -1048,11 +1213,12 @@ export class Session {
 
   // ------------------------------------------------------------------ speech out
   /** Speak and stream audio; returns the time first audio was sent (or null). */
-  private async speak(text: string): Promise<number | null> {
+  private async speak(spoken: string): Promise<number | null> {
     this.bargeIn() // never talk over ourselves
     const ac = new AbortController()
     const start = this.now()
     let bytes = 0
+    const text = stripTags(spoken) // what the screen shows and what can echo back
     this.speaking = { ac, text, ducked: false, until: start + 60_000 }
     this.deps.send({ type: 'say', text })
     let first: number | null = null
@@ -1067,12 +1233,12 @@ export class Session {
     })
     try {
       await Promise.race([
-        this.deps.speak(text, LOCALE[this.lang], (pcm) => {
+        this.deps.speak(spoken, LOCALE[this.lang], (pcm) => {
           if (ac.signal.aborted) return
           if (first === null) first = this.now()
           bytes += pcm.length
           this.deps.sendAudio(pcm)
-        }, ac.signal),
+        }, ac.signal, this.speed),
         timeout,
       ])
     } catch (e) {

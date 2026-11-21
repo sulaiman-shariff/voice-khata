@@ -1,14 +1,16 @@
 /**
  * Voice Khata session endpoint (Vercel Function, Node, region bom1, WebSocket).
- * Phone <-> this function <-> Gnani Prisma (STT) / Timbre (TTS), with Claude Haiku as the
- * fallback parser. All dialogue logic lives in server/session.ts.
+ * Phone <-> this function <-> Gnani Prisma (STT, realtime + REST second reading) / Timbre (TTS),
+ * with Gnani Evon (Claude Haiku as fallback) for hard turns. All dialogue logic lives in
+ * server/session.ts.
  */
 import http from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
 import { TtsPool } from '../server/gnani/tts.js'
-import { readWithLlm, warmUp } from '../server/parse/llm.js'
+import { transcribeRest } from '../server/gnani/rest.js'
+import { readHard, warmUp } from '../server/parse/llm.js'
 import { Session } from '../server/session.js'
 
 const server = http.createServer((_req, res) => {
@@ -55,12 +57,21 @@ wss.on('connection', (ws, req) => {
         onSpeechStart: cb.onSpeechStart,
         onSpeechEnd: cb.onSpeechEnd,
         onPartial: cb.onPartial,
-        onFinal: (t) => cb.onFinal?.(t),
+        onFinal: (t, l) => cb.onFinal?.(t, l),
         onError: cb.onError,
         onClose: cb.onClose,
       }),
-    speak: (text, locale, onAudio, signal) => tts.speak(text, locale, onAudio, signal),
-    llm: async (text, ctx) => (await readWithLlm(text, ctx)).reading,
+    speak: (text, locale, onAudio, signal, speed) => tts.speak(text, locale, onAudio, signal, speed),
+    llm: async (text, ctx) => {
+      const r = await readHard(text, ctx)
+      if (process.env.VK_DEBUG) console.log('[llm-model]', r.model, Math.round(r.ms), r.fallback ?? '')
+      return r.reading
+    },
+    // Prisma REST reading of the turn audio: language rescue always; the noisy-turn amount
+    // cross-check only with SECOND_READING=on (it agreed 57/65 times in the e2e suite, caught no
+    // error, and cost 0.4-0.65 s per noisy turn). SECOND_READING=off disables both.
+    transcribe2: process.env.SECOND_READING === 'off' ? undefined : (pcm, locale, keyterms, prev) => transcribeRest(key, pcm, locale, keyterms, prev),
+    secondReading: process.env.SECOND_READING === 'on',
     send,
     sendAudio: (pcm) => ws.readyState === WebSocket.OPEN && ws.send(pcm),
   })
@@ -112,6 +123,8 @@ function validMsg(m: unknown): m is ClientMsg {
       return typeof x.text === 'string'
     case 'tap':
       return x.action === 'yes' || x.action === 'no' || x.action === 'undo'
+    case 'speed':
+      return x.speed === 0.8 || x.speed === 1 || x.speed === 1.2
     case 'ptt_start':
     case 'ptt_end':
     case 'playback_done':

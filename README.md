@@ -21,7 +21,7 @@ Voice Khata is a voice credit ledger for kirana shops, built for the Gnani Voice
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
 
-The deterministic parser handles most turns with no LLM call. Claude Haiku is called only for hard turns, and its output is validated: an amount that is not among the candidates found in the transcript is rejected.
+The deterministic parser handles most turns with no LLM call. Hard turns go to Gnani's Evon LLM first, with Claude Haiku as the fallback (our current key has no Evon scope, so today that is Haiku). Either way the output is validated: an amount that is not among the candidates found in the transcript is rejected.
 
 ## Architecture
 
@@ -37,12 +37,14 @@ flowchart LR
   end
   STT["Gnani Prisma v3.0 STT"]
   TTS["Gnani Timbre v3.0 TTS"]
-  LLM["Claude Haiku<br/>(hard turns only)"]
+  REST["Gnani Prisma REST STT<br/>(noisy or unreadable turns)"]
+  LLM["Gnani Evon, Claude Haiku fallback<br/>(hard turns only)"]
   NEON[("Neon Postgres<br/>backup ciphertext,<br/>confirmation tokens")]
   UI <-- "WebSocket: 16 kHz PCM up,<br/>PCM and JSON ops down" --> S
   S <-- WebSocket --> STT
   S <-- WebSocket --> TTS
   S -. fallback .-> LLM
+  S -. second reading .-> REST
   UI -. "optional PIN-encrypted backup<br/>and customer confirmation link" .-> NEON
 ```
 
@@ -75,17 +77,37 @@ Measured on production (Vercel bom1), 7 Hindi conversation turns: speech end to 
 
 ## Gnani services used
 
-**Prisma v3.0 STT** (`wss://api.vachana.ai/stt/v3/stream`, WebSocket only)
-- Headers: `x-api-key-id`, `model: prisma-v3.0`, `language_code` (exactly one locale; a list is rejected), `format: transcribe`, `x-sample-rate: 16000`, `x-partials: true`, `x-idle-timeout-sec`, `topic`, and `keyterms`.
+Every claim below was checked against the live API with the probe scripts `eval/probe_gnani*.ts`.
+
+**Prisma v3.0 STT, realtime** (`wss://api.vachana.ai/stt/v3/stream`)
+- Headers: `x-api-key-id`, `model: prisma-v3.0`, `language_code`, `format: transcribe`, `x-sample-rate: 16000`, `x-partials: true`, `x-idle-timeout-sec`, `topic`, `keyterms`. The VAD headers (`x-min-silence-ms`, `x-min-segment-ms`, `x-vad-threshold`) are optional, through env.
+- VAD silence, measured: with no header, `speech_end` arrived about 1,250 ms after an isolated clip ended (the docs say the default is 500 ms). With `x-min-silence-ms` at 300, 500 and 700 it arrived after about 320, 620 and 1,000 ms. In the full e2e suite, 500 ms gave no measurable end-to-end gain, because our early commit already ends complete sentences sooner, so it is off by default.
+- Where a clean turn's time goes (76 turns, hi/kn/ta/te, local server): final transcript at p50 812 ms after speech end, parse 0 ms, Timbre first audio 212 ms after the final, first audio sent at p50 1,035 ms. Our early commit fired on about 25% of turns. On the rest, Prisma's last partial is one word short (it reads "रमेश का 150"; the final reads "रमेश का 150 उधार।"), so the sentence never looks complete before Prisma finalizes. Committing on `speech_end` was measured and gave no gain.
+- A shorter silence window splits a sentence at a breath ("रमेश का।" then "340 रुपये उधार।"). The session holds a line that ends on a case marker or conjunction and joins it to the next one, as it already did for lists.
+- `language_code` is a single locale on realtime. A list is rejected ("exactly one locale"). The `multi_lang_codes` header named in that error is accepted but changes nothing. `update_settings` with `language_code` does switch a live stream without a reconnect.
+- `detected_language_code` comes back on each final. When it names another supported language and the turn reads as a ledger turn, the session switches to that language. English never triggers a switch (Hinglish is normal), and neither does Hindi to Marathi or back (same script).
+- The stream is refreshed at a quiet moment after 14 minutes, before Prisma's 15-minute cap closes it with code 1001.
 - Input is 16 kHz s16le PCM in exact 1024-byte frames; the server re-frames whatever the phone sends.
 - `format=transcribe` returns digits ("रमेश का 340 रुपये उधार"). `codemix` returns number words, which are harder to read exactly.
 - `keyterms` biasing: the customer names in the ledger are sent as keyterms when the stream opens (non-ASCII JSON-escaped, up to 200), and can be replaced mid-session with `update_settings`.
 - `commit` frame: once the transcript is a complete khata sentence and the speaker has paused, we send `commit` rather than wait for Prisma's silence timer.
 - Finding: the `x-partials: true` header is not in the public docs. With it, Prisma streams `partial_transcript` events plus `speech_start` and `speech_end` events, and ends the turn with `final_transcript`. Without it you only get `processing` and `transcript`. Partials are what let us parse before the sentence ends.
 
+**Prisma v3.0 STT, REST** (`POST https://api.vachana.ai/stt/v3`), used for a second reading of the same turn audio
+- On REST, `language_code` is a hint, not a lock. Kannada speech sent with `hi-IN` comes back in Kannada script tagged `kn-IN`. The realtime stream, with Shivani-voiced Kannada, wrote it in Hindi script instead.
+- **Noisy turns (opt-in, `SECOND_READING=on`):** the audio is also sent with `format=verbatim`, so numbers come back as words and our own number parser reads the amount. When the two readings disagree, the agent asks "70 ya 17?" instead of a plain yes/no read-back. `previous_text` carries what the agent just asked. In the e2e suite the two readings agreed 57 times out of 65 and the cross-check caught no error, while adding 0.4–0.65 s per noisy turn, so it is off by default.
+- **Unreadable turns in another language:** when realtime text does not read as a ledger turn, or has money but no direction, the REST reading is used if it is in another supported language and does read. The session switches to that language.
+- Both uses share one REST call per turn, because REST allows one active request at a time. Latency was 180–450 ms warm. Any error or timeout (1.2–1.5 s) leaves the turn as it would have been.
+- v3.0 vs v2.5: both read 7 of 7 amounts correctly across hi/kn/ta/te/en/mr, so we stay on v3.0. The comparison found a gap in our own parser: Kannada "ಏಳುನೂರ ಐವತ್ತು" was read as 50. The joined hundreds forms for 600–900 are now handled in Kannada, Tamil and Malayalam.
+
 **Timbre v3.0 TTS** (`wss://api.vachana.ai/api/v1/tts`, WebSocket only)
-- Voice: Shivani, 16 kHz PCM.
-- A pool of pre-opened sockets removes connect time, and one socket serves many requests. There is no cancel message, so on barge-in the listener is detached and the rest of that reply is drained and dropped.
+- One female voice per language, each from Gnani's recommended list for that language: Shivani (hi/mr/bn/gu), Sunaina (en/ml), Sneha (kn), Kalpana (ta/te/pa). 16 kHz PCM. `eval/tts_roundtrip.ts` speaks each language's saved-entry reply with an amount and reads it back through Prisma. For Malayalam we tried Tarika, Rajni, Shubham, Sunaina and Shivani, and Sunaina came back most exactly. Spoken 17 is sometimes heard as 15 (പതിനഞ്ച്) with every voice.
+- `<pauses>` audio tags between names in list read-backs. Tags are removed from the on-screen text and from echo matching.
+- `speed: 1.2` when "Faster replies" is on in Settings (it changes mid-session).
+- A pool of pre-opened sockets removes connect time, and one socket serves many requests. There is no cancel message: a probe sent `{"type":"cancel"}` and 94 of 96 chunks still arrived. On barge-in the listener is detached, and the rest of that reply is drained and dropped.
+
+**Evon LLM** (`POST https://api.vachana.ai/v1/chat/completions`, `evon-v3.5`, `reasoning_effort: none`)
+- Evon is tried first for hard turns, with the same prompt and tool schema as Haiku. On error, a 2.5 s timeout or no tool call, the turn falls back to Haiku. A 401/402/403 turns Evon off for the life of the process. Our hackathon key returns `403 SCOPE_NOT_ALLOWED` today, so Haiku answers. Set `LLM_PROVIDER=haiku` to skip Evon.
 - No voice cloning is used anywhere.
 
 Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our own code in `server/` and `shared/`.
@@ -114,7 +136,7 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Speech end to first reply audio | p50 729 ms, max 774 ms (Vercel bom1) |
 | Early commit | fires about 280 ms after the pause when the sentence is complete |
 | Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
-| Unit tests | 298 passing |
+| Unit tests | 507 passing |
 
 ### STT noise benchmark (exact amount)
 
@@ -154,6 +176,9 @@ Environment variables (names only; `.env` is gitignored):
 - `ANTHROPIC_API_KEY`
 - `DATABASE_URL` (optional; enables backup and confirmation links, set by the Neon integration on Vercel)
 - `CRON_SECRET` (optional; protects the cleanup cron)
+- `LLM_PROVIDER` (optional; `evon` by default, `haiku` to skip Evon)
+- `SECOND_READING` (optional; `on` adds the noisy-turn amount cross-check, `off` also disables the language rescue)
+- `STT_MIN_SILENCE_MS`, `STT_VAD_THRESHOLD` (optional; Prisma realtime VAD tuning, not sent unless set)
 
 Run the voice server locally:
 

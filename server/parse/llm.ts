@@ -1,5 +1,5 @@
 /**
- * Slow path: Claude Haiku 5.5 reads turns the fast path could not settle.
+ * Slow path: Gnani Evon (Claude Haiku 5.5 as fallback) reads turns the fast path could not settle.
  *
  * The model never invents money. It picks from the amounts our own parser heard
  * (`candidates`); anything else is rejected by `validate()` and the agent asks instead.
@@ -153,11 +153,9 @@ function describeCandidates(spans: AmountSpan[]): string {
 let client: Anthropic | null = null
 const getClient = () => (client ??= new Anthropic({ maxRetries: 1, timeout: 6000 }))
 
-export async function readWithLlm(
-  transcript: string, ctx: LlmContext, signal?: AbortSignal,
-): Promise<{ reading: Partial<LlmReading>; ms: number; cachedTokens: number }> {
+function userMessage(transcript: string, ctx: LlmContext): string {
   const spans = parseAmounts(transcript)
-  const user = [
+  return [
     `Language: ${ctx.lang}`,
     `Known customers: ${ctx.customers.length ? ctx.customers.slice(0, 80).join(', ') : 'none yet'}`,
     `Recent conversation:\n${ctx.history?.length ? ctx.history.join('\n') : '(start of session)'}`,
@@ -166,6 +164,11 @@ export async function readWithLlm(
     `Recent-entry amounts (only for "same"/"bhi"/"wahi"): ${ctx.contextAmounts?.length ? [...new Set(ctx.contextAmounts)].join(', ') : 'none'}`,
     `Utterance: ${transcript}`,
   ].join('\n')
+}
+
+export async function readWithLlm(
+  transcript: string, ctx: LlmContext, signal?: AbortSignal,
+): Promise<{ reading: Partial<LlmReading>; ms: number; cachedTokens: number }> {
   const t0 = performance.now()
   const res = await getClient().messages.create(
     {
@@ -174,7 +177,7 @@ export async function readWithLlm(
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools: [TOOL],
       tool_choice: { type: 'tool', name: 'khata' },
-      messages: [{ role: 'user', content: user }],
+      messages: [{ role: 'user', content: userMessage(transcript, ctx) }],
     },
     { signal },
   )
@@ -182,6 +185,69 @@ export async function readWithLlm(
   const block = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!block) throw new Error(`no tool call (stop_reason ${res.stop_reason})`)
   return { reading: block.input as Partial<LlmReading>, ms, cachedTokens: res.usage.cache_read_input_tokens ?? 0 }
+}
+
+export const EVON_MODEL = 'evon-v3.5'
+const EVON_URL = 'https://api.vachana.ai/v1/chat/completions'
+/** Evon gets this long before the turn falls back to Haiku. */
+export const EVON_TIMEOUT_MS = 2500
+
+/** Gnani Evon (OpenAI-compatible chat completions) with the same prompt and tool as Haiku. */
+export async function readWithEvon(
+  transcript: string, ctx: LlmContext, signal?: AbortSignal,
+): Promise<{ reading: Partial<LlmReading>; ms: number }> {
+  const t0 = performance.now()
+  const res = await fetch(EVON_URL, {
+    method: 'POST',
+    headers: { 'X-API-Key-ID': process.env.GNANI_API_KEY ?? '', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: EVON_MODEL,
+      reasoning_effort: 'none',
+      max_tokens: 600,
+      temperature: 0,
+      messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: userMessage(transcript, ctx) }],
+      tools: [{ type: 'function', function: { name: TOOL.name, description: TOOL.description, parameters: TOOL.input_schema } }],
+      tool_choice: { type: 'function', function: { name: TOOL.name } },
+    }),
+    signal,
+  })
+  if (!res.ok) {
+    // no LLM scope / no credit on this key: stop trying for the life of the process
+    if (res.status === 401 || res.status === 402 || res.status === 403) evonOff = true
+    throw new Error(`evon ${res.status}: ${(await res.text()).slice(0, 160)}`)
+  }
+  const body = (await res.json()) as { choices?: { message?: { tool_calls?: { function?: { name?: string; arguments?: string } }[] } }[] }
+  const call = body.choices?.[0]?.message?.tool_calls?.find((c) => c.function?.name === TOOL.name)
+  if (!call?.function?.arguments) throw new Error('evon: no tool call')
+  const reading = JSON.parse(call.function.arguments) as Partial<LlmReading>
+  if (typeof reading.intent !== 'string') throw new Error('evon: no intent')
+  return { reading, ms: performance.now() - t0 }
+}
+
+let evonOff = false
+export const evonAvailable = () => !evonOff
+
+export type LlmProvider = 'evon' | 'haiku'
+const PROVIDER: LlmProvider = process.env.LLM_PROVIDER === 'haiku' ? 'haiku' : 'evon'
+
+/**
+ * Hard turns: Gnani Evon first, Claude Haiku when Evon errors, times out or returns no usable
+ * tool call. Either way the reading still goes through validate() in the session.
+ */
+export async function readHard(
+  transcript: string, ctx: LlmContext, provider: LlmProvider = PROVIDER,
+): Promise<{ reading: Partial<LlmReading>; ms: number; model: string; fallback?: string }> {
+  let fallback: string | undefined
+  if (provider === 'evon' && !evonOff) {
+    try {
+      const r = await readWithEvon(transcript, ctx, AbortSignal.timeout(EVON_TIMEOUT_MS))
+      return { ...r, model: EVON_MODEL }
+    } catch (e) {
+      fallback = String(e).slice(0, 120)
+    }
+  }
+  const r = await readWithLlm(transcript, ctx)
+  return { reading: r.reading, ms: r.ms, model: LLM_MODEL, fallback }
 }
 
 /** Fire one tiny request at boot so the prompt cache and TLS connection are warm. */

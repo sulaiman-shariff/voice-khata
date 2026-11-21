@@ -127,7 +127,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
 }
 
 export function SettingsSheet({ store, open, t, onClose, onChanged }: {
-  store: KhataStore; open: boolean; t: UiStrings; onClose: () => void; onChanged: (p: { lang?: Lang; handsFree?: boolean }) => void
+  store: KhataStore; open: boolean; t: UiStrings; onClose: () => void; onChanged: (p: { lang?: Lang; handsFree?: boolean; fastSpeech?: boolean }) => void
 }) {
   const st = store.settings
   const [name, setName] = useState(st.shopName)
@@ -144,6 +144,10 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
           <label className="flex items-center justify-between">
             <span>{t.handsFree}</span>
             <Switch checked={st.handsFree} onCheckedChange={(v) => void store.updateSettings({ handsFree: v }).then(() => onChanged({ handsFree: v }))} />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t.fastSpeech}</span>
+            <Switch checked={!!st.fastSpeech} onCheckedChange={(v) => void store.updateSettings({ fastSpeech: v }).then(() => onChanged({ fastSpeech: v }))} />
           </label>
           <label className="flex items-center justify-between">
             <span>{t.latency}</span>

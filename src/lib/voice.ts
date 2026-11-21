@@ -27,6 +27,7 @@ interface StartOpts {
   snapshot: () => Snapshot
   firstRun: boolean
   handsFree: boolean
+  fastSpeech?: boolean
 }
 
 export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
@@ -94,7 +95,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   function hello(sock: WebSocket) {
     if (!opts) return
-    sendTo(sock, { type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree })
+    sendTo(sock, { type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree, speed: opts.fastSpeech ? 1.2 : 1 })
     opts.firstRun = false // the disclosure plays once, not on every reconnect
   }
 
@@ -208,6 +209,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     switch (m.type) {
       case 'ready':
         if (status === 'connecting' || status === 'offline') setStatus('listening')
+        break
+      case 'lang':
+        if (opts) opts.lang = m.lang // reconnects keep the new language
+        ev.lang?.(m.lang)
         break
       case 'partial':
         partialAt = performance.now()
@@ -564,6 +569,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
+    setFastSpeech(on: boolean) {
+      if (opts) opts.fastSpeech = on
+      send({ type: 'speed', speed: on ? 1.2 : 1 })
+    },
     bargeIn() {
       if (!running) return
       send({ type: 'barge' })

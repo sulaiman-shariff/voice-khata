@@ -55,7 +55,8 @@ export type LedgerOp =
   | { op: 'delete_all' }
 
 export type ClientMsg =
-  | { type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean }
+  | { type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2 }
+  | { type: 'speed'; speed: 0.8 | 1 | 1.2 }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'ptt_start' }
   | { type: 'ptt_end' }
@@ -95,6 +96,7 @@ export type ServerMsg =
   | { type: 'final'; text: string }
   | { type: 'ops'; ops: LedgerOp[] }
   | { type: 'say'; text: string } // audio follows as binary PCM 16 kHz s16le
+  | { type: 'lang'; lang: Lang } // the shopkeeper spoke another language: the session switched to it
   | { type: 'audio_end' }
   | { type: 'duck' } // user started speaking over the agent: lower volume
   | { type: 'unduck' } // false alarm: restore volume

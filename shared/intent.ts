@@ -516,6 +516,16 @@ export function turnComplete(text: string): boolean {
  * A line the recogniser closed in the middle of a spoken list ("Suresh 200," + a breath + "Geeta 150 … udhaar"):
  * an entry with a name and an amount but no credit/paid word yet, ending on the number or a conjunction.
  */
+/**
+ * A line the recogniser closed at a breath mid-sentence: it ends on a case marker or a
+ * conjunction ("रमेश का", "Ramesh aur"), so the rest of the sentence is still coming.
+ */
+export function dangling(text: string): boolean {
+  const toks = tokenize(text)
+  const last = toks[toks.length - 1]
+  return !!last && (CASE.has(last) || CONJ.has(last))
+}
+
 export function midList(text: string): boolean {
   const toks = tokenize(text)
   const last = toks[toks.length - 1]

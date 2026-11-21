@@ -13,6 +13,8 @@ export interface Settings {
   firstRunDone: boolean // AI disclosure already spoken
   handsFree: boolean // true: open mic with server end-of-turn; false: push-to-talk only
   showLatency: boolean
+  /** replies at Timbre speed 1.2 instead of 1.0 (optional: older stored settings lack it) */
+  fastSpeech?: boolean
 }
 
 export interface KhataStore {
@@ -67,11 +69,13 @@ export interface VoiceEvents {
   remind(cid: string, text: string): void
   metrics(m: TurnMetrics & { clientFirstAudioMs: number | null }): void
   error(message: string): void
+  /** The server heard another language and switched the session to it. */
+  lang?(l: Lang): void
 }
 
 export interface VoiceClient {
   /** Ask mic permission + open the socket. Must be called from a user gesture (audio unlock). */
-  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean }): Promise<void>
+  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean }): Promise<void>
   stop(): void
   /** Push-to-talk (works in both modes). */
   pttDown(): void
@@ -84,6 +88,7 @@ export interface VoiceClient {
   /** Send a fresh snapshot after local (non-voice) ledger changes. */
   sendSnapshot(): void
   setHandsFree(on: boolean): void
+  setFastSpeech(on: boolean): void
   /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
   bargeIn(): void
 }

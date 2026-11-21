@@ -96,11 +96,12 @@ function Home({ store }: { store: KhataStore }) {
       remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { console.warn('[remind]', e) } },
       metrics: setMetrics,
       error: (msg) => console.warn('[voice]', msg),
+      lang: (l) => void store.updateSettings({ lang: l }),
     })
     voice.current = v
     setOn(true)
     try {
-      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree })
+      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech })
       if (!store.settings.firstRunDone) void store.updateSettings({ firstRunDone: true })
     } catch {
       voice.current = null
@@ -283,7 +284,7 @@ function Home({ store }: { store: KhataStore }) {
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
-        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.lang) { stop() } }} />
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.lang) { stop() } }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />
     </div>

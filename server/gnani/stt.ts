@@ -6,10 +6,24 @@
  * (~every 450 ms) plus `speech_start` / `speech_end` / `final_transcript`. Per the docs, `keyterms`
  * is a JSON array header (non-ASCII escaped) and can be replaced mid-session via
  * `update_settings` -> `bias.list`; sessions last up to 15 min, idle timeout 5-900 s.
+ *
+ * Re-probed 2026-11-21 (eval/probe_gnani*.ts): a `language_code` list is still rejected on
+ * realtime ("exactly one locale"), and `multi_lang_codes` is accepted but has no effect.
+ * The VAD silence window is the main latency lever: with defaults `speech_end` came ~1250 ms
+ * after the audio ended; `x-min-silence-ms` 300/500/700 gave ~320/620/1000 ms. Shorter
+ * windows split a sentence at a breath ("रमेश का।" + "340 रुपये उधार।"); the session holds
+ * such dangling lines and joins them (see `dangling` / `midList`).
  */
 import WebSocket from 'ws'
 
 const STT_URL = 'wss://api.vachana.ai/stt/v3/stream'
+/**
+ * Optional Prisma VAD tuning (env). Off by default: in the e2e suite (4 languages, clean/street/
+ * babble) 500 ms gave no measurable gain over Prisma's defaults, because our early commit already
+ * ends complete sentences sooner, and clean p95 got worse.
+ */
+const MIN_SILENCE_MS = process.env.STT_MIN_SILENCE_MS
+const VAD_THRESHOLD = process.env.STT_VAD_THRESHOLD
 export const FRAME_BYTES = 1024 // 512 samples of s16le @ 16 kHz
 
 export interface SttEvents {
@@ -42,6 +56,12 @@ export class SttStream {
       'x-idle-timeout-sec': '300',
       topic: 'kirana shop credit ledger: customer names, rupee amounts, udhaar and payments',
     }
+    if (MIN_SILENCE_MS) {
+      headers['x-min-silence-ms'] = MIN_SILENCE_MS
+      // short answers ("haan", "nahi", "ho") must still produce a transcript
+      headers['x-min-segment-ms'] = '100'
+    }
+    if (VAD_THRESHOLD) headers['x-vad-threshold'] = VAD_THRESHOLD
     if (keyterms.length) headers.keyterms = asciiJson(keyterms.slice(0, 200))
     this.ws = new WebSocket(STT_URL, { headers })
     this.opened = new Promise((res, rej) => {
@@ -100,6 +120,11 @@ export class SttStream {
   /** Force-close the current utterance now instead of waiting for the silence timer. */
   commit() {
     if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'commit' }))
+  }
+
+  /** Switch the recognition language from the next utterance on (no reconnect). */
+  setLanguage(locale: string) {
+    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'update_settings', language_code: locale }))
   }
 
   setKeyterms(terms: string[]) {

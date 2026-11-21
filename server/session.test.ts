@@ -14,7 +14,7 @@ function snap(customers: SnapCustomer[] = []): Snapshot {
   }
 }
 
-function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Partial<LlmReading>; speakMs?: number } = {}) {
+function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Partial<LlmReading>; speakMs?: number; transcribe2?: (pcm: Buffer) => Promise<{ text: string; lang?: string }> } = {}) {
   const out: ServerMsg[] = []
   const said: string[] = []
   let audio = 0
@@ -40,6 +40,8 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
       if (!opts.llm) throw new Error('no llm in this test')
       return opts.llm(t)
     },
+    transcribe2: opts.transcribe2,
+    secondReading: true,
     send: (m) => out.push(m),
     sendAudio: (b) => (audio += b.length),
     now: () => clock,
@@ -48,7 +50,7 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
   s.onClient({ type: 'hello', lang: 'hi', snapshot: snap(customers), firstRun: false, ptt: false })
   const turn = async (text: string, noisy = false) => {
     said.length = 0
-    await s.handleText(text, { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: noisy ? 3 : 25, noisy }, 'voice')
+    await s.handleText(text, { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: noisy ? 3 : 25, noisy, pcm: Buffer.alloc(32000) }, 'voice')
     await s.idle()
   }
   const ops = () => out.filter((m): m is Extract<ServerMsg, { type: 'ops' }> => m.type === 'ops').flatMap((m) => m.ops)
@@ -383,5 +385,116 @@ describe('a list the recogniser split at a breath', () => {
     expect(h.out.some((m) => m.type === 'final' && m.text === 'रमेश का 340 उधार')).toBe(true) // handled at once
     await h.s.idle()
     expect(h.said.join(' ')).toMatch(/340/)
+  })
+})
+
+describe('a sentence the recogniser split at a breath', () => {
+  it('joins a dangling "रमेश का" with the rest', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.cb.onFinal!('रमेश का।')
+    await new Promise((r) => setTimeout(r, 100))
+    expect(h.out.filter((m) => m.type === 'final')).toHaveLength(0)
+    h.cb.onFinal!('340 रुपये उधार।')
+    await h.s.idle()
+    const finals = h.out.filter((m): m is Extract<ServerMsg, { type: 'final' }> => m.type === 'final')
+    expect(finals.map((f) => f.text)).toEqual(['रमेश का 340 रुपये उधार।']) // one sentence, no list comma
+    expect(h.said.join(' ')).toMatch(/Ramesh, 340.*उधार/) // read back as one entry (no audio here, so it confirms)
+  })
+})
+
+describe('second reading of a noisy turn (Prisma REST)', () => {
+  it('a different amount turns the read-back into "X or Y?"', async () => {
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'रमेश का सत्रह रुपये उधार' }) })
+    await h.turn('रमेश का 70 रुपये उधार', true)
+    expect(h.entries()).toHaveLength(0)
+    expect(h.s.pending?.kind).toBe('confusable')
+    expect(h.said.join(' ')).toMatch(/70.*17|17.*70/)
+    await h.turn('सत्रह', true)
+    await h.turn('हाँ', true) // noisy room: the chosen amount is read back once more
+    expect(h.entries()[0]).toMatchObject({ cid: 'r', paise: 1700 })
+  })
+
+  it('an agreeing second reading keeps the plain noisy read-back', async () => {
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'रमेश का सत्तर रुपये उधार' }) })
+    await h.turn('रमेश का 70 रुपये उधार', true)
+    expect(h.s.pending?.kind).toBe('confirm')
+  })
+
+  it('a failing or slow second reading changes nothing', async () => {
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: () => new Promise((_r, rej) => setTimeout(() => rej(new Error('429')), 5)) })
+    await h.turn('रमेश का 70 रुपये उधार', true)
+    expect(h.s.pending?.kind).toBe('confirm')
+  })
+
+  it('quiet turns never ask for a second reading', async () => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => { calls++; return { text: '' } } })
+    await h.turn('रमेश का 70 रुपये उधार')
+    expect(calls).toBe(0)
+    expect(h.entries()).toHaveLength(1)
+  })
+})
+
+describe('spoken-only markup', () => {
+  it('list read-backs pause between names, but the screen shows no tags', async () => {
+    const h = harness([cust('s', 'Suresh'), cust('g', 'Geeta'), cust('m', 'Mohan')])
+    await h.turn('सुरेश 200, गीता 150, मोहन 100 उधार', true)
+    expect(h.said.join(' ')).toContain('<pauses>')
+    const shown = h.out.filter((m): m is Extract<ServerMsg, { type: 'say' }> => m.type === 'say').map((m) => m.text).join(' ')
+    expect(shown).not.toMatch(/[<>]/)
+    expect(shown).toMatch(/सुरेश 200, गीता 150, मोहन 100/)
+  })
+})
+
+describe('language rescue (Prisma REST follows the spoken language)', () => {
+  it('an unreadable turn heard as Kannada switches the session and is handled', async () => {
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'ರಮೇಶ್‌ಗೆ 500 ರೂಪಾಯಿ ಸಾಲ ಕೊಟ್ಟೆ', lang: 'kn-IN' }) })
+    await h.turn('रमेश के 500 रुपये साला कोटे')
+    expect(h.out).toContainEqual({ type: 'lang', lang: 'kn' })
+    expect(h.s.lang).toBe('kn')
+    expect(h.entries()).toEqual([expect.objectContaining({ cid: 'r', paise: 50000, direction: 'credit' })])
+  })
+
+  it('another language that is not a ledger turn (a customer chatting) changes nothing', async () => {
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => ({ text: 'ಹೇಗಿದ್ದೀರಾ ಅಣ್ಣ', lang: 'kn-IN' }) })
+    await h.turn('हेगिदिरा अन्ना')
+    expect(h.s.lang).toBe('hi')
+    expect(h.out.some((m) => m.type === 'lang')).toBe(false)
+  })
+
+  it('the same language as the session is not a rescue', async () => {
+    const h = harness([], { transcribe2: async () => ({ text: 'कुछ भी', lang: 'hi-IN' }) })
+    await h.turn('कुछ भी नहीं')
+    expect(h.out.some((m) => m.type === 'lang')).toBe(false)
+  })
+})
+
+describe('following the language realtime Prisma detected', () => {
+  const at = (lang: string) => ({ speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: 25, noisy: false, lang })
+  it('a Kannada ledger turn in a Hindi session switches replies to Kannada', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.s.handleText('ರಮೇಶ್‌ಗೆ 500 ರೂಪಾಯಿ ಸಾಲ ಕೊಟ್ಟೆ', at('kn-IN'), 'voice')
+    expect(h.out).toContainEqual({ type: 'lang', lang: 'kn' })
+    expect(h.s.lang).toBe('kn')
+  })
+  it('English (Hinglish code-mixing) never switches', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.s.handleText('Ramesh 500 credit', at('en-IN'), 'voice')
+    expect(h.s.lang).toBe('hi')
+  })
+  it('a non-ledger line in another language (customer chatting) never switches', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.s.handleText('ಹೇಗಿದ್ದೀರಾ ಅಣ್ಣ', at('kn-IN'), 'voice')
+    expect(h.s.lang).toBe('hi')
+  })
+})
+
+describe('language rescue is not asked for plain turns', () => {
+  it('"रमेश, 400" (nothing unplaced) asks the direction without a REST call', async () => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => { calls++; return { text: '' } } })
+    await h.turn('रमेश, 400')
+    expect(calls).toBe(0)
+    expect(h.said.join(' ')).toMatch(/उधार|जमा/)
   })
 })

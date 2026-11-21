@@ -10,7 +10,17 @@
 import WebSocket from 'ws'
 
 const TTS_URL = 'wss://api.vachana.ai/api/v1/tts'
-export const TTS_VOICE = 'Shivani'
+/**
+ * One female Timbre v3.0 voice per language, each from Gnani's recommended list for that
+ * language (docs: TTS/available-voices). Shivani is not recommended for kn/ta/te/ml/en/pa.
+ */
+export const VOICE_BY_LOCALE: Record<string, string> = {
+  'hi-IN': 'Shivani', 'mr-IN': 'Shivani', 'bn-IN': 'Shivani', 'gu-IN': 'Shivani',
+  'en-IN': 'Sunaina', 'kn-IN': 'Sneha', 'ta-IN': 'Kalpana', 'te-IN': 'Kalpana', 'pa-IN': 'Kalpana', 'ml-IN': 'Sunaina',
+}
+export const voiceFor = (locale: string) => VOICE_BY_LOCALE[locale] ?? 'Shivani'
+/** Timbre v3.0 accepts exactly 0.8, 1.0 and 1.2. */
+export type TtsSpeed = 0.8 | 1 | 1.2
 export const TTS_RATE = 16000
 
 export interface SpeakResult {
@@ -69,7 +79,7 @@ export class TtsPool {
    * Speak `text`; PCM s16le 16 kHz chunks go to `onAudio` as they arrive.
    * Aborting stops delivery immediately (barge-in); the socket drains in the background.
    */
-  async speak(text: string, lang: string, onAudio: (pcm: Buffer) => void, signal?: AbortSignal): Promise<SpeakResult> {
+  async speak(text: string, lang: string, onAudio: (pcm: Buffer) => void, signal?: AbortSignal, speed: TtsSpeed = 1): Promise<SpeakResult> {
     const t0 = performance.now()
     const slot = this.acquire()
     try {
@@ -135,9 +145,10 @@ export class TtsPool {
       slot.ws.send(
         JSON.stringify({
           text,
-          voice: TTS_VOICE,
+          voice: voiceFor(lang),
           model: 'timbre-v3.0',
           language: lang,
+          speed,
           audio_config: { sample_rate: TTS_RATE, num_channels: 1, sample_width: 2, encoding: 'linear_pcm', container: 'raw' },
         }),
       )
