@@ -20,3 +20,6 @@ eval/results/*.wav
 
 # local test-run audio (KB_RECORD_DIR)
 eval/recordings/
+
+.vercel
+.env*

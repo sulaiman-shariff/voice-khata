@@ -37,3 +37,19 @@ describe('validate', () => {
     expect(v.type === 'entries' && [v.entries[0].promise, v.entries[0].dayOffset]).toEqual([false, 30])
   })
 })
+
+describe('guard on confident model guesses', () => {
+  const entry = (name: string, direction: 'credit' | 'payment') => ({ intent: 'entries' as const, sure: true, entries: [{ name, amount: 340, direction, day_offset: 0, promise: false }] })
+  const reasons = (t: string, r: ReturnType<typeof entry>) => {
+    const i = validate(t, r)
+    return i.type === 'entries' ? i.entries[0].reasons : []
+  }
+  it('a credit/paid word the sentence never had is marked guessed (read back)', () => {
+    expect(reasons('Ramesh wale 340 ka scene', entry('Ramesh', 'credit'))).toContain('direction-guessed')
+    expect(reasons('Ramesh ka 340 udhaar wala scene', entry('Ramesh', 'credit'))).not.toContain('direction-guessed')
+  })
+  it('a name the sentence never had is marked changed (read back), in any script', () => {
+    expect(reasons('Sunitu ka 340 udhaar', entry('Geeta', 'credit'))).toContain('name-changed')
+    expect(reasons('रमेश का 340 उधार', entry('Ramesh', 'credit'))).not.toContain('name-changed')
+  })
+})

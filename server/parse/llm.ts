@@ -1,5 +1,6 @@
 /**
- * Slow path: Claude Haiku 5.5 reads turns the fast path could not settle.
+ * Slow path: an AI model reads turns the fast path could not settle. Gemini on Vertex AI (Mumbai)
+ * in production (gemini.ts); Claude Haiku only with LLM_PROVIDER=claude, for comparison.
  *
  * The model never invents money. It picks from the amounts our own parser heard
  * (`candidates`); anything else is rejected by `validate()` and the agent asks instead.
@@ -7,11 +8,24 @@
  * context (customer names, last entry, language) goes in the user message.
  */
 import Anthropic from '@anthropic-ai/sdk'
-import type { EntryIntent, Intent } from '../../shared/intent.js'
+import { type EntryIntent, type Intent, directionAnswer } from '../../shared/intent.js'
+import { NAME_SURE, matchName } from '../../shared/names.js'
 import { type AmountSpan, parseAmounts } from '../../shared/numbers.js'
 import { log } from '../log.js'
+import { GEMINI_MODEL, WARM_TIMEOUT_MS, geminiConfigured, geminiToolCall } from './gemini.js'
 
-export const LLM_MODEL = 'claude-haiku-5-5'
+export const CLAUDE_MODEL = 'claude-haiku-5-5'
+/** Which model reads hard turns: Gemini when its key is configured, unless LLM_PROVIDER says otherwise. */
+export function llmProvider(): 'gemini' | 'claude' {
+  const p = process.env.LLM_PROVIDER
+  if (p === 'gemini' || p === 'claude') return p
+  return geminiConfigured() ? 'gemini' : 'claude'
+}
+export function llmModel(): string {
+  return llmProvider() === 'gemini' ? GEMINI_MODEL : CLAUDE_MODEL
+}
+/** @deprecated the model in use is llmModel() */
+export const LLM_MODEL = CLAUDE_MODEL
 
 export const SYSTEM = `You are the understanding module of KhataBhai, a voice credit ledger used by small Indian shopkeepers (kirana stores).
 A shopkeeper speaks mid-sale, in any Indian language mixed with English. Speech-to-text has already turned their speech into text, which may contain recognition errors.
@@ -171,10 +185,14 @@ export function userMessage(transcript: string, ctx: LlmContext): string {
 export async function readWithLlm(
   transcript: string, ctx: LlmContext, signal?: AbortSignal,
 ): Promise<{ reading: Partial<LlmReading>; ms: number; cachedTokens: number }> {
+  if (llmProvider() === 'gemini') {
+    const r = await geminiToolCall<Partial<LlmReading>>(SYSTEM, userMessage(transcript, ctx), TOOL, signal)
+    return { reading: r.args, ms: r.ms, cachedTokens: 0 }
+  }
   const t0 = performance.now()
   const res = await getClient().messages.create(
     {
-      model: LLM_MODEL,
+      model: CLAUDE_MODEL,
       max_tokens: 600,
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools: [TOOL],
@@ -192,7 +210,10 @@ export async function readWithLlm(
 /** Fire one tiny request at boot so the prompt cache and TLS connection are warm. */
 export async function warmUp(): Promise<void> {
   try {
-    await readWithLlm('haan', { lang: 'hi-IN', customers: [] })
+    // one real call: the model's first answers after a cold start are slow (2-6 s on Gemini), so
+    // pay that here, with a longer limit, instead of on a shopkeeper's turn
+    if (llmProvider() === 'gemini') await geminiToolCall(SYSTEM, userMessage('haan', { lang: 'hi-IN', customers: [] }), TOOL, undefined, WARM_TIMEOUT_MS)
+    else await readWithLlm('haan', { lang: 'hi-IN', customers: [] })
   } catch (e) {
     log.warn('llm_warmup_failed', { error: e }) // best effort
   }
@@ -203,6 +224,14 @@ export async function warmUp(): Promise<void> {
  * that every amount was actually heard. Amounts outside the candidates are dropped and the
  * turn becomes low-confidence, so the agent asks instead of saving.
  */
+/** Is this name (or one of its words) in the sentence, in any script? */
+function saidName(name: string, transcript: string): boolean {
+  const words = transcript.split(/[\s,.;:!?।]+/).filter(Boolean)
+  const tries = [...words, ...words.slice(1).map((w, i) => `${words[i]} ${w}`)]
+  const target = [{ id: 'n', names: [name, ...name.split(/\s+/)] }]
+  return tries.some((t) => (matchName(t, target)[0]?.score ?? 0) >= NAME_SURE)
+}
+
 export function validate(transcript: string, raw: Partial<LlmReading>, contextAmounts: number[] = [], recentCount = 0): Intent {
   // the tool schema is not strict (strict decoding doubled latency), so normalise defensively
   const r: LlmReading = {
@@ -287,6 +316,10 @@ export function validate(transcript: string, raw: Partial<LlmReading>, contextAm
         if (!e.name) reasons.push('no-name')
         if (!e.direction) reasons.push('no-direction-cue')
         if (e.amount !== span.value) reasons.push('confusable')
+        // models guess confidently: a credit/paid the sentence never said, or a name it never said,
+        // is read back rather than written ("Ramesh 340" -> credit; "Sunitu" -> Sunita)
+        if (e.direction && !directionAnswer(transcript)) reasons.push('direction-guessed')
+        if (e.name && !saidName(e.name, transcript)) reasons.push('name-changed')
         for (const f of span.flags) if (f !== 'fractional_rupee' && f !== 'from-context' && !reasons.includes(f)) reasons.push(f)
         if (span.flags.includes('from-context')) reasons.push('from-context')
         entries.push({

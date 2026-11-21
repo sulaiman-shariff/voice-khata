@@ -14,7 +14,7 @@ import { MultiStt } from '../server/gnani/multi.js'
 import { transcribeSarvam } from '../server/sarvam.js'
 import { TtsPool } from '../server/gnani/tts.js'
 import { transcribeRest } from '../server/gnani/rest.js'
-import { LLM_MODEL, readWithLlm, warmUp } from '../server/parse/llm.js'
+import { llmModel, llmProvider, readWithLlm, warmUp } from '../server/parse/llm.js'
 import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
 
@@ -95,7 +95,7 @@ wss.on('connection', (ws, req) => {
   const key = process.env.GNANI_API_KEY ?? ''
   if (!warmed) {
     warmed = true
-    void warmUp() // prime the Haiku prompt cache + TLS for this instance
+    void warmUp() // fetch the model's token, open TLS for this instance
   }
   const tts = new TtsPool(key, 2, L.child({ part: 'tts' }))
   const send = (m: ServerMsg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
@@ -120,7 +120,7 @@ wss.on('connection', (ws, req) => {
     warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
     llm: async (text, ctx) => {
       const r = await readWithLlm(text, ctx)
-      L.info('llm_call', { model: LLM_MODEL, ms: r.ms, cachedTokens: r.cachedTokens })
+      L.info('llm_call', { provider: llmProvider(), model: llmModel(), ms: r.ms, cachedTokens: r.cachedTokens })
       return r.reading
     },
     // Prisma REST reading of the turn audio: language rescue always; the noisy-turn amount

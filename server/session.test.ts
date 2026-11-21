@@ -368,6 +368,8 @@ describe('the model (LLM) never introduces money that was not said', () => {
     const recent = [ent('e1', 'r', 340, 'credit')]
     const copy = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { recent, llm: () => llmEntry('Suresh', 340, 'credit') })
     await copy.turn('Suresh ka bhi same')
+    expect(copy.asks).toBe('confirm') // credit was never said: read back first
+    await copy.turn('haan')
     expect(copy.written()).toEqual([['s', 340, 'credit']])
     const invent = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { recent, llm: () => llmEntry('Suresh', 777, 'credit') })
     await invent.turn('Suresh ka bhi same')
@@ -388,7 +390,16 @@ describe('the model (LLM) never introduces money that was not said', () => {
     const twice = { intent: 'entries' as const, sure: true, entries: [0, 1].map(() => ({ name: 'Ramesh', amount: 340, direction: 'credit' as const, day_offset: 0, promise: false })) }
     const h = harness([cust('r', 'Ramesh')], { llm: () => twice })
     await h.turn('Ramesh wale 340 ka scene')
+    expect(h.asks).toBe('confirm') // the model guessed credit: read back first
+    await h.turn('haan')
     expect(h.written()).toEqual([['r', 340, 'credit']])
+  })
+
+  it('a credit/paid the model guessed is read back before writing', async () => {
+    const h = harness([cust('r', 'Ramesh')], { llm: () => llmEntry('Ramesh', 340, 'credit') })
+    await h.turn('Ramesh wale 340 ka scene')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('confirm')
   })
 
   it('an unsure model reading of a relation name is read back before writing', async () => {
