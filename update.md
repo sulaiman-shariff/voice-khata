@@ -43,6 +43,8 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 **Files:** `server/remind/vonage.ts` (new), `api/remind.ts`, `src/ui/strings.ts`, `.env.example`.
 
+**Verified (22 Nov):** with the owner's phone joined to the sandbox, `POST /api/remind` went through Vonage (`provider: vonage`, status `accepted`), and the WhatsApp message **arrived** on the phone from `+1 415 738 6102`.
+
 ---
 
 ## 8. Reminders bell, customer numbers, top bar spacing
