@@ -1,4 +1,4 @@
-import { Check, Mic, Pencil, MicOff, Sparkles, WifiOff, X } from 'lucide-react'
+import { Check, Mic, Pencil, MicOff, Sparkles, Square, WifiOff, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
@@ -29,7 +29,7 @@ export function EntryRow({ e, name, t, onClick, fresh }: { e: Entry; name: strin
           {e.promise ? <span className="text-amber-800">{t.due} {relDay(e.day, t)}</span> : <span className="num">{time(e.ts)}</span>}
           {e.amended && !e.voided && <span className="flex items-center gap-0.5 text-xs"><Pencil className="size-3" />{t.edited}</span>}
           {e.voided && <span className="text-xs">{t.removed}</span>}
-          {e.source?.path === 'llm' && <Sparkles className="size-3" aria-label="AI read" />}
+          {e.source?.path === 'llm' && <Sparkles className="size-3" aria-label={t.aiRead} />}
           {e.status === 'confirmed' && <Check className="size-3.5 text-payment" aria-label={t.confirmed} />}
           {e.status === 'disputed' && <X className="size-3.5 text-destructive" aria-label={t.disputed} />}
         </div>
@@ -50,8 +50,8 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
       <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
         <div className="flex items-center gap-2">
           <span className="num text-sm text-muted-foreground">× {p.options?.length ?? 0}</span>
-          <button onClick={() => onAnswer('udhaar')} className={cn('min-h-9 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'credit' ? 'bg-credit text-white ring-credit' : 'ring-black/15')}>{t.credit}</button>
-          <button onClick={() => onAnswer('jama')} className={cn('min-h-9 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'payment' ? 'bg-payment text-white ring-payment' : 'ring-black/15')}>{t.payment}</button>
+          <button onClick={() => onAnswer('udhaar')} className={cn('min-h-11 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'credit' ? 'bg-credit text-white ring-credit' : 'ring-black/15')}>{t.credit}</button>
+          <button onClick={() => onAnswer('jama')} className={cn('min-h-11 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'payment' ? 'bg-payment text-white ring-payment' : 'ring-black/15')}>{t.payment}</button>
         </div>
         <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-lg font-semibold">
           {(p.options ?? []).map((o, i) => <li key={i} className="num truncate">{o}</li>)}
@@ -129,9 +129,13 @@ function Answer({ className, children, onClick }: { className?: string; children
   )
 }
 
-/** Big mic: rings breathe with the input level; colour shows who is talking. */
-export function MicButton({ status, levelSource, on, onPress, onRelease }: {
-  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; onPress: () => void; onRelease: () => void
+/**
+ * Big mic: ONE control. Hands-free: tap = start listening, tap again = stop (mute); while the app is
+ * speaking the tap cuts the reply short instead (square icon). Push-to-talk: hold to talk.
+ * Rings breathe with the input level; colour shows who is talking.
+ */
+export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRelease }: {
+  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; handsFree: boolean; t: UiStrings; onPress: () => void; onRelease: () => void
 }) {
   // the ~30 Hz mic level lives here, so it re-renders only this button, not the whole screen
   const [level, setLevel] = useState(0)
@@ -141,6 +145,8 @@ export function MicButton({ status, levelSource, on, onPress, onRelease }: {
   }, [levelSource])
   const s = 1 + Math.min(level * 3, 0.6)
   const live = on && status !== 'offline'
+  const interrupt = handsFree && live && status === 'speaking'
+  const label = !on ? (handsFree ? t.micStart : t.hold) : interrupt ? t.interrupt : handsFree ? t.micStop : t.hold
   return (
     <div className="relative grid size-28 place-items-center">
       {live && status === 'listening' && (
@@ -152,17 +158,22 @@ export function MicButton({ status, levelSource, on, onPress, onRelease }: {
       {live && status === 'speaking' && <span className="absolute inset-0 animate-pulse rounded-full bg-payment/25" />}
       {live && status === 'thinking' && <span className="absolute -inset-1 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />}
       <button
-        aria-label="mic"
+        type="button"
+        aria-label={label}
+        // a toggle in hands-free mode (pressed = listening); push-to-talk is a hold button, not a toggle
+        aria-pressed={handsFree ? on && !interrupt : undefined}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); onPress() } }}
+        onKeyUp={(e) => { if (e.key === 'Enter' || e.key === ' ') onRelease() }}
         onPointerDown={(e) => { e.preventDefault(); onPress() }}
         onPointerUp={onRelease}
         onPointerLeave={onRelease}
         onContextMenu={(e) => e.preventDefault()}
         className={cn(
           'relative grid size-24 touch-none select-none place-items-center rounded-full shadow-xl transition-colors',
-          !on ? 'bg-primary text-primary-foreground' : status === 'speaking' ? 'bg-payment text-white' : status === 'offline' ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
+          !on ? 'bg-card text-primary ring-4 ring-primary/40' : status === 'speaking' ? 'bg-payment text-white' : status === 'offline' ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
         )}
       >
-        {status === 'offline' && on ? <WifiOff className="size-9" /> : on ? <Mic className="size-10" /> : <MicOff className="size-10 opacity-90" />}
+        {status === 'offline' && on ? <WifiOff className="size-9" /> : interrupt ? <Square className="size-8 fill-current" /> : on ? <Mic className="size-10" /> : <MicOff className="size-10" />}
       </button>
     </div>
   )

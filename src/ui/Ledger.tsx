@@ -127,7 +127,7 @@ export function Passbook({ entries, t, onEntry, onConfirm }: {
                   </span>
                 </button>
                 {live(e) && e.status === 'unconfirmed' && (
-                  <button onClick={() => onConfirm(e.eid)} className="mb-1 flex min-h-9 items-center gap-1 text-sm text-primary">
+                  <button onClick={() => onConfirm(e.eid)} className="mb-1 flex min-h-11 items-center gap-1 text-sm text-primary">
                     <Link2 className="size-4" />{t.confirmLink}
                   </button>
                 )}

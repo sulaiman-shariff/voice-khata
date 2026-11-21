@@ -81,7 +81,7 @@ function Home({ store }: { store: KhataStore }) {
     try {
       await w
     } catch (err) {
-      toast.error(`${t.saved}: ✗`)
+      toast.error(t.saveFailed)
       clientLog.error('store_write_failed', { error: String(err), ops: ops.map((o) => o.op) })
     }
     voice.current?.sendSnapshot()
@@ -123,9 +123,9 @@ function Home({ store }: { store: KhataStore }) {
     } catch {
       voice.current = null
       setOn(false)
-      toast.error('Microphone / network')
+      toast.error(t.micError)
     }
-  }, [onOps, store])
+  }, [onOps, store, t])
 
   const sendTyped = async (text: string) => {
     if (!voice.current) await start(store.settings.lang!)
@@ -182,9 +182,9 @@ function Home({ store }: { store: KhataStore }) {
           <div className="truncate font-bold leading-tight">{settings.shopName}</div>
           <div className="text-xs text-muted-foreground">KhataBhai · AI</div>
         </div>
-        <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-9 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{LANG_NAME[settings.lang]}</button>
-        <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
-        <button aria-label={t.settings} onClick={() => setSheet('settings')} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
+        <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-11 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{LANG_NAME[settings.lang]}</button>
+        <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
+        <button aria-label={t.settings} onClick={() => setSheet('settings')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
       </header>
 
       {on && status === 'offline' && (
@@ -202,7 +202,7 @@ function Home({ store }: { store: KhataStore }) {
       <div className="mx-4 mt-3 flex gap-2">
         <nav className="grid flex-1 grid-cols-2 rounded-2xl bg-muted p-1 text-base font-semibold">
           {(['today', 'dues'] as const).map((k) => (
-            <button key={k} onClick={() => setTab(k)} className={cn('min-h-10 rounded-xl', tab === k && 'bg-card shadow-sm')}>
+            <button key={k} onClick={() => setTab(k)} className={cn('min-h-11 rounded-xl', tab === k && 'bg-card shadow-sm')}>
               {k === 'today' ? t.history : `${t.dues} · ${due.length}`}
             </button>
           ))}
@@ -233,8 +233,8 @@ function Home({ store }: { store: KhataStore }) {
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} aria-label={t.search} className="min-w-0 flex-1 bg-transparent text-base outline-none" />
               </label>
               <div className="grid grid-cols-2 rounded-xl bg-muted p-0.5 text-sm font-semibold">
-                <button onClick={() => setSort('amount')} className={cn('min-h-10 rounded-lg px-2.5', sort === 'amount' && 'bg-card shadow-sm')}>₹ {t.sortBig}</button>
-                <button onClick={() => setSort('name')} className={cn('min-h-10 rounded-lg px-2.5', sort === 'name' && 'bg-card shadow-sm')}>A–Z</button>
+                <button onClick={() => setSort('amount')} className={cn('min-h-11 rounded-lg px-2.5', sort === 'amount' && 'bg-card shadow-sm')}>₹ {t.sortBig}</button>
+                <button onClick={() => setSort('name')} className={cn('min-h-11 rounded-lg px-2.5', sort === 'name' && 'bg-card shadow-sm')}>A–Z</button>
               </div>
             </div>
             {shownDues.map((d) => (
@@ -284,19 +284,21 @@ function Home({ store }: { store: KhataStore }) {
             <div className="flex items-center justify-center gap-5">
               <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-black/10 active:scale-95"><Keyboard className="size-6" /></button>
               <MicButton
-                status={status} levelSource={levelSource} on={on}
+                status={status} levelSource={levelSource} on={on} handsFree={settings.handsFree} t={t}
                 onPress={() => {
                   if (!on) void start(settings.lang!)
-                  else if (!settings.handsFree) voice.current?.pttDown()
-                  else if (status === 'speaking') (voice.current as unknown as { bargeIn?: () => void })?.bargeIn?.() // tap to cut the reply short
+                  else if (!settings.handsFree) voice.current?.pttDown() // push-to-talk: hold
+                  else if (status === 'speaking') voice.current?.bargeIn() // tap while it talks: cut the reply short, keep listening
+                  else stop() // tap the same button again: mute
                 }}
                 onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
               />
               <span className="size-14" aria-hidden />
             </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{statusText}</span>
-              {on && <button onClick={stop} className="min-h-9 rounded-full px-3 text-sm ring-1 ring-black/10">{t.stop}</button>}
+              <span role="status" aria-live="polite">{statusText}</span>
+              {/* push-to-talk's button is hold-only, so it cannot also be the off switch; hands-free needs no extra control */}
+              {on && !settings.handsFree && <button onClick={stop} className="min-h-11 rounded-full px-3 text-sm ring-1 ring-black/10">{t.micStop}</button>}
             </div>
           </div>
         </div>

@@ -102,7 +102,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
               <span>{t.phone}</span>
               <input
                 inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone !== (c.phone ?? '') && void consent({})}
-                className="w-40 rounded-lg border bg-background px-2 py-1 text-right" placeholder="98xxxxxxxx"
+                aria-label={t.phone} className="h-11 w-40 rounded-lg border bg-background px-2 text-right" placeholder="98xxxxxxxx"
               />
             </label>
           </div>
@@ -117,7 +117,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
 
           <button
             onClick={() => { if (confirm(`${t.forget}: ${c.name}?`)) void store.forgetCustomer(c.cid).then(() => { void dropBackup(backup); onChanged(); onClose() }) }}
-            className="mt-6 flex items-center gap-2 text-sm text-destructive"
+            className="mt-6 flex min-h-11 items-center gap-2 text-sm text-destructive"
           >
             <Trash2 className="size-4" />{t.forget}
           </button>
@@ -141,7 +141,7 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
           <label className="flex items-center justify-between gap-3">
             <span>{t.shopName}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => void store.updateSettings({ shopName: name.trim() || st.shopName })}
-              className="w-44 rounded-lg border bg-background px-2 py-1 text-right" maxLength={40} />
+              aria-label={t.shopName} className="h-11 w-44 rounded-lg border bg-background px-2 text-right" maxLength={40} />
           </label>
           <label className="flex items-center justify-between">
             <span>{t.handsFree}</span>
@@ -163,10 +163,10 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
             <span>{t.latency}</span>
             <Switch checked={st.showLatency} onCheckedChange={(v) => void store.updateSettings({ showLatency: v })} />
           </label>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div role="group" aria-label={t.language} className="grid grid-cols-5 gap-1.5">
             {LANGS.map((l) => (
-              <button key={l} onClick={() => void store.updateSettings({ lang: l }).then(() => onChanged({ lang: l }))}
-                className={cn('rounded-xl py-2 text-sm ring-1 ring-black/10', st.lang === l && 'bg-primary text-primary-foreground')}>
+              <button key={l} aria-pressed={st.lang === l} onClick={() => void store.updateSettings({ lang: l }).then(() => onChanged({ lang: l }))}
+                className={cn('min-h-11 rounded-xl py-2 text-sm ring-1 ring-black/10', st.lang === l && 'bg-primary text-primary-foreground')}>
                 {LANG_NAME[l]}
               </button>
             ))}
@@ -196,7 +196,7 @@ export function PrivacySheet({ store, open, t, backup, onClose, onChanged }: {
     a.click()
   }
   const doBackup = async () => {
-    if (pin.length < 4) return setMsg('PIN ≥ 4')
+    if (pin.length < 4) return setMsg(t.pinShort)
     try {
       const r = await backup.backup(pin, await store.exportRecords())
       try { localStorage.setItem('vk-backup-id', r.id) } catch { /* ignore */ }
@@ -224,24 +224,24 @@ export function PrivacySheet({ store, open, t, backup, onClose, onChanged }: {
               {chain.ok ? t.chainOk : t.chainBad} · {chain.records}
             </div>
           )}
-          <button onClick={() => void download()} className="flex items-center gap-2 font-medium text-primary"><Download className="size-4" />{t.export}</button>
+          <button onClick={() => void download()} className="flex min-h-11 items-center gap-2 font-medium text-primary"><Download className="size-4" />{t.export}</button>
 
           <div className="space-y-2 rounded-2xl bg-muted/50 p-3">
             <div className="font-semibold">{t.backup}</div>
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="PIN"
-              className="w-full rounded-lg border bg-background px-2 py-1.5" />
+            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" type="password" placeholder="PIN" aria-label="PIN"
+              className="h-11 w-full rounded-lg border bg-background px-2" />
             <div className="flex gap-2">
-              <button onClick={() => void doBackup()} className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground">Backup</button>
-              <input value={restoreId} onChange={(e) => setRestoreId(e.target.value.trim())} placeholder={lastId ? `${lastId.slice(0, 8)}…` : 'backup id'}
-                className="min-w-0 flex-1 rounded-lg border bg-background px-2 py-1.5" />
-              <button onClick={() => void doRestore()} className="rounded-lg px-3 py-1.5 ring-1 ring-black/15">Restore</button>
+              <button onClick={() => void doBackup()} className="min-h-11 shrink-0 rounded-lg bg-primary px-3 text-primary-foreground">{t.backupBtn}</button>
+              <input value={restoreId} onChange={(e) => setRestoreId(e.target.value.trim())} placeholder={lastId ? `${lastId.slice(0, 8)}…` : t.backupId} aria-label={t.backupId}
+                className="h-11 min-w-0 flex-1 rounded-lg border bg-background px-2" />
+              <button onClick={() => void doRestore()} className="min-h-11 shrink-0 rounded-lg px-3 ring-1 ring-black/15">{t.restore}</button>
             </div>
             {msg && <div className="text-xs text-muted-foreground">{msg}</div>}
-            <div className="text-xs text-muted-foreground">Encrypted on this phone with your PIN before upload. We cannot read it.</div>
+            <div className="text-xs text-muted-foreground">{t.backupNote}</div>
           </div>
 
           <button onClick={() => { if (confirm(`${t.deleteAll}?`)) void store.deleteAll().then(() => { void dropBackup(backup); onChanged() }) }}
-            className="flex items-center gap-2 text-destructive"><Trash2 className="size-4" />{t.deleteAll}</button>
+            className="flex min-h-11 items-center gap-2 text-destructive"><Trash2 className="size-4" />{t.deleteAll}</button>
         </div>
       </SheetContent>
     </Sheet>
