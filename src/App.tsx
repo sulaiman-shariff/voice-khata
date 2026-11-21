@@ -1,4 +1,4 @@
-import { BellRing, Keyboard, Plus, Search, Settings2, ShieldCheck, WifiOff } from 'lucide-react'
+import { BellRing, Keyboard, Plus, Search, Settings2, ShieldCheck } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { balance, daySummary, dues, promises } from '../shared/ledger.js'
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { createVoiceClient, defaultVoiceUrl } from '@/lib/voice'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
-import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
+import { heardFeedback, primeFeedback, savedFeedback, sleepChime, wakeChime } from '@/ui/feedback'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
@@ -46,8 +46,6 @@ function Home({ store }: { store: KhataStore }) {
   /** ledger writes in order; feedback no longer waits for them */
   const writes = useRef<Promise<unknown>>(Promise.resolve())
   const [heard, setHeard] = useState('')
-  /** hands-free mic paused by a tap: the connection stays open */
-  const [muted, setMuted] = useState(false)
   /** a tap that cut a reply short: a second tap right after it must not also mute */
   const lastBargeAt = useRef(0)
   /** the heard line was taken as talk to someone else (shown dimmed, marked "not an entry") */
@@ -67,6 +65,16 @@ function Home({ store }: { store: KhataStore }) {
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<'amount' | 'name'>('amount')
   const voice = useRef<VoiceClient | null>(null)
+  /** the mic stream is open (or being opened): false for a typed-text-only session */
+  const [micReady, setMicReady] = useState(false)
+  /** the previous status, to clear the reply caption when speech ends */
+  const lastStatus = useRef<VoiceStatus>('idle')
+  const ignoredRef = useRef(false)
+  const markIgnored = (b: boolean) => { ignoredRef.current = b; setHeardIgnored(b) }
+  const ignoredTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** mic button still down / push-to-talk started for this press (hold-to-start can outlast start()) */
+  const held = useRef(false)
+  const pttOn = useRef(false)
 
   const onOps = useCallback(async (ops: LedgerOp[]) => {
     // feedback first: the chime, highlight and toast must not wait for the encrypted IndexedDB write
@@ -93,15 +101,37 @@ function Home({ store }: { store: KhataStore }) {
     voice.current?.sendSnapshot()
   }, [store, t])
 
-  const start = useCallback(async (lang: Lang) => {
+  const newTurn = () => {
+    if (ignoredTimer.current) clearTimeout(ignoredTimer.current)
+    ignoredTimer.current = null
+    setSaid('')
+  }
+
+  /** Open the connection. `mic: false` (typed text, example chips): socket only, no permission prompt yet. */
+  const start = useCallback(async (lang: Lang, mic = true) => {
     if (voice.current) return
     const v = createVoiceClient(VOICE_URL, {
-      status: (st) => { setStatus(st); if (st === 'offline' || (st as string) === 'reconnecting') setPending(null) },
+      status: (st) => {
+        if (lastStatus.current === 'speaking' && st !== 'speaking') setSaid('') // the reply is over: its caption goes
+        lastStatus.current = st
+        setStatus(st)
+        if (st === 'offline' || (st as string) === 'reconnecting') setPending(null)
+      },
       level: (v) => { for (const f of levelSource) f(v) },
       heard: heardFeedback,
-      partial: (x) => { setHeard(x); setHeardIgnored(false) },
-      final: (x) => { setHeard(x); setHeardIgnored(false) },
-      notEntry: () => setHeardIgnored(true),
+      attention: (s) => { if (s === 'awake') wakeChime(); else sleepChime() },
+      turnDone: () => {
+        // the reply caption stays while its audio plays (cleared when speaking ends); a silent turn clears it now
+        if (lastStatus.current !== 'speaking') setSaid('')
+        if (ignoredTimer.current) clearTimeout(ignoredTimer.current)
+        // "not an entry" stays readable for a few seconds, a normal heard line goes with the turn
+        if (ignoredRef.current) ignoredTimer.current = setTimeout(() => { setHeard(''); markIgnored(false) }, 3000)
+        else setHeard('')
+      },
+      micError: () => { setMicReady(false); toast.error(t.micError) },
+      partial: (x) => { newTurn(); setHeard(x); markIgnored(false) },
+      final: (x) => { newTurn(); setHeard(x); markIgnored(false) },
+      notEntry: () => markIgnored(true),
       say: (x) => setSaid(x),
       ops: (ops) => onOps(ops),
       network: (s) => setNet(s),
@@ -124,18 +154,21 @@ function Home({ store }: { store: KhataStore }) {
     primeFeedback()
     voice.current = v
     setOn(true)
+    setMicReady(mic)
     try {
-      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll })
+      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll, mic })
+      if (mic) v.wake('tap') // tapping the mic to start also wakes it
       if (!store.settings.firstRunDone) void store.updateSettings({ firstRunDone: true })
     } catch {
       voice.current = null
       setOn(false)
+      setMicReady(false)
       toast.error(t.micError)
     }
   }, [onOps, store, t])
 
   const sendTyped = async (text: string) => {
-    if (!voice.current) await start(store.settings.lang!)
+    if (!voice.current) await start(store.settings.lang!, false)
     if (!voice.current) return false
     voice.current.sendText(text)
     return true
@@ -155,8 +188,14 @@ function Home({ store }: { store: KhataStore }) {
     })
   }
 
-  const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setMuted(false); setStatus('idle'); setPending(null) }
-  const mute = (m: boolean) => { voice.current?.setMuted(m); setMuted(m) }
+  const micTap = () => {
+    const v = voice.current
+    if (!on || !v) void start(settings.lang!)
+    else if (status === 'speaking' || status === 'thinking') { lastBargeAt.current = Date.now(); v.bargeIn() } // cut the reply short, stay awake
+    else if (status === 'asleep') { setMicReady(true); v.wake('tap') }
+    else if (status === 'listening') { if (Date.now() - lastBargeAt.current > 1500) v.sleep() } // a quick second tap is part of the interrupt
+  }
+  const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setStatus('idle'); setPending(null); setMicReady(false) }
 
   // keep the screen awake while the khata is listening
   useEffect(() => {
@@ -180,7 +219,7 @@ function Home({ store }: { store: KhataStore }) {
   const shownDues = due
     .filter((d) => { const c = state.customers.get(d.cid); return !needle || !!c && (c.name.toLowerCase().includes(needle) || c.aliases.some((a) => a.toLowerCase().includes(needle))) })
     .sort((a, b) => (sort === 'name' ? name(a.cid).localeCompare(name(b.cid), t.loc) : b.paise - a.paise))
-  const statusText = !on || muted ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : settings.handsFree ? t.listening : t.hold
+  const statusText = !on || (!micReady && status === 'asleep') ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : status === 'asleep' ? t.sayKhataBhai : settings.handsFree ? t.awake : t.hold
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
@@ -194,12 +233,6 @@ function Home({ store }: { store: KhataStore }) {
         <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
         <button aria-label={t.settings} onClick={() => setSheet('settings')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
       </header>
-
-      {on && status === 'offline' && (
-        <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-100 px-3 py-1.5 text-sm text-amber-900">
-          <WifiOff className="size-4 shrink-0" /><span>{t.offlineBanner}</span>
-        </div>
-      )}
 
       <section className="mx-4 mt-3 grid grid-cols-3 gap-1.5">
         <Stat label={`${t.today} · ${t.credit}`} value={rsShort(day.creditPaise)} className="text-credit" />
@@ -277,9 +310,9 @@ function Home({ store }: { store: KhataStore }) {
             else if (a === 'nahi') voice.current?.tap('no')
             else voice.current?.answer(a)
           }} />}
-          {on && net !== 'good' && (
-            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-800 dark:text-amber-300')}>
-              {net === 'offline' ? t.netOffline : t.netSlow}
+          {on && (net !== 'good' || status === 'offline') && (
+            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' || status === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-800 dark:text-amber-300')}>
+              {net === 'offline' || status === 'offline' ? t.netOffline : t.netSlow}
             </div>
           )}
           {(heard || said) && on && (
@@ -296,19 +329,26 @@ function Home({ store }: { store: KhataStore }) {
             <div className="flex items-center justify-center gap-5">
               <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-black/10 active:scale-95"><Keyboard className="size-6" /></button>
               <MicButton
-                status={status} levelSource={levelSource} on={on && !muted} handsFree={settings.handsFree} t={t}
-                onPress={() => {
-                  if (!on) void start(settings.lang!)
-                  else if (!settings.handsFree) voice.current?.pttDown() // push-to-talk: hold
-                  else if (muted) mute(false) // unmute: instant, the connection never closed
-                  else if (status === 'speaking') {
-                    // tap while it talks: cut the reply short, keep listening
-                    lastBargeAt.current = Date.now()
-                    voice.current?.bargeIn()
+                status={status} levelSource={levelSource} on={on} handsFree={settings.handsFree} t={t}
+                onTap={micTap}
+                onHoldStart={() => {
+                  held.current = true
+                  setMicReady(true)
+                  if (!on || !voice.current) {
+                    // start() wakes by itself (tap); released before it finishes = no hold at all, never a second wake
+                    void start(settings.lang!).then(() => {
+                      if (held.current && voice.current && !settings.handsFree) { voice.current.pttDown(); pttOn.current = true }
+                    })
+                    return
                   }
-                  else if (Date.now() - lastBargeAt.current > 1500) mute(true) // a quick second tap is part of the interrupt
+                  voice.current.wake('hold')
+                  if (!settings.handsFree) { voice.current.pttDown(); pttOn.current = true }
                 }}
-                onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
+                onHoldEnd={() => {
+                  held.current = false
+                  voice.current?.holdEnd() // no-op unless a hold wake was sent
+                  if (pttOn.current) { pttOn.current = false; voice.current?.pttUp() }
+                }}
               />
               <span className="size-14" aria-hidden />
             </div>
@@ -325,7 +365,7 @@ function Home({ store }: { store: KhataStore }) {
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
-        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll); if (p.lang) { stop() } }} />
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll); if (p.lang) voice.current?.setLang(p.lang) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />
     </div>
