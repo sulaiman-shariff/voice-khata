@@ -6,6 +6,7 @@ import type { ClientMsg, ServerMsg, Snapshot, TurnMetrics } from '../../shared/p
 import type { Lang } from '../../shared/replies.js'
 import type { VoiceClient, VoiceEvents, VoiceStatus } from './contracts'
 import { clientLog as log } from './log'
+import { NetMonitor, PING_EVERY_MS, PROBE_TIMEOUT_MS, SpeechBuffer, TurnTracker, backoffMs } from './link'
 
 export function defaultVoiceUrl(): string {
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice`
@@ -13,7 +14,6 @@ export function defaultVoiceUrl(): string {
 
 const PTT_TAIL_MS = 200
 const RECONNECT_AFTER_MS = 270_000
-const BACKOFF_MS = [500, 1000, 2000, 5000]
 const LEVEL_INTERVAL_MS = 33
 const METRICS_WAIT_MS = 2000
 const HARD_SWAP_MS = 290_000 // swap no later than this (server cap is 300 s), whatever is open
@@ -64,6 +64,21 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let pttHeld = false
   let pttTailTimer: ReturnType<typeof setTimeout> | null = null
 
+  // bad-network handling (src/lib/link.ts)
+  const turns = new TurnTracker()
+  const speech = new SpeechBuffer()
+  const net = new NetMonitor()
+  let netShown: 'good' | 'slow' | 'offline' | null = null
+  /** the server's latest session state, handed back in the next hello */
+  let resume: string | undefined
+  /** a turn lost to a drop, to be handled again by the next session */
+  let resend: string | null = null
+  /** speech captured since this time may not have reached the server: replay it after reconnect */
+  let droppedSince: number | null = null
+  let tick: ReturnType<typeof setInterval> | null = null
+  let lastPingAt = 0
+  let probeDeadline: number | null = null
+
   let lastLevelAt = 0
   let finalAt: number | null = null
   let playerStartedAt: number | null = null
@@ -99,8 +114,31 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   function hello(sock: WebSocket) {
     if (!opts) return
-    sendTo(sock, { type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree, speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll })
+    const again = resend
+    resend = null
+    sendTo(sock, {
+      type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree,
+      speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll, resume, ...(again ? { resend: again } : {}),
+    })
     opts.firstRun = false // the disclosure plays once, not on every reconnect
+    if (again) {
+      log.warn('resend', { text: again })
+      ev.resent?.(again)
+      // in flight again until its result arrives: a second drop re-sends it once more
+      turns.onFinal(again, performance.now())
+    }
+    // speech from the gap: replayed (paced by the server) right after hello
+    if (droppedSince !== null) {
+      const since = Math.max(droppedSince - 1500, turns.lastFinalAt, turns.lastTurnDoneAt)
+      const frames = speech.replayWindow(since, performance.now(), SPEECH_LEVEL)
+      droppedSince = null
+      if (frames.length) {
+        log.info('replay', { frames: frames.length, audioMs: frames.length * 32 })
+        sendTo(sock, { type: 'replay_start' })
+        for (const f of frames) if (sock.readyState === WebSocket.OPEN) sock.send(f)
+        sendTo(sock, { type: 'replay_end' })
+      }
+    }
   }
 
   // ------------------------------------------------------------ audio graph
@@ -132,8 +170,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       lastLevelAt = now
       ev.level(level)
     }
-    if (micDead || !ws || ws.readyState !== WebSocket.OPEN || swapping) return // dropped while disconnected
-    if (handsFree || pttHeld) ws.send(buf)
+    if (micDead || !(handsFree || pttHeld)) return
+    speech.push(buf, level, now) // kept a few seconds so speech during a drop can be replayed
+    if (!ws || ws.readyState !== WebSocket.OPEN || swapping) return // not sent now; replayed after reconnect
+    ws.send(buf)
   }
 
   function onPlayerMsg(e: MessageEvent<{ type: string }>) {
@@ -172,6 +212,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   function handleMessage(sock: WebSocket, e: MessageEvent) {
     const isOld = sock !== ws
     if (isOld && !oldSockets.has(sock)) return
+    if (!isOld) net.onMessage(performance.now())
     if (e.data instanceof ArrayBuffer) {
       if (!isOld) {
         turnAudioBytes += e.data.byteLength
@@ -195,7 +236,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
           ev.final(m.text)
           break
         case 'ops':
-          ev.ops(m.ops)
+          turns.onOps()
+          applyAndAck(sock, m.ops, m.seq)
           break
         case 'say':
           turnSaid = true
@@ -212,6 +254,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
           settleIfSilent()
           break
         case 'turn_done':
+          turns.onTurnDone(performance.now())
+          if (m.resume) resume = m.resume
           settleIfSilent()
           break
       }
@@ -234,7 +278,12 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         partialAt = performance.now()
         ev.partial(m.text)
         break
+      case 'pong':
+        net.onPong(m.t, performance.now())
+        probeDeadline = null
+        break
       case 'final':
+        turns.onFinal(m.text, performance.now())
         partialAt = null
         turnSaid = false
         finalAt = performance.now()
@@ -243,7 +292,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         setStatus('thinking')
         break
       case 'ops':
-        ev.ops(m.ops)
+        turns.onOps()
+        applyAndAck(sock, m.ops, m.seq)
         break
       case 'say':
         turnSaid = true
@@ -269,6 +319,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         if (!turnSaid) settleIfSilent()
         break
       case 'turn_done':
+        turns.onTurnDone(performance.now())
+        if (m.resume) resume = m.resume
         partialAt = null
         settleIfSilent()
         break
@@ -292,6 +344,80 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         settleIfSilent()
         break
     }
+  }
+
+  /** Write the ops on the phone, then tell the server they arrived. */
+  function applyAndAck(sock: WebSocket, ops: Parameters<VoiceEvents['ops']>[0], seq?: number) {
+    Promise.resolve(ev.ops(ops))
+      .then(() => {
+        if (seq !== undefined) sendTo(sock.readyState === WebSocket.OPEN ? sock : ws, { type: 'ack', seq })
+      })
+      .catch((e) => log.error('ops_apply_failed', { error: String(e), seq }))
+  }
+
+  function emitNet() {
+    const s = net.evaluate(performance.now(), ws?.bufferedAmount ?? 0)
+    if (s === netShown) return
+    netShown = s
+    log.info('network', { state: s, rttMs: net.lastRtt })
+    ev.network?.(s)
+  }
+
+  /** Heartbeat, dead-link watchdog and network state: once a second while running. */
+  function onTick() {
+    if (!running) return
+    const now = performance.now()
+    if (ws && ws.readyState === WebSocket.OPEN && !swapping) {
+      if (now - lastPingAt >= PING_EVERY_MS) {
+        lastPingAt = now
+        send({ type: 'ping', t: now })
+      }
+      if (net.isDead(now)) dropSocket('no_reply')
+      else if (probeDeadline !== null && now > probeDeadline) dropSocket('probe_timeout')
+    }
+    emitNet()
+  }
+
+  /** The link is dead (or the network changed under it): stop using it now and reconnect. */
+  function dropSocket(reason: string) {
+    const s = ws
+    if (!s) return
+    log.warn('link_dead', { reason, rttMs: net.lastRtt, bufferedBytes: s.bufferedAmount })
+    s.onclose = null
+    s.onmessage = null
+    try {
+      s.close(4000, reason)
+    } catch { /* already closing */ }
+    onClosed(s, 4000, reason)
+  }
+
+  /** Network came back or changed: check the link at once instead of waiting for the watchdog. */
+  function onNetworkChange(kind: string) {
+    if (!running) return
+    log.info('network_event', { kind, online: navigator.onLine })
+    if (kind === 'offline') {
+      dropSocket('offline')
+      return
+    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reconnectNow()
+      return
+    }
+    probeDeadline = performance.now() + PROBE_TIMEOUT_MS
+    lastPingAt = performance.now()
+    send({ type: 'ping', t: lastPingAt })
+  }
+  const onOnline = () => onNetworkChange('online')
+  const onOffline = () => onNetworkChange('offline')
+  const onConnChange = () => onNetworkChange('change')
+  const connection = () => (navigator as unknown as { connection?: EventTarget }).connection
+
+  function reconnectNow() {
+    if (!running) return
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+    reconnectTimer = null
+    backoffIdx = 0
+    scheduleReconnect(0)
   }
 
   /** Open a socket; resolves once open (hello is sent by the caller). */
@@ -356,11 +482,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     ws = sock
     backoffIdx = 0
     adoptedAt = Date.now()
-    // a new socket is a new server Session: no open question, no half-heard turn, no held key
-    if (pendingOpen) {
-      pendingOpen = false
-      ev.pending(null)
-    }
+    net.onOpen(performance.now())
+    probeDeadline = null
+    emitNet()
+    // a new socket is a new server Session: the open question comes back with the resumed state
+    // (the server re-sends 'pending' after hello); no half-heard turn, no held key
     partialAt = null
     releasePtt()
     scheduleRefresh()
@@ -376,6 +502,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     if (sock !== ws || !running) return
     log.warn('socket_closed', { code, reason, ageS: Math.round((Date.now() - adoptedAt) / 1000) })
     ws = null
+    net.onClose()
+    resend = turns.onDrop() ?? resend
+    // the server last proved it was receiving at its last message: replay speech from about then
+    droppedSince ??= net.lastMessageAt
+    emitNet()
     clearRefresh()
     releasePtt()
     partialAt = null
@@ -383,9 +514,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     scheduleReconnect()
   }
 
-  function scheduleReconnect() {
+  function scheduleReconnect(delayOverride?: number) {
     if (!running || reconnectTimer) return
-    const delay = BACKOFF_MS[Math.min(backoffIdx, BACKOFF_MS.length - 1)]
+    const delay = delayOverride ?? backoffMs(backoffIdx)
     backoffIdx++
     log.info('reconnect_scheduled', { delayMs: delay, attempt: backoffIdx })
     reconnectTimer = setTimeout(async () => {
@@ -520,6 +651,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       await resumeCtx()
       watchMic()
       document.addEventListener('visibilitychange', onVisibility)
+      window.addEventListener('online', onOnline)
+      window.addEventListener('offline', onOffline)
+      connection()?.addEventListener('change', onConnChange)
+      tick ??= setInterval(onTick, 1000)
       const sock = await sockP
       if (!sock || !running) return
       if (!early) hello(sock)
@@ -570,6 +705,16 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   function teardown() {
     running = false
     document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('online', onOnline)
+    window.removeEventListener('offline', onOffline)
+    connection()?.removeEventListener('change', onConnChange)
+    if (tick) clearInterval(tick)
+    tick = null
+    speech.clear()
+    resend = null
+    droppedSince = null
+    probeDeadline = null
+    net.onClose()
     if (thinkTimer) clearTimeout(thinkTimer)
     thinkTimer = null
     pendingOpen = false

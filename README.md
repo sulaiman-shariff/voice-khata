@@ -151,7 +151,7 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Speech end to first reply audio | p50 729 ms, max 774 ms (Vercel bom1) |
 | Early commit | fires about 280 ms after the pause when the sentence is complete |
 | Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
-| Unit tests | 524 passing |
+| Unit tests | 540 passing |
 
 ### STT noise benchmark (exact amount)
 
@@ -207,6 +207,23 @@ Tests and deploy:
 npx vitest run
 vercel deploy            # add --prod for production
 ```
+
+## Bad networks
+
+The production logs of a real test showed what used to go wrong. The phone switched from Wi-Fi to mobile data while the server was answering "Suleman gave me 300. Mahi gave me 400.". The server had saved both lines, but the phone never received them, and nothing said so. The old link had stalled long before anyone noticed. Now:
+
+- **No turn is lost silently.** The phone tracks each turn from its transcript to its end. If the connection drops after the transcript but before the ledger changes arrive, the next session handles the same text again and says so: "नेटवर्क टूट गया था, फिर से लिख रहा हूँ।" followed by the full read-back. A turn re-sent this way stays pending until its result arrives, so a second drop sends it again. Ledger changes carry a sequence number and the phone acknowledges each batch; changes never acknowledged are logged as `ops_unacked`. The phone skips an entry or customer it already has, so nothing is saved twice.
+- **Dead links are found in seconds, not 30.** The phone pings every 4 s and treats 9 s of silence from the server as a dead link. On `online`/`offline` and network-type changes it checks the link at once (a reply is expected within 3 s). Reconnects start after 250 ms. A banner says "No network — nothing is being saved" or "Slow network — replies will be late" (ping over 1.2 s, or about 2 s of audio stuck in the socket buffer). The server's own heartbeat is 15 s.
+- **Speech during a drop is kept.** The phone holds the last 12 s of mic audio. After reconnecting it replays what came after the server last answered (up to 10 s, and only if it contains speech). The server feeds it to Prisma at 3x real time. Prisma transcribed 1x, 2x and 4x replays identically (`eval/probe_gnani5.ts`).
+- **An open question survives.** Every turn end carries the session's state: the open question with its drafts, who the conversation is about, the last few lines and the language. The phone hands it back on reconnect and on the planned 300 s socket swaps, so "haan" still answers "Ramesh 15,000, sahi hai?" after a drop.
+
+`eval/net_chaos.ts` runs these through a local bad-network proxy (`eval/netsim.ts`), all passing:
+1. killed after the transcript;
+2. uplink stalled mid-sentence;
+3. killed with a question open;
+4. 400 ± 150 ms latency;
+5. killed after the entry arrived (no duplicate);
+6. server gone silent (reconnected in about 9 s).
 
 ## Logs
 

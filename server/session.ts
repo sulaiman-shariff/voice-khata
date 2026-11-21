@@ -113,6 +113,16 @@ type Pending =
   /** read-back before changing or removing an older entry */
   | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string }
 
+interface SavedState {
+  v: 1
+  at: number
+  lang: Lang
+  pending: Pending | null
+  pendingAgeMs: number
+  focusCid: string | null
+  history: string[]
+}
+
 interface Reply {
   parts: string[]
   ops: LedgerOp[]
@@ -171,6 +181,9 @@ export class Session {
   private newId: () => string
 
   private log: Logger
+  /** ledger ops batches sent, and the ones the phone has not acknowledged yet */
+  private opsSeq = 0
+  private unacked = new Map<number, number>()
   /** voice/tap turns handled so far (logged as `turn`) */
   private turnNo = 0
   private startedAt = 0
@@ -196,8 +209,16 @@ export class Session {
         this.ptt = msg.ptt
         this.speed = msg.speed === 0.8 || msg.speed === 1.2 ? msg.speed : 1
         this.readBackAll = msg.readBack === true
+        if (msg.resume) this.importState(msg.resume)
         this.openStt()
         this.warmPhrases()
+        // always: the phone keeps showing its last question until told otherwise
+        this.deps.send({ type: 'pending', pending: this.pendingView() })
+        if (msg.resend && msg.resend.trim() && msg.resend.length <= 2000) {
+          const text = msg.resend.trim()
+          this.log.info('resend', { text })
+          this.enqueue(() => this.handleText(text, null, 'resend'))
+        }
         if (msg.firstRun)
           this.enqueue(async () => {
             await this.speak(say(this.lang).disclosure())
@@ -241,6 +262,9 @@ export class Session {
         this.log.info('setting', { speed: msg.speed })
         this.speed = msg.speed
         this.warmPhrases()
+        break
+      case 'ack':
+        this.unacked.delete(msg.seq)
         break
       case 'readback':
         this.log.info('setting', { readBack: msg.on })
@@ -288,7 +312,9 @@ export class Session {
       },
       onFinal: (t, l) => this.onFinal(t, l),
       onError: (m) => {
-        this.log.warn('stt_error', { message: m })
+        // a stream torn down with its session is not worth a warning
+        if (this.closed) this.log.debug('stt_error_after_close', { message: m })
+        else this.log.warn('stt_error', { message: m })
         this.deps.send({ type: 'error', message: `stt: ${m}` })
       },
       onClose: (code) => {
@@ -597,7 +623,7 @@ export class Session {
   async handleText(
     text: string,
     t: TurnTiming | null,
-    _src: 'voice' | 'tap',
+    _src: 'voice' | 'tap' | 'resend',
   ): Promise<void> {
     const t0 = this.now()
     // started now so it runs alongside parsing; only noisy money turns ask for it
@@ -661,8 +687,10 @@ export class Session {
       : this.dispatch(intent, text, snrDb, noisy, path === 'llm' ? 'llm' : 'fast')
     if (!reply && unsureChange) reply = { parts: [say(this.lang).didNotCatch()], ops: [] }
     // one confident save: the screen shows name and amount, so a short "noted" is enough
-    if (reply && !this.readBackAll && reply.saved === 1 && reply.ackable === 1 && reply.parts.length === 1)
+    if (reply && _src !== 'resend' && !this.readBackAll && reply.saved === 1 && reply.ackable === 1 && reply.parts.length === 1)
       reply.parts = [say(this.lang).ack()]
+    // a turn lost to a dropped connection, handled again: say so, then the full read-back
+    if (reply && _src === 'resend') reply.parts.unshift(say(this.lang).resent())
     if (this.pending && this.pending !== before) this.pendingAt = this.now()
     this.secondAmounts = null
     if (!reply) path = 'none'
@@ -671,7 +699,9 @@ export class Session {
 
     if (reply?.ops.length) {
       for (const op of reply.ops) this.applyLocal(op)
-      this.deps.send({ type: 'ops', ops: reply.ops })
+      const seq = ++this.opsSeq
+      this.unacked.set(seq, reply.ops.length)
+      this.deps.send({ type: 'ops', ops: reply.ops, seq })
     }
     this.deps.send({ type: 'pending', pending: this.pendingView() })
 
@@ -718,7 +748,44 @@ export class Session {
         : {}),
       parseMs, llmMs, replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0, cached: spoken?.cached ?? false,
     })
-    this.deps.send({ type: 'turn_done' })
+    this.deps.send({ type: 'turn_done', resume: this.exportState() })
+  }
+
+  // ------------------------------------------------------------------ continuity across reconnects
+  /**
+   * The state a new session needs to carry on after a dropped or swapped connection: the open
+   * question (with its drafts), who the conversation is about, the last few lines and the
+   * language. The phone keeps the latest blob and hands it back in its next hello.
+   */
+  exportState(): string {
+    const st: SavedState = {
+      v: 1, at: Date.now(), lang: this.lang, pending: this.pending,
+      pendingAgeMs: this.pending ? this.now() - this.pendingAt : 0,
+      focusCid: this.focusCid, history: this.history.slice(-6),
+    }
+    return Buffer.from(JSON.stringify(st)).toString('base64url')
+  }
+
+  /** Restore what exportState() wrote; anything malformed or stale is ignored. */
+  importState(blob: string) {
+    try {
+      if (blob.length > 64_000) throw new Error('too large')
+      const st = JSON.parse(Buffer.from(blob, 'base64url').toString()) as SavedState
+      if (st?.v !== 1 || typeof st.at !== 'number') throw new Error('bad version')
+      const age = Date.now() - st.at
+      if (Array.isArray(st.history)) this.history = st.history.filter((h): h is string => typeof h === 'string').slice(-8)
+      if (typeof st.focusCid === 'string' || st.focusCid === null) this.focusCid = st.focusCid
+      const pendingAge = age + (typeof st.pendingAgeMs === 'number' ? st.pendingAgeMs : 0)
+      const kinds = ['confirm', 'name', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify']
+      const pendingOk = !!st.pending && typeof st.pending === 'object' && kinds.includes((st.pending as { kind?: string }).kind ?? '')
+      if (pendingOk && pendingAge < PENDING_TTL_MS) {
+        this.pending = st.pending
+        this.pendingAt = this.now() - pendingAge
+      }
+      this.log.info('resume', { ageMs: age, pending: pendingOk ? (st.pending as { kind: string }).kind : null, restored: !!this.pending, history: this.history.length })
+    } catch (e) {
+      this.log.warn('resume_ignored', { error: e })
+    }
   }
 
   private remember(line: string) {
@@ -1441,6 +1508,7 @@ export class Session {
   }
 
   close() {
+    if (this.unacked.size) this.log.warn('ops_unacked', { batches: this.unacked.size, ops: [...this.unacked.values()].reduce((a, b) => a + b, 0), seqs: [...this.unacked.keys()] })
     this.log.info('session_end', { turns: this.turnNo, lang: this.lang, durationMs: this.now() - this.startedAt, pendingLeft: this.pending?.kind ?? null })
     this.closed = true
     if (this.held) clearTimeout(this.held.timer)

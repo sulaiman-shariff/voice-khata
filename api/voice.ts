@@ -32,7 +32,14 @@ const perIp = new Map<string, number>()
  */
 const MAX_PER_IP = 12
 /** A socket whose client stopped answering pings is terminated, so it cannot hold an IP slot forever. */
-const HEARTBEAT_MS = 30_000
+const HEARTBEAT_MS = 15_000
+/**
+ * Speech buffered on the phone during a dropped connection is replayed this many times faster
+ * than real time (Prisma transcribed 1x, 2x and 4x replays identically in eval/probe_gnani5.ts).
+ */
+const REPLAY_PACE = 3
+/** at most 20 s of audio may wait in the replay queue */
+const REPLAY_MAX_FRAMES = 625
 const alive = new WeakSet<WebSocket>()
 const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
@@ -116,16 +123,40 @@ wss.on('connection', (ws, req) => {
     log: L,
   })
   let audioFrames = 0
+  // replayed speech (and live audio that arrives meanwhile) goes through a paced queue, in order
+  let replaying = false
+  const backlog: Buffer[] = []
+  let pump: ReturnType<typeof setInterval> | null = null
+  let replay = { frames: 0, started: 0 }
+  const feed = (b: Buffer) => {
+    try {
+      session.onAudio(b)
+    } catch (e) {
+      L.error('audio_failed', { error: e })
+    }
+  }
+  const startPump = () => {
+    if (pump) return
+    pump = setInterval(() => {
+      for (let i = 0; i < REPLAY_PACE && backlog.length; i++) feed(backlog.shift()!)
+      if (!backlog.length && !replaying) {
+        clearInterval(pump!)
+        pump = null
+        L.info('replay_done', { frames: replay.frames, audioMs: replay.frames * 32, ms: Date.now() - replay.started, pace: REPLAY_PACE })
+      }
+    }, 32)
+  }
   send({ type: 'ready', region: process.env.VERCEL_REGION ?? 'local' })
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
       audioFrames++
-      try {
-        session.onAudio(data as Buffer)
-      } catch (e) {
-        L.error('audio_failed', { error: e })
-      }
+      const b = data as Buffer
+      if (replaying || backlog.length) {
+        if (replaying) replay.frames++
+        if (backlog.length < REPLAY_MAX_FRAMES) backlog.push(b)
+        startPump()
+      } else feed(b)
       return
     }
     let msg: ClientMsg
@@ -133,6 +164,21 @@ wss.on('connection', (ws, req) => {
       msg = JSON.parse(data.toString())
     } catch {
       L.warn('bad_message', { reason: 'not json', bytes: (data as Buffer).length })
+      return
+    }
+    if (msg && (msg as { type?: string }).type === 'ping') {
+      send({ type: 'pong', t: Number((msg as { t?: unknown }).t) || 0 })
+      return
+    }
+    if (msg && (msg as { type?: string }).type === 'replay_start') {
+      replaying = true
+      replay = { frames: 0, started: Date.now() }
+      L.info('replay_start')
+      return
+    }
+    if (msg && (msg as { type?: string }).type === 'replay_end') {
+      replaying = false
+      startPump()
       return
     }
     if (!validMsg(msg)) {
@@ -147,6 +193,7 @@ wss.on('connection', (ws, req) => {
     }
   })
   ws.on('close', (code, reason) => {
+    if (pump) clearInterval(pump)
     L.info('conn_close', { code, reason: reason.toString().slice(0, 120), durationMs: Date.now() - opened, audioFrames })
     session.close()
     tts.close()
@@ -164,7 +211,8 @@ function validMsg(m: unknown): m is ClientMsg {
     case 'hello': {
       const s = x.snapshot as Record<string, unknown> | undefined
       return typeof x.lang === 'string' && LANGS.has(x.lang) && !!s && Array.isArray(s.customers) && s.customers.length <= 5000 &&
-        typeof s.today === 'object' && typeof s.month === 'object'
+        typeof s.today === 'object' && typeof s.month === 'object' &&
+        (x.resume === undefined || typeof x.resume === 'string') && (x.resend === undefined || typeof x.resend === 'string')
     }
     case 'snapshot': {
       const s = x.snapshot as Record<string, unknown> | undefined
@@ -179,6 +227,8 @@ function validMsg(m: unknown): m is ClientMsg {
       return x.speed === 0.8 || x.speed === 1 || x.speed === 1.2
     case 'readback':
       return typeof x.on === 'boolean'
+    case 'ack':
+      return Number.isInteger(x.seq)
     case 'ptt_start':
     case 'ptt_end':
     case 'playback_done':

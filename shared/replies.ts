@@ -30,6 +30,8 @@ export interface Replies {
   ack: () => string
   /** said while a slow (LLM) turn is still being read */
   filler: () => string
+  /** the connection dropped before a turn's result arrived: it is being handled again */
+  resent: () => string
   saved: (name: string, amt: number, dir: Dir) => string
   savedPromise: (name: string, amt: number, dayOffset: number) => string
   newCustomer: (name: string) => string
@@ -60,6 +62,7 @@ export interface Replies {
 }
 
 const HI: Replies = {
+  resent: () => 'नेटवर्क टूट गया था, फिर से लिख रहा हूँ।',
   ack: () => 'लिख दिया।',
   filler: () => 'एक सेकंड।',
   disclosure: () => 'नमस्ते! मैं वॉइस खाता हूँ, एक AI सहायक। आपका हिसाब सिर्फ़ इसी फ़ोन पर रहता है। बोलिए, किसका कितना लिखूँ?',
@@ -93,6 +96,7 @@ const HI: Replies = {
 }
 
 const EN: Replies = {
+  resent: () => 'The network dropped, saving that again.',
   ack: () => 'Noted.',
   filler: () => 'One second.',
   disclosure: () => 'Hello! I am Voice Khata, an AI assistant. Your ledger stays only on this phone. Tell me, whose amount should I write?',
@@ -126,6 +130,7 @@ const EN: Replies = {
 }
 
 const KN: Replies = {
+  resent: () => 'ನೆಟ್‌ವರ್ಕ್ ಕಡಿತವಾಗಿತ್ತು, ಮತ್ತೆ ಬರೆಯುತ್ತಿದ್ದೇನೆ.',
   ack: () => 'ಬರೆದೆ.',
   filler: () => 'ಒಂದು ಸೆಕೆಂಡ್.',
   disclosure: () => 'ನಮಸ್ಕಾರ! ನಾನು ವಾಯ್ಸ್ ಖಾತಾ, ಒಂದು AI ಸಹಾಯಕಿ. ನಿಮ್ಮ ಲೆಕ್ಕ ಈ ಫೋನಿನಲ್ಲೇ ಇರುತ್ತದೆ. ಹೇಳಿ, ಯಾರದು ಎಷ್ಟು ಬರೆಯಲಿ?',
@@ -159,6 +164,7 @@ const KN: Replies = {
 }
 
 const TA: Replies = {
+  resent: () => 'நெட்வொர்க் துண்டிக்கப்பட்டது, மீண்டும் எழுதுகிறேன்.',
   ack: () => 'எழுதிட்டேன்.',
   filler: () => 'ஒரு நொடி.',
   disclosure: () => 'வணக்கம்! நான் வாய்ஸ் கட்டா, ஒரு AI உதவியாளர். உங்கள் கணக்கு இந்த போனில் மட்டுமே இருக்கும். சொல்லுங்கள், யாருக்கு எவ்வளவு எழுதட்டும்?',
@@ -192,6 +198,7 @@ const TA: Replies = {
 }
 
 const TE: Replies = {
+  resent: () => 'నెట్‌వర్క్ తెగిపోయింది, మళ్ళీ రాస్తున్నాను.',
   ack: () => 'రాశాను.',
   filler: () => 'ఒక్క క్షణం.',
   disclosure: () => 'నమస్కారం! నేను వాయిస్ ఖాతా, ఒక AI సహాయకురాలిని. మీ లెక్క ఈ ఫోన్‌లోనే ఉంటుంది. చెప్పండి, ఎవరిది ఎంత రాయాలి?',
@@ -225,6 +232,7 @@ const TE: Replies = {
 }
 
 const ML: Replies = {
+  resent: () => 'നെറ്റ്‌വർക്ക് മുറിഞ്ഞു, വീണ്ടും എഴുതുന്നു.',
   ack: () => 'എഴുതി.',
   filler: () => 'ഒരു നിമിഷം.',
   disclosure: () => 'നമസ്കാരം! ഞാൻ വോയ്സ് ഖാത, ഒരു AI സഹായി. നിങ്ങളുടെ കണക്ക് ഈ ഫോണിൽ മാത്രമേ ഉള്ളൂ. പറയൂ, ആരുടെ എത്ര എഴുതണം?',
@@ -258,6 +266,7 @@ const ML: Replies = {
 }
 
 const MR: Replies = {
+  resent: () => 'नेटवर्क तुटले होते, पुन्हा लिहितो.',
   ack: () => 'लिहिलं.',
   filler: () => 'एक सेकंद.',
   disclosure: () => 'नमस्कार! मी व्हॉइस खाता, एक AI सहाय्यक. तुमचा हिशोब फक्त याच फोनवर राहतो. सांगा, कोणाचे किती लिहू?',
@@ -291,6 +300,7 @@ const MR: Replies = {
 }
 
 const BN: Replies = {
+  resent: () => 'নেটওয়ার্ক কেটে গিয়েছিল, আবার লিখছি।',
   ack: () => 'লিখে নিলাম।',
   filler: () => 'এক সেকেন্ড।',
   disclosure: () => 'নমস্কার! আমি ভয়েস খাতা, একজন AI সহায়ক। আপনার হিসাব শুধু এই ফোনেই থাকে। বলুন, কার কত লিখব?',
@@ -324,6 +334,7 @@ const BN: Replies = {
 }
 
 const GU: Replies = {
+  resent: () => 'નેટવર્ક તૂટી ગયું હતું, ફરી લખું છું.',
   ack: () => 'લખી દીધું.',
   filler: () => 'એક સેકન્ડ.',
   disclosure: () => 'નમસ્તે! હું વૉઇસ ખાતા છું, એક AI સહાયક. તમારો હિસાબ ફક્ત આ ફોનમાં જ રહે છે. બોલો, કોનું કેટલું લખું?',
@@ -357,6 +368,7 @@ const GU: Replies = {
 }
 
 const PA: Replies = {
+  resent: () => 'ਨੈੱਟਵਰਕ ਟੁੱਟ ਗਿਆ ਸੀ, ਮੁੜ ਲਿਖ ਰਿਹਾ ਹਾਂ।',
   ack: () => 'ਲਿਖ ਲਿਆ।',
   filler: () => 'ਇੱਕ ਸਕਿੰਟ।',
   disclosure: () => 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਵੌਇਸ ਖਾਤਾ ਹਾਂ, ਇੱਕ AI ਸਹਾਇਕ। ਤੁਹਾਡਾ ਹਿਸਾਬ ਸਿਰਫ਼ ਇਸੇ ਫ਼ੋਨ ਵਿੱਚ ਰਹਿੰਦਾ ਹੈ। ਦੱਸੋ, ਕਿਸਦਾ ਕਿੰਨਾ ਲਿਖਾਂ?',

@@ -65,7 +65,8 @@ export interface VoiceEvents {
   partial(text: string): void
   final(text: string): void
   say(text: string): void
-  ops(ops: LedgerOp[]): void
+  /** apply these ops; resolve once they are written (the client then acknowledges them) */
+  ops(ops: LedgerOp[]): void | Promise<void>
   pending(p: PendingView | null): void
   show(m: Extract<ServerMsg, { type: 'show' }>): void
   remind(cid: string, text: string): void
@@ -75,6 +76,10 @@ export interface VoiceEvents {
   lang?(l: Lang): void
   /** The shopkeeper paused after speaking: give instant feedback before the reply. */
   heard?(): void
+  /** Connection quality: good, slow (replies will be late) or offline (nothing is saved). */
+  network?(state: 'good' | 'slow' | 'offline'): void
+  /** A turn lost to a dropped connection is being handled again in the new session. */
+  resent?(text: string): void
 }
 
 export interface VoiceClient {

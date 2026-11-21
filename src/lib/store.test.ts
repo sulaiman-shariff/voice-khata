@@ -185,3 +185,15 @@ describe('backup export/import', () => {
     expect((await a.verify()).ok).toBe(true)
   })
 })
+
+describe('store: a batch delivered twice saves once', () => {
+  it('skips entries and customers it already has (re-sent or replayed ops)', async () => {
+    const s = await createStore(memoryPersistence())
+    const batch = [cust('c1', 'Suleman'), entry('e1', 'c1', 30000, 'payment')]
+    await s.applyOps(batch)
+    await s.applyOps(batch)
+    expect(s.state.entries.size).toBe(1)
+    expect(s.state.customers.size).toBe(1)
+    expect(balance(s.state, 'c1')).toBe(-30000)
+  })
+})

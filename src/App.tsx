@@ -54,6 +54,7 @@ function Home({ store }: { store: KhataStore }) {
   const [sheet, setSheet] = useState<'settings' | 'privacy' | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const [on, setOn] = useState(false)
+  const [net, setNet] = useState<'good' | 'slow' | 'offline'>('good')
   const [entry, setEntry] = useState<EntryMode>(null)
   const [entryFrom, setEntryFrom] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
@@ -95,7 +96,9 @@ function Home({ store }: { store: KhataStore }) {
       partial: (x) => setHeard(x),
       final: (x) => setHeard(x),
       say: (x) => setSaid(x),
-      ops: (ops) => void onOps(ops),
+      ops: (ops) => onOps(ops),
+      network: (s) => setNet(s),
+      resent: (text) => toast(`${t.resent}: “${text.length > 60 ? `${text.slice(0, 60)}…` : text}”`, { duration: 6000 }),
       pending: (p) => {
         setPending(p)
         if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false) } // the question card must be visible
@@ -266,6 +269,11 @@ function Home({ store }: { store: KhataStore }) {
             else if (a === 'nahi') voice.current?.tap('no')
             else voice.current?.answer(a)
           }} />}
+          {on && net !== 'good' && (
+            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-800 dark:text-amber-300')}>
+              {net === 'offline' ? t.netOffline : t.netSlow}
+            </div>
+          )}
           {(heard || said) && on && (
             <div className="space-y-1 text-center">
               {heard && <div className="truncate text-sm text-muted-foreground">“{heard}”</div>}

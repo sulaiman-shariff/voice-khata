@@ -264,7 +264,7 @@ describe('review fixes', () => {
   it('every turn ends with turn_done, even when nothing is said', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.turn('bhaiya thoda jaldi karo')
-    expect(h.out.at(-1)).toEqual({ type: 'turn_done' })
+    expect(h.out.at(-1)).toMatchObject({ type: 'turn_done', resume: expect.any(String) })
   })
 
   it('a model promise on a credit or a far-off day is not trusted', () => {

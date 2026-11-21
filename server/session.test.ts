@@ -588,3 +588,50 @@ describe('colloquial rupee words do not trigger the language rescue', () => {
     expect(h.s.pending?.kind).toBe('direction')
   })
 })
+
+describe('continuity across a dropped connection', () => {
+  const lastResume = (out: ServerMsg[]) => (out.filter((m) => m.type === 'turn_done').at(-1) as { resume?: string }).resume!
+
+  it('an open read-back question survives a reconnect: "haan" in the new session saves it', async () => {
+    const a = harness([cust('r', 'Ramesh')])
+    await a.turn('रमेश का 340 रुपये उधार', true)
+    expect(a.s.pending?.kind).toBe('confirm')
+    const resume = lastResume(a.out)
+    const b = harness([cust('r', 'Ramesh')])
+    b.s.onClient({ type: 'hello', lang: 'hi', snapshot: { shopName: 'S', customers: [cust('r', 'Ramesh')], last: null, today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 } }, firstRun: false, ptt: false, resume })
+    expect(b.s.pending?.kind).toBe('confirm')
+    expect(b.out).toContainEqual(expect.objectContaining({ type: 'pending', pending: expect.objectContaining({ kind: 'confirm' }) }))
+    await b.turn('हाँ', true)
+    expect(b.entries()).toEqual([expect.objectContaining({ cid: 'r', paise: 34000, direction: 'credit' })])
+  })
+
+  it('a garbled or foreign resume blob is ignored', () => {
+    const b = harness([cust('r', 'Ramesh')])
+    b.s.importState('not-base64-json')
+    b.s.importState(Buffer.from(JSON.stringify({ v: 2 })).toString('base64url'))
+    expect(b.s.pending).toBeNull()
+  })
+
+  it('a stale question is not restored', () => {
+    const a = harness([cust('r', 'Ramesh')])
+    const blob = Buffer.from(JSON.stringify({ v: 1, at: Date.now() - 60_000, lang: 'hi', pending: { kind: 'delete' }, pendingAgeMs: 0, focusCid: null, history: [] })).toString('base64url')
+    a.s.importState(blob)
+    expect(a.s.pending).toBeNull()
+  })
+
+  it('a turn re-sent after a drop is saved with a notice and a full read-back', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'hello', lang: 'hi', snapshot: { shopName: 'S', customers: [cust('r', 'Ramesh')], last: null, today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 } }, firstRun: false, ptt: false, resend: 'Ramesh ka 340 udhaar' })
+    await h.s.idle()
+    expect(h.entries()).toEqual([expect.objectContaining({ cid: 'r', paise: 34000 })])
+    expect(h.said.join(' ')).toMatch(/नेटवर्क.*340/)
+  })
+
+  it('ledger ops carry a sequence number the phone acknowledges', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('Ramesh ka 340 udhaar')
+    const ops = h.out.find((m) => m.type === 'ops') as { seq?: number }
+    expect(ops.seq).toBe(1)
+    h.s.onClient({ type: 'ack', seq: 1 })
+  })
+})

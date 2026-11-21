@@ -241,6 +241,9 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
     applyOps(ops) {
       return enqueue(async () => {
         for (const o of ops) {
+          // a replayed or re-sent batch must never save twice: entries and customers are keyed by id
+          if (o.op === 'entry' && state.entries.has(o.eid)) continue
+          if (o.op === 'add_customer' && state.customers.has(o.cid)) continue
           const ev = opToEvent(o)
           if (ev === 'delete_all') {
             await wipe()

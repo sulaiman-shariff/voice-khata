@@ -55,7 +55,13 @@ export type LedgerOp =
   | { op: 'delete_all' }
 
 export type ClientMsg =
-  | { type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2; readBack?: boolean }
+  | {
+    type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2; readBack?: boolean
+    /** the previous session's state (open question, conversation), from its last turn_done */
+    resume?: string
+    /** a turn whose result never arrived because the connection dropped: handle it again */
+    resend?: string
+  }
   | { type: 'speed'; speed: 0.8 | 1 | 1.2 }
   | { type: 'readback'; on: boolean }
   | { type: 'snapshot'; snapshot: Snapshot }
@@ -66,6 +72,10 @@ export type ClientMsg =
   | { type: 'text'; text: string } // typed (or pasted) instruction: same pipeline as speech
   | { type: 'barge' } // hands-free: the shopkeeper tapped to cut the reply short (does not switch to push-to-talk)
   | { type: 'playback_done' }
+  | { type: 'ack'; seq: number } // these ops are written on the phone
+  | { type: 'ping'; t: number } // heartbeat: the server answers pong at once
+  | { type: 'replay_start' } // binary frames until replay_end are buffered speech from a dropped connection
+  | { type: 'replay_end' }
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
@@ -103,7 +113,8 @@ export type ServerMsg =
   | { type: 'heard' } // the shopkeeper paused after speaking: a tick on the phone, before the reply
   | { type: 'partial'; text: string }
   | { type: 'final'; text: string }
-  | { type: 'ops'; ops: LedgerOp[] }
+  | { type: 'ops'; ops: LedgerOp[]; seq?: number }
+  | { type: 'pong'; t: number }
   | { type: 'say'; text: string } // audio follows as binary PCM 16 kHz s16le
   | { type: 'lang'; lang: Lang } // the shopkeeper spoke another language: the session switched to it
   | { type: 'audio_end' }
@@ -116,4 +127,4 @@ export type ServerMsg =
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */
-  | { type: 'turn_done' }
+  | { type: 'turn_done'; resume?: string }
