@@ -215,7 +215,7 @@ export class Session {
         })
         this.lang = msg.lang
         this.snap = msg.snapshot
-        this.snap.recent ??= []
+        this.snap.entries ??= []
         this.ptt = msg.ptt
         this.speed = msg.speed === 0.8 || msg.speed === 1.2 ? msg.speed : 1
         this.readBackAll = msg.readBack === true
@@ -237,7 +237,7 @@ export class Session {
       case 'snapshot':
         this.log.debug('snapshot', { customers: msg.snapshot.customers.length, todayEntries: msg.snapshot.today.entries })
         this.snap = msg.snapshot
-        this.snap.recent ??= []
+        this.snap.entries ??= []
         this.stt?.setKeyterms(this.keyterms())
         break
       case 'ptt_start':
@@ -761,7 +761,7 @@ export class Session {
    * "Ramesh ka kal wala 340 asal mein 430"): the model picks which entry from the numbered list.
    */
   private isChangeTalk(text: string, intent: Intent): boolean {
-    const recent = this.snap.recent ?? []
+    const recent = this.snap.entries ?? []
     if (recent.length < 2 || !mentionsChange(text)) return false
     // a new entry with an in-breath slip ("Ramesh ko 500 nahi 300") is not a change; "kal wala", "galat tha" are
     if (intent.type === 'entries' && !POINTS_BACK.test(text)) return false
@@ -770,7 +770,7 @@ export class Session {
   }
 
   private needsLlm(text: string, intent: Intent): boolean {
-    const recent = this.snap.recent ?? []
+    const recent = this.snap.entries ?? []
     if (this.isChangeTalk(text, intent)) return true
     if (intent.type === 'entries') {
       const unsure = intent.entries.some((e) => e.reasons.includes('no-name') || e.reasons.includes('no-direction-cue'))
@@ -794,7 +794,7 @@ export class Session {
   }
 
   private llmContext(): LlmContext {
-    const recent = (this.snap.recent ?? []).slice(0, 12)
+    const recent = (this.snap.entries ?? []).slice(0, 12)
     const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10) // shops are in IST
     const when = (e: SnapEntry) => {
       const d = e.day ? Math.round((Date.parse(e.day) - Date.parse(today)) / 86_400_000) : 0
@@ -920,7 +920,7 @@ export class Session {
   private modifyEntry(intent: Extract<Intent, { type: 'modify' }>): Reply {
     const R = say(this.lang)
     const M = sayMore(this.lang)
-    const e = (this.snap.recent ?? [])[intent.ref - 1]
+    const e = (this.snap.entries ?? [])[intent.ref - 1]
     if (!e) return { parts: [R.didNotCatch()], ops: [] }
     const oldName = this.nameOf(e.cid)
     if (intent.remove) {
@@ -1601,7 +1601,7 @@ export class Session {
       case 'entry': {
         const day = istDay(op.dayOffset)
         s.last = { eid: op.eid, cid: op.cid, paise: op.paise, direction: op.direction, day, promise: op.promise || undefined }
-        s.recent = [{ ...s.last }, ...(s.recent ?? [])].slice(0, 20)
+        s.entries = [{ ...s.last }, ...(s.entries ?? [])]
         if (op.promise) break // a promise is remembered, never posted to the balance
         const c = s.customers.find((x) => x.cid === op.cid)
         if (c) c.balancePaise += op.direction === 'credit' ? op.paise : -op.paise
@@ -1610,7 +1610,7 @@ export class Session {
       }
       case 'amend': {
         const sign = (d: Direction) => (d === 'credit' ? 1 : -1)
-        const copies = [s.last, ...(s.recent ?? [])].filter((e): e is SnapEntry => !!e && e.eid === op.eid)
+        const copies = [s.last, ...(s.entries ?? [])].filter((e): e is SnapEntry => !!e && e.eid === op.eid)
         const e = copies[0]
         if (!e) break
         if (!e.promise) {
@@ -1631,20 +1631,20 @@ export class Session {
         break
       }
       case 'void': {
-        const e = [s.last, ...(s.recent ?? [])].find((x) => x && x.eid === op.eid)
+        const e = [s.last, ...(s.entries ?? [])].find((x) => x && x.eid === op.eid)
         if (e && !e.promise) {
           const c = s.customers.find((x) => x.cid === e.cid)
           if (c) c.balancePaise -= (e.direction === 'credit' ? 1 : -1) * e.paise
           this.totals(e.day, e.direction, e.paise, -1)
         }
-        s.recent = (s.recent ?? []).filter((x) => x.eid !== op.eid)
-        if (s.last?.eid === op.eid) s.last = s.recent[0] ?? null
+        s.entries = (s.entries ?? []).filter((x) => x.eid !== op.eid)
+        if (s.last?.eid === op.eid) s.last = s.entries[0] ?? null
         break
       }
       case 'delete_all':
         s.customers = []
         s.last = null
-        s.recent = []
+        s.entries = []
         this.focusCid = null
         break
       case 'add_alias':

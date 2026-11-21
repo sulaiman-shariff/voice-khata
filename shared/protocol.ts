@@ -15,6 +15,7 @@ export interface SnapCustomer {
   adult: boolean
   balancePaise: number
   typicalPaise: number | null
+  phone?: string
 }
 
 export interface SnapEntry {
@@ -31,8 +32,8 @@ export interface Snapshot {
   shopName: string
   customers: SnapCustomer[]
   last: SnapEntry | null
-  /** Recent live entries, newest first (up to 20): lets the agent change any of them, not just the last. */
-  recent?: SnapEntry[]
+  /** Every live entry (voided excluded), newest first: the agent answers and changes from this. Memory only on the server. */
+  entries: SnapEntry[]
   today: { creditPaise: number; paymentPaise: number; entries: number }
   month: { creditPaise: number; paymentPaise: number; entries: number }
 }

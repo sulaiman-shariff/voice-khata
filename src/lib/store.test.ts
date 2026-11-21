@@ -25,6 +25,21 @@ describe('store', () => {
     expect(s.snapshot().last?.eid).not.toBe('e4')
   })
 
+  it('the snapshot carries every live entry and the phone', async () => {
+    const s = await createStore(memoryPersistence())
+    const ops: LedgerOp[] = [cust('c1', 'Ramesh')]
+    for (let i = 1; i <= 26; i++) ops.push(entry(`e${i}`, 'c1', i * 100, 'credit'))
+    await s.applyOps(ops)
+    await s.applyOps([{ op: 'void', eid: 'e26', reason: 'galat' }])
+    await s.setConsent('c1', { remindersOptIn: true, adult: true, phone: '9876543210' })
+    const snap = s.snapshot()
+    expect(snap.entries.length).toBe(25)
+    expect(snap.entries[0].eid).toBe('e25')
+    expect(snap.entries[24].eid).toBe('e1')
+    expect(snap.entries.some((e) => e.eid === 'e26')).toBe(false)
+    expect(snap.customers[0].phone).toBe('9876543210')
+  })
+
   it('a batch delivered twice (re-sent or replayed) is written once', async () => {
     const s = await createStore(memoryPersistence())
     const batch = [cust('c1', 'Suleman'), entry('e1', 'c1', 30000, 'payment')]

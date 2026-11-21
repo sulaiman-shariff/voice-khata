@@ -192,7 +192,7 @@ describe('never a wrong amount silently', () => {
   })
 
   it('a slip in the same breath ("500 nahi 300") writes only 300 and amends nothing', async () => {
-    const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { recent: [ent('e1', 's', 200, 'payment')] })
+    const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: [ent('e1', 's', 200, 'payment')] })
     await h.turn('Ramesh ko 500 nahi 300 udhaar')
     expect(h.ops().filter((o) => o.op === 'amend')).toEqual([])
     expect(h.written()).toEqual([['r', 300, 'credit']])
@@ -332,7 +332,7 @@ describe('a heard name not in the ledger is never written without a yes', () => 
 
   it('a model change of the newest entry to an unknown name is read back before opening it', async () => {
     const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], {
-      recent: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
+      entries: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
       llm: () => ({ intent: 'modify', sure: true, modify: { ref: 1, amount: null, direction: null, name: 'Pinky', remove: false } }),
     })
     await h.turn('Suresh wali entry galat hai, Pinky ka tha')
@@ -349,19 +349,19 @@ describe('the model (LLM) never introduces money that was not said', () => {
 
   it('"same for Suresh" may copy a recent amount, but not one neither spoken nor recent', async () => {
     const recent = [ent('e1', 'r', 340, 'credit')]
-    const copy = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { recent, llm: () => llmEntry('Suresh', 340, 'credit') })
+    const copy = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: recent, llm: () => llmEntry('Suresh', 340, 'credit') })
     await copy.turn('Suresh ka bhi same')
     expect(copy.asks).toBe('confirm') // credit was never said: read back first
     await copy.turn('haan')
     expect(copy.written()).toEqual([['s', 340, 'credit']])
-    const invent = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { recent, llm: () => llmEntry('Suresh', 777, 'credit') })
+    const invent = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: recent, llm: () => llmEntry('Suresh', 777, 'credit') })
     await invent.turn('Suresh ka bhi same')
     expect(invent.entries()).toEqual([])
   })
 
   it('a model change to an older entry with an unspoken amount changes nothing', async () => {
     const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], {
-      recent: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
+      entries: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
       llm: () => ({ intent: 'modify', sure: true, modify: { ref: 1, amount: 999, direction: null, name: null, remove: false } }),
     })
     await h.turn('Suresh wali entry galat hai badlo')
@@ -539,7 +539,7 @@ describe('corrections and undo target the right entry', () => {
       ({ intent: 'modify' as const, sure: true, modify: { ref: m.ref, amount: m.amount ?? null, direction: null, name: m.name ?? null, remove: !!m.remove } })
 
     it('removing Suresh\'s entry is read back first, then voids e2 only', async () => {
-      const h = harness(people(), { recent: recent(), llm: modify({ ref: 2, remove: true }) })
+      const h = harness(people(), { entries: recent(), llm: modify({ ref: 2, remove: true }) })
       await h.turn('Suresh wali entry hata do')
       expect(h.ops()).toEqual([])
       expect(h.asks).toBe('modify')
@@ -548,18 +548,18 @@ describe('corrections and undo target the right entry', () => {
     })
 
     it('yesterday\'s amount for Ramesh changes after a yes; "no" changes nothing', async () => {
-      const yes = harness(people(), { recent: recent(), llm: modify({ ref: 3, amount: 430 }) })
+      const yes = harness(people(), { entries: recent(), llm: modify({ ref: 3, amount: 430 }) })
       await yes.turn('Ramesh ka kal wala 340 nahi 430 tha')
       await yes.turn('haan')
       expect(yes.ops()).toEqual([{ op: 'amend', eid: 'e1', paise: 43000 }])
-      const no = harness(people(), { recent: recent(), llm: modify({ ref: 3, amount: 430 }) })
+      const no = harness(people(), { entries: recent(), llm: modify({ ref: 3, amount: 430 }) })
       await no.turn('Ramesh ka kal wala 340 nahi 430 tha')
       await no.turn('nahi')
       expect(no.ops()).toEqual([])
     })
 
     it('moving an entry to another customer keeps both balances right', async () => {
-      const h = harness(people(), { recent: recent(), llm: modify({ ref: 3, name: 'Suresh' }) })
+      const h = harness(people(), { entries: recent(), llm: modify({ ref: 3, name: 'Suresh' }) })
       await h.turn('Ramesh ka kal wala 340 galat hai, Suresh ka tha')
       await h.turn('haan')
       expect(h.ops()).toEqual([{ op: 'amend', eid: 'e1', cid: 's' }])
@@ -567,14 +567,14 @@ describe('corrections and undo target the right entry', () => {
     })
 
     it('a model pointing at an entry that does not exist changes nothing', async () => {
-      const h = harness(people(), { recent: recent(), llm: modify({ ref: 9, amount: 430 }) })
+      const h = harness(people(), { entries: recent(), llm: modify({ ref: 9, amount: 430 }) })
       await h.turn('Ramesh ka kal wala 340 nahi 430 tha')
       await h.turn('haan')
       expect(h.ops()).toEqual([])
     })
 
     it('a change request the model cannot read never falls back to changing the last entry', async () => {
-      const h = harness(people(), { recent: recent(), llm: () => ({ intent: 'unclear', sure: false }) })
+      const h = harness(people(), { entries: recent(), llm: () => ({ intent: 'unclear', sure: false }) })
       await h.turn('Suresh wali entry hata do')
       expect(h.ops()).toEqual([])
       expect(h.said).toHaveLength(1) // says it did not catch that

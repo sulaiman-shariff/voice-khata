@@ -28,7 +28,7 @@ export interface EntryIntent {
 export type Intent =
   | { type: 'entries'; entries: EntryIntent[] }
   | { type: 'correct'; amount?: AmountSpan; direction?: Direction; name?: string }
-  /** Change or remove an earlier entry (not necessarily the last). ref = 1-based index into snapshot.recent. */
+  /** Change or remove an earlier entry (not necessarily the last). ref = 1-based index into snapshot.entries. */
   | { type: 'modify'; ref: number; amount?: AmountSpan; direction?: Direction; name?: string; remove?: boolean }
   | { type: 'undo' }
   | { type: 'yes' }

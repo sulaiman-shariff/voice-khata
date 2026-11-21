@@ -53,7 +53,7 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
     return null
   }
   const snapshot = (): Snapshot => ({
-    shopName: 'Shop', customers: [...customers], last: null,
+    shopName: 'Shop', customers: [...customers], last: null, entries: [],
     today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   })
   const s = new Session({

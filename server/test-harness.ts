@@ -14,9 +14,9 @@ export const cust = (cid: string, name: string, balanceRs = 0, extra: Partial<Sn
 export const ent = (eid: string, cid: string, rs: number, direction: 'credit' | 'payment', day = '2026-11-13'): SnapEntry =>
   ({ eid, cid, paise: rs * 100, direction, day })
 
-export function snap(customers: SnapCustomer[] = [], recent: SnapEntry[] = []): Snapshot {
+export function snap(customers: SnapCustomer[] = [], entries: SnapEntry[] = []): Snapshot {
   return {
-    shopName: 'Sharma Kirana', customers, last: recent[0] ?? null, recent,
+    shopName: 'Sharma Kirana', customers, last: entries[0] ?? null, entries,
     today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   }
 }
@@ -29,7 +29,7 @@ export const llmEntry = (name: string, amount: number, direction: 'credit' | 'pa
 
 export interface HarnessOpts {
   lang?: Lang
-  recent?: SnapEntry[]
+  entries?: SnapEntry[]
   llm?: (text: string, ctx: LlmContext) => Partial<LlmReading>
   speakMs?: number
   resume?: string
@@ -69,7 +69,7 @@ export function harness(customers: SnapCustomer[] = [], opts: HarnessOpts = {}) 
     now: () => clock,
     newId: () => `id${++ids}`,
   })
-  s.onClient({ type: 'hello', lang: opts.lang ?? 'hi', snapshot: snap(customers, opts.recent), firstRun: false, ptt: false, resume: opts.resume, resend: opts.resend })
+  s.onClient({ type: 'hello', lang: opts.lang ?? 'hi', snapshot: snap(customers, opts.entries), firstRun: false, ptt: false, resume: opts.resume, resend: opts.resend })
 
   const settle = async () => {
     await s.idle()

@@ -19,7 +19,7 @@ function snapshot(): Snapshot {
   const recent = [ent('e3', 'g', 150, 'credit', ist(0)), ent('e2', 's', 200, 'payment', ist(0)), ent('e1', 'r', 340, 'credit', ist(-1))]
   return {
     shopName: 'Sharma Kirana', customers: [cust('r', 'Ramesh', 340), cust('s', 'Suresh', -200), cust('g', 'Geeta', 150)],
-    last: recent[0], recent,
+    last: recent[0], entries: recent,
     today: { creditPaise: 15000, paymentPaise: 20000, entries: 2 }, month: { creditPaise: 49000, paymentPaise: 20000, entries: 3 },
   }
 }

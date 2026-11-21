@@ -304,10 +304,10 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
         customers: [...state.customers.values()].map((c) => ({
           cid: c.cid, name: c.name, aliases: [...c.aliases], householdId: c.householdId,
           remindersOptIn: c.remindersOptIn, adult: c.adult,
-          balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid),
+          balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid), phone: c.phone,
         })),
         last: last ? { eid: last.eid, cid: last.cid, paise: last.paise, direction: last.direction, day: last.day } : null,
-        recent: [...state.order].reverse().map((id) => state.entries.get(id)!).filter((e) => e && !e.voided).slice(0, 20)
+        entries: [...state.order].reverse().map((id) => state.entries.get(id)!).filter((e) => e && !e.voided)
           .map((e) => ({ eid: e.eid, cid: e.cid, paise: e.paise, direction: e.direction, day: e.day, promise: e.promise, ts: e.ts })),
         today: pick(today),
         month: pick(month),
