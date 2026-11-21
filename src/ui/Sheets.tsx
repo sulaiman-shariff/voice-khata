@@ -5,6 +5,7 @@ import { balance, displayName } from '../../shared/ledger.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
+import { isUpiId } from '@/lib/pay'
 import { type RemindResult, sendReminder } from '@/lib/remind'
 import { cn } from '@/lib/utils'
 import { dayLabel, rs } from './format'
@@ -128,6 +129,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
               className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-payment font-semibold text-white shadow-sm disabled:opacity-40">
               <MessageCircle className="size-5" />{t.remindNow}
             </button>
+            {!isUpiId(store.settings.shopUpi) && <div className="rounded-md bg-gold/10 px-2.5 py-2 text-xs">{t.addUpiHint}</div>}
             <div className="text-xs text-muted-foreground">
               {bal <= 0 ? t.nothingDue : !phone.trim() ? t.noPhone : !c.adult || !c.remindersOptIn ? t.notAllowed
                 : last ? `${t.lastReminded}: ${new Date(last).toLocaleString(t.loc, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}

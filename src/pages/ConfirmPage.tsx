@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { api } from '@/lib/api'
 
 interface LinkData {
   shop: string
@@ -100,7 +101,7 @@ export default function ConfirmPage({ token }: { token: string }) {
 
   useEffect(() => {
     let off = false
-    fetch(`/api/confirm?token=${encodeURIComponent(token)}`)
+    fetch(api(`/api/confirm?token=${encodeURIComponent(token)}`))
       .then(async (r) => {
         if (off) return
         if (r.status === 410 || r.status === 404) return setView({ k: 'expired' })
@@ -122,7 +123,7 @@ export default function ConfirmPage({ token }: { token: string }) {
     setBusy(true)
     setErr(false)
     try {
-      const r = await fetch('/api/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, answer: ans }) })
+      const r = await fetch(api('/api/confirm'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, answer: ans }) })
       if (r.ok) setView({ k: 'answered', d, ans, fresh: true })
       else if (r.status === 409) setView({ k: 'answered', d, ans: ((await r.json()) as LinkData).status === 'disputed' ? 'disputed' : 'confirmed', fresh: false })
       else if (r.status === 410) setView({ k: 'expired' })

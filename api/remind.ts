@@ -7,11 +7,11 @@
  * Abuse guard: our own pages only (Origin), Indian or E.164 numbers, short text, and a per-IP
  * hourly cap, since the Twilio account pays for every message.
  */
+import { cors } from '../server/http.js'
 import { log, logged } from '../server/log.js'
 import { json } from '../server/db.js'
 import { sendWhatsApp, toE164, twilioConfigured } from '../server/remind/twilio.js'
 
-const ALLOWED_ORIGIN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/
 const MAX_PER_HOUR = 60
 const sent = new Map<string, number[]>()
 
@@ -27,8 +27,6 @@ function allow(ip: string): boolean {
 export async function handle(req: Request): Promise<Response> {
   if (req.method === 'GET') return json({ configured: twilioConfigured() })
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
-  const origin = req.headers.get('origin')
-  if (origin && !ALLOWED_ORIGIN.test(origin)) return json({ error: 'origin not allowed' }, 403)
   if (!twilioConfigured()) return json({ error: 'twilio not configured' }, 503)
   let b: { to?: unknown; body?: unknown; vars?: { name?: unknown; amount?: unknown; shop?: unknown } }
   try {
@@ -54,4 +52,4 @@ export async function handle(req: Request): Promise<Response> {
   }
 }
 
-export default { fetch: logged('remind', handle) }
+export default { fetch: cors(logged('remind', handle)) }

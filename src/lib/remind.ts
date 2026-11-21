@@ -11,6 +11,8 @@
  */
 import { balance, type LedgerState } from '../../shared/ledger.js'
 import { say } from '../../shared/replies.js'
+import { api } from './api'
+import { PAY_LABEL, isUpiId, payPageUrl } from './pay'
 import type { KhataStore, Settings } from './contracts'
 
 export type RemindResult =
@@ -19,8 +21,8 @@ export type RemindResult =
 
 let configured: Promise<boolean> | null = null
 /** Is Twilio set up on the server? (cached; a failed check counts as no) */
-export const twilioReady = (base = ''): Promise<boolean> =>
-  (configured ??= fetch(`${base}/api/remind`).then((r) => r.json()).then((j: { configured?: boolean }) => !!j.configured).catch(() => false))
+export const twilioReady = (): Promise<boolean> =>
+  (configured ??= fetch(api('/api/remind')).then((r) => r.json()).then((j: { configured?: boolean }) => !!j.configured).catch(() => false))
 
 export const canRemind = (state: LedgerState, cid: string): boolean => {
   const c = state.customers.get(cid)
@@ -33,7 +35,12 @@ export function reminderMessage(state: LedgerState, settings: Settings, cid: str
   const owed = Math.max(0, balance(state, cid)) / 100
   const shop = [settings.shopName, settings.shopAddress].filter(Boolean).join(', ')
   const sign = [settings.ownerName, settings.shopPhone ? `📞 ${settings.shopPhone}` : ''].filter(Boolean).join(' · ')
-  return [say(settings.lang ?? 'hi').reminderText(c.name, owed, shop), sign && `— ${sign}`].filter(Boolean).join('\n')
+  const lang = settings.lang ?? 'hi'
+  // with the shop's UPI ID set, the customer can pay straight from the message
+  const pay = isUpiId(settings.shopUpi) && owed > 0
+    ? `💳 ${PAY_LABEL[lang]} ₹${owed.toLocaleString('en-IN')}: ${payPageUrl({ pa: settings.shopUpi!, pn: settings.shopName, am: owed, tn: `Khata: ${c.name}` })}\nUPI: ${settings.shopUpi!.trim()}`
+    : ''
+  return [say(lang).reminderText(c.name, owed, shop), pay, sign && `— ${sign}`].filter(Boolean).join('\n')
 }
 
 function share(text: string, phone?: string) {
@@ -56,7 +63,7 @@ export async function sendReminder(store: KhataStore, cid: string, opts: { text?
   const stamp = () => store.updateSettings({ reminded: { ...(store.settings.reminded ?? {}), [cid]: Date.now() } })
   if (c.phone && (await twilioReady())) {
     try {
-      const res = await fetch('/api/remind', {
+      const res = await fetch(api('/api/remind'), {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ to: c.phone, body: text, vars: { name: c.name, amount: `₹${(balance(s, cid) / 100).toLocaleString('en-IN')}`, shop: store.settings.shopName } }),
       })

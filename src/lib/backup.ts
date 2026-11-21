@@ -1,4 +1,5 @@
 import type { BackupClient } from './contracts.js'
+import { publicUrl } from './api'
 
 const ITER = 310_000
 const enc = new TextEncoder()
@@ -109,7 +110,7 @@ export function createBackupClient(base = '', storage: IdStorage | null = defaul
       const { res, data } = await post('/api/confirm', { shop: e.shopName, paise: e.paise, direction: e.direction, day: e.day, lang: e.lang })
       if (!res.ok) throw new Error(`Could not create link (${res.status})`)
       const token = data.token as string
-      return { token, url: `${location.origin}/c/${token}` }
+      return { token, url: `${publicUrl()}/c/${token}` }
     },
     async confirmStatus(token) {
       const { res, data } = await call(`/api/confirm?token=${encodeURIComponent(token)}`)

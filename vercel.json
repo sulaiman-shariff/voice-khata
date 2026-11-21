@@ -6,5 +6,5 @@
     "api/import.ts": { "maxDuration": 60 }
   },
   "crons": [{ "path": "/api/cleanup", "schedule": "17 3 * * *" }],
-  "rewrites": [{ "source": "/c/(.*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/c/(.*)", "destination": "/index.html" }, { "source": "/pay", "destination": "/index.html" }]
 }

@@ -1,3 +1,4 @@
+import { cors } from '../server/http.js'
 import { log, logged } from '../server/log.js'
 import { ensureSchema, json, randomHex, sql } from '../server/db.js'
 
@@ -77,4 +78,4 @@ export async function handle(req: Request): Promise<Response> {
   }
 }
 
-export default { fetch: logged('confirm', handle) }
+export default { fetch: cors(logged('confirm', handle)) }

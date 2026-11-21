@@ -1,25 +1,27 @@
 import { Check } from 'lucide-react'
 import { useState } from 'react'
 import type { Settings } from '@/lib/contracts'
+import { isUpiId } from '@/lib/pay'
 import type { UiStrings } from './strings'
 
-export type Profile = Pick<Settings, 'shopName' | 'ownerName' | 'shopAddress' | 'shopPhone'>
+export type Profile = Pick<Settings, 'shopName' | 'ownerName' | 'shopAddress' | 'shopPhone' | 'shopUpi'>
 
 /** Shop name, owner, address and phone: used by sign-up and by "Edit profile" in the menu. */
 export function ProfileForm({ t, initial, submit, onSave }: { t: UiStrings; initial: Profile; submit: string; onSave: (p: Profile) => void }) {
   const [p, setP] = useState<Profile>({
     shopName: initial.shopName === 'Meri Dukaan' ? '' : initial.shopName,
-    ownerName: initial.ownerName ?? '', shopAddress: initial.shopAddress ?? '', shopPhone: initial.shopPhone ?? '',
+    ownerName: initial.ownerName ?? '', shopAddress: initial.shopAddress ?? '', shopPhone: initial.shopPhone ?? '', shopUpi: initial.shopUpi ?? '',
   })
   const set = (k: keyof Profile) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setP({ ...p, [k]: e.target.value })
   const phoneOk = !p.shopPhone || p.shopPhone.replace(/\D/g, '').length >= 10
-  const ok = !!p.shopName.trim() && phoneOk
+  const upiOk = !p.shopUpi?.trim() || isUpiId(p.shopUpi)
+  const ok = !!p.shopName.trim() && phoneOk && upiOk
   return (
     <form
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault()
-        if (ok) onSave({ shopName: p.shopName.trim(), ownerName: p.ownerName?.trim() || undefined, shopAddress: p.shopAddress?.trim() || undefined, shopPhone: p.shopPhone?.trim() || undefined })
+        if (ok) onSave({ shopName: p.shopName.trim(), ownerName: p.ownerName?.trim() || undefined, shopAddress: p.shopAddress?.trim() || undefined, shopPhone: p.shopPhone?.trim() || undefined, shopUpi: p.shopUpi?.trim() || undefined })
       }}
     >
       <Field label={`${t.shopName} *`}>
@@ -33,6 +35,10 @@ export function ProfileForm({ t, initial, submit, onSave }: { t: UiStrings; init
       </Field>
       <Field label={t.shopPhone}>
         <input value={p.shopPhone} onChange={set('shopPhone')} inputMode="tel" autoComplete="tel" maxLength={16} placeholder="98xxxxxxxx" className={INPUT} aria-invalid={!phoneOk} />
+      </Field>
+      <Field label={t.upiId}>
+        <input value={p.shopUpi} onChange={set('shopUpi')} autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={80} placeholder="sharma@okaxis" className={INPUT} aria-invalid={!upiOk} />
+        <span className={`mt-1 block text-xs ${upiOk ? 'text-muted-foreground' : 'text-destructive'}`}>{t.upiHint}</span>
       </Field>
       <p className="text-xs text-muted-foreground">{t.signupNote}</p>
       <button type="submit" disabled={!ok} className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-bold text-primary-foreground shadow-md disabled:opacity-40">

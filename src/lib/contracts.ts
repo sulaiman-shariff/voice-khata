@@ -25,6 +25,8 @@ export interface Settings {
   ownerName?: string
   shopAddress?: string
   shopPhone?: string
+  /** the shop's UPI ID (name@bank): reminders carry a pay link to it */
+  shopUpi?: string
   /** colour scheme (see THEMES in src/ui/theme.ts) */
   theme?: string
   /** WhatsApp reminders: send automatically to opted-in customers who owe, every N days */

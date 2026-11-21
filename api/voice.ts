@@ -13,6 +13,7 @@ import { transcribeRest } from '../server/gnani/rest.js'
 import { LLM_MODEL, readWithLlm, warmUp } from '../server/parse/llm.js'
 import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
+import { isAllowedOrigin } from '../server/http.js'
 
 const server = http.createServer((_req, res) => {
   res.writeHead(426, { 'content-type': 'text/plain' })
@@ -22,8 +23,6 @@ const server = http.createServer((_req, res) => {
 const wss = new WebSocketServer({ server, maxPayload: 1 << 20 })
 let warmed = false
 
-/** Browsers always send Origin: only our own pages may open a session (scripts without Origin are the eval harness). */
-const ALLOWED_ORIGIN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const perIp = new Map<string, number>()
 /**
  * Abuse guard. A phone holds one session (two for a few seconds while it swaps sockets). The
@@ -60,7 +59,8 @@ wss.on('connection', (ws, req) => {
   const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
   const sid = shortId()
   const L = log.child({ sid, ip: hashIp(ip) })
-  if (origin && !ALLOWED_ORIGIN.test(origin)) {
+  // browsers always send Origin: only our own pages (site, local dev, the Capacitor app) may open a session
+  if (!isAllowedOrigin(origin)) {
     L.warn('conn_rejected', { reason: 'origin', origin })
     ws.close(1008, 'origin not allowed')
     return

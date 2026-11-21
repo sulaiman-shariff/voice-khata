@@ -38,9 +38,17 @@ const EXTRA4 = {
   ta: { importTitle: "பழைய கணக்கைச் சேர்", importRead: "படித்து", importType: "தட்டச்சு", importPhoto: "புகைப்படம்", importReadHint: "புத்தகத்தின் ஒவ்வொரு வரியையும் படியுங்கள்: பெயர், பின் தொகை. “ரமேஷ் 500… சுரேஷ் 300 வரவு…”", importTypeHint: "ஒவ்வொரு வரியிலும் பெயர் மற்றும் தொகை, எ.கா “ரமேஷ் 500”", importPhotoHint: "கணக்குப் பக்கத்தைத் தெளிவாகப் படம் எடுங்கள்; AI பெயர்களையும் தொகைகளையும் படிக்கும்", startReading: "படிக்கத் தொடங்கு", stopReading: "படிப்பதை நிறுத்து", addRows: "வரிகளைச் சேர்", takePhoto: "படம் எடு / தேர்வு செய்", readingPhoto: "படத்தைப் படிக்கிறது…", asOf: "எந்தத் தேதி வரையிலான பாக்கி", owes: "பாக்கி", advance: "வரவு (முன்பணம்)", newCust: "புதிய", saveRows: "அனைத்தையும் சேமி", imported: "பழைய கணக்கு சேர்க்கப்பட்டது", noRows: "இன்னும் வரிகள் இல்லை", checkRow: "சரிபார்க்கவும்", importCta: "காகிதக் கணக்கு உள்ளதா? இங்கே சேர்க்கவும்", photoFailed: "படத்தைப் படிக்க முடியவில்லை" },
   te: { importTitle: "పాత ఖాతా చేర్చండి", importRead: "చదివి", importType: "టైప్", importPhoto: "ఫోటో", importReadHint: "పుస్తకంలోని ప్రతి లైన్ చదవండి: పేరు, తర్వాత మొత్తం. “రమేష్ 500… సురేష్ 300 జమ…”", importTypeHint: "ప్రతి లైన్‌లో పేరు మరియు మొత్తం, ఉదా “రమేష్ 500”", importPhotoHint: "ఖాతా పేజీ స్పష్టమైన ఫోటో తీయండి; AI పేర్లు, మొత్తాలు చదువుతుంది", startReading: "చదవడం మొదలుపెట్టండి", stopReading: "చదవడం ఆపండి", addRows: "లైన్లు చేర్చండి", takePhoto: "ఫోటో తీయండి / ఎంచుకోండి", readingPhoto: "ఫోటో చదువుతోంది…", asOf: "ఏ తేదీ వరకు బాకీ", owes: "బాకీ", advance: "జమ (అడ్వాన్స్)", newCust: "కొత్త", saveRows: "అన్నీ సేవ్ చేయండి", imported: "పాత ఖాతా చేరింది", noRows: "ఇంకా లైన్లు లేవు", checkRow: "సరిచూడండి", importCta: "కాగితం ఖాతా ఉందా? ఇక్కడ చేర్చండి", photoFailed: "ఫోటో చదవలేకపోయాం" },
 }
+/** Getting paid: the shop's UPI ID. */
+const EXTRA5 = {
+  hi: { upiId: "UPI ID (भुगतान के लिए)", upiHint: "जैसे sharma@okaxis — याद-दिहानी में “भुगतान करें” लिंक जुड़ेगा", addUpiHint: "ग्राहक संदेश से ही भुगतान कर सकें, इसके लिए ☰ → दुकान की जानकारी में अपना UPI ID डालें" },
+  en: { upiId: "UPI ID (to get paid)", upiHint: "e.g. sharma@okaxis — reminders get a “Pay” link", addUpiHint: "Add your UPI ID in ☰ → Shop profile so customers can pay straight from the reminder" },
+  kn: { upiId: "UPI ID (ಪಾವತಿಗಾಗಿ)", upiHint: "ಉದಾ sharma@okaxis — ನೆನಪಿನ ಸಂದೇಶದಲ್ಲಿ “ಪಾವತಿಸಿ” ಲಿಂಕ್ ಇರುತ್ತದೆ", addUpiHint: "ಗ್ರಾಹಕರು ಸಂದೇಶದಿಂದಲೇ ಪಾವತಿಸಲು ☰ → ಅಂಗಡಿ ವಿವರದಲ್ಲಿ UPI ID ಸೇರಿಸಿ" },
+  ta: { upiId: "UPI ID (பணம் பெற)", upiHint: "எ.கா sharma@okaxis — நினைவூட்டலில் “செலுத்த” இணைப்பு வரும்", addUpiHint: "வாடிக்கையாளர்கள் செய்தியிலிருந்தே செலுத்த ☰ → கடை விவரத்தில் UPI ID சேர்க்கவும்" },
+  te: { upiId: "UPI ID (చెల్లింపుల కోసం)", upiHint: "ఉదా sharma@okaxis — రిమైండర్‌లో “చెల్లించండి” లింక్ వస్తుంది", addUpiHint: "కస్టమర్లు సందేశం నుండే చెల్లించేందుకు ☰ → షాప్ వివరాల్లో UPI ID చేర్చండి" },
+}
 const T = Object.fromEntries(
-  (Object.keys(BASE) as (keyof typeof BASE)[]).map((k) => [k, { ...BASE[k], ...EXTRA[k], ...EXTRA2[k], ...EXTRA3[k], ...EXTRA4[k] }]),
-) as { [K in keyof typeof BASE]: (typeof BASE)[K] & (typeof EXTRA)[K] & (typeof EXTRA2)[K] & (typeof EXTRA3)[K] & (typeof EXTRA4)[K] }
+  (Object.keys(BASE) as (keyof typeof BASE)[]).map((k) => [k, { ...BASE[k], ...EXTRA[k], ...EXTRA2[k], ...EXTRA3[k], ...EXTRA4[k], ...EXTRA5[k] }]),
+) as { [K in keyof typeof BASE]: (typeof BASE)[K] & (typeof EXTRA)[K] & (typeof EXTRA2)[K] & (typeof EXTRA3)[K] & (typeof EXTRA4)[K] & (typeof EXTRA5)[K] }
 export type UiStrings = (typeof T)['en']
 export const ui = (l: Lang | null): UiStrings => (l && l in T ? T[l as keyof typeof T] : T.hi)
 

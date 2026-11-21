@@ -3,19 +3,17 @@
  * Reads a photo of a paper khata page (server/parse/vision.ts). Nothing is stored: the image goes
  * to Gemini and the rows come back to the phone for review. Own pages only, size-capped.
  */
+import { cors } from '../server/http.js'
 import { log, logged } from '../server/log.js'
 import { json } from '../server/db.js'
 import { geminiKeys } from '../server/parse/llm.js'
 import { VISION_MODEL, readLedgerPhoto } from '../server/parse/vision.js'
 
-const ALLOWED_ORIGIN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$/
 const MAX_CHARS = 6_000_000 // ~4.5 MB of base64; the phone sends a ~1600 px JPEG (a few hundred KB)
 const DATA_URL = /^data:(image\/(?:jpeg|png|webp|heic|heif));base64,([A-Za-z0-9+/=]+)$/
 
 export async function handle(req: Request): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405)
-  const origin = req.headers.get('origin')
-  if (origin && !ALLOWED_ORIGIN.test(origin)) return json({ error: 'origin not allowed' }, 403)
   if (!geminiKeys().length) return json({ error: 'no GEMINI_API_KEY on the server' }, 503)
   const text = await req.text()
   if (text.length > MAX_CHARS) return json({ error: 'photo too large' }, 413)
@@ -37,4 +35,4 @@ export async function handle(req: Request): Promise<Response> {
   }
 }
 
-export default { fetch: logged('import', handle) }
+export default { fetch: cors(logged('import', handle)) }

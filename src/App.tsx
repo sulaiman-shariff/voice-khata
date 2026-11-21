@@ -1,4 +1,4 @@
-import { BellRing, BookOpen, Globe, Keyboard, Menu as MenuIcon, MessageCircle, Plus, Search, WifiOff } from 'lucide-react'
+import { BellRing, BookOpen, ChevronRight, Globe, Keyboard, Menu as MenuIcon, MessageCircle, Mic, Plus, Search, ShieldCheck, WifiOff } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { balance, daySummary, displayName, dues, promises } from '../shared/ledger.js'
@@ -9,7 +9,8 @@ import { createBackupClient } from '@/lib/backup'
 import type { KhataStore, VoiceClient, VoiceStatus } from '@/lib/contracts'
 import { createStore, idbPersistence } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { createVoiceClient, defaultVoiceUrl } from '@/lib/voice'
+import { createVoiceClient } from '@/lib/voice'
+import { API_BASE, voiceUrl } from '@/lib/api'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
 import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
@@ -23,14 +24,18 @@ import { MenuSheet } from '@/ui/Menu'
 import { ImportSheet, type ImportSink } from '@/ui/ImportSheet'
 import { ProfileForm } from '@/ui/Profile'
 import { applyTheme } from '@/ui/theme'
+import { Logo, Wordmark } from '@/ui/Logo'
 import { dueForReminder, runAutoReminders, sendReminder } from '@/lib/remind'
 
 const ConfirmPage = lazy(() => import('@/pages/ConfirmPage'))
-const backup = createBackupClient()
+const PayPage = lazy(() => import('@/pages/PayPage'))
+const backup = createBackupClient(API_BASE)
 
 export default function App() {
   const m = location.pathname.match(/^\/c\/([A-Za-z0-9_-]+)/)
   if (m) return <Suspense fallback={null}><ConfirmPage token={m[1]} /></Suspense>
+  // a customer paying from a WhatsApp reminder: no ledger on this page
+  if (location.pathname === '/pay') return <Suspense fallback={null}><PayPage /></Suspense>
   return <ShopApp />
 }
 
@@ -41,7 +46,7 @@ function ShopApp() {
   return <Home store={store} />
 }
 
-const VOICE_URL = (import.meta.env.VITE_VOICE_URL as string | undefined) ?? defaultVoiceUrl()
+const VOICE_URL = voiceUrl()
 
 function Home({ store }: { store: KhataStore }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state)
@@ -448,31 +453,57 @@ function phoneLang(): Lang {
 }
 
 function Brand() {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="grid size-12 place-items-center rounded-lg bg-primary font-display text-2xl font-bold text-primary-foreground shadow-md ring-2 ring-gold/60">₹</div>
-      <div>
-        <div className="font-display text-2xl leading-tight font-semibold">KhataBhai</div>
-        <div className="text-[10px] font-bold tracking-[0.3em] text-gold uppercase">Voice khata · AI</div>
-      </div>
-    </div>
-  )
+  return <Wordmark size={48} />
 }
 
 function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => void }) {
+  const [step, setStep] = useState<'welcome' | 'lang'>('welcome')
   const sample = useMemo(() => ['रमेश का 340 उधार', 'ರಮೇಶ್ 340 ಸಾಲ', 'ரமேஷ் 340 கடன்', 'రమేష్ 340 అప్పు', 'Ramesh 340 credit'], [])
   const [i, setI] = useState(0)
   useEffect(() => { const id = setInterval(() => setI((x) => (x + 1) % sample.length), 1800); return () => clearInterval(id) }, [sample])
+
+  if (step === 'welcome') {
+    return (
+      <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pt-14 pb-8">
+        <div className="flex flex-1 flex-col items-center text-center">
+          <Logo size={96} className="drop-shadow-md" />
+          <div className="mt-6 text-sm font-medium tracking-[0.2em] text-gold uppercase">Welcome to · स्वागत है</div>
+          <h1 className="mt-1 text-4xl font-semibold tracking-tight">KhataBhai</h1>
+          <p className="mt-3 text-lg text-muted-foreground">Your voice khata. Speak, it writes.<br />बोलो, खाता लिख जाएगा।</p>
+          <div className="mt-5 h-8 overflow-hidden text-xl text-primary">
+            <div key={i} className="stamp">“{sample[i]}”</div>
+          </div>
+          <ul className="mt-8 w-full space-y-3 text-left">
+            {([
+              [Mic, 'Speak in any Indian language', 'हिंदी, ಕನ್ನಡ, தமிழ், తెలుగు, English…'],
+              [ShieldCheck, 'Your khata stays on your phone', 'Encrypted · कोई और नहीं पढ़ सकता'],
+              [MessageCircle, 'WhatsApp reminders with a UPI pay link', 'Customers pay you directly'],
+            ] as const).map(([Icon, title, sub]) => (
+              <li key={title} className="flex items-start gap-3 rounded-lg bg-card p-3 ring-1 ring-foreground/10">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary"><Icon className="size-5" /></span>
+                <span>
+                  <span className="block font-semibold">{title}</span>
+                  <span className="block text-sm text-muted-foreground">{sub}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <button onClick={() => setStep('lang')} className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-lg font-semibold text-primary-foreground shadow-md active:scale-[.98]">
+          Get started · शुरू करें<ChevronRight className="size-5" />
+        </button>
+        <p className="mt-3 text-center text-xs text-muted-foreground">An AI assistant · आपकी आवाज़ AI समझता है</p>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-5 pt-8 pb-6">
       <Brand />
-      <div className="mt-8 h-9 overflow-hidden font-display text-2xl text-primary">
-        <div key={i} className="stamp">“{sample[i]}”</div>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">Bolo, khata likh jaayega. An AI assistant · data stays on your phone.</p>
-      <div className="gold-rule mt-6" />
+      <h1 className="mt-8 text-2xl font-semibold tracking-tight">Choose language · भाषा चुनें</h1>
+      <div className="gold-rule mt-4" />
       <button onClick={() => onPick(phoneLang(), true)}
-        className="mt-6 flex items-center gap-3 rounded-lg bg-primary px-4 py-4 text-left text-primary-foreground shadow-md active:scale-[.98]">
+        className="mt-5 flex items-center gap-3 rounded-lg bg-primary px-4 py-4 text-left text-primary-foreground shadow-md active:scale-[.98]">
         <Globe className="size-7 shrink-0" />
         <span>
           <span className="block text-xl font-bold">Auto · कोई भी भाषा</span>

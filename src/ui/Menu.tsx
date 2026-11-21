@@ -1,4 +1,4 @@
-import { BellRing, BookOpen, ChevronRight, MapPin, Palette, Pencil, Phone, ShieldCheck, Store, User } from 'lucide-react'
+import { BellRing, BookOpen, ChevronRight, IndianRupee, MapPin, Palette, Pencil, Phone, ShieldCheck, Store, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
@@ -6,6 +6,7 @@ import type { KhataStore } from '@/lib/contracts'
 import { clientLog } from '@/lib/log'
 import { dueForReminder, twilioReady } from '@/lib/remind'
 import { Dropdown } from './Dropdown'
+import { Logo } from './Logo'
 import { ProfileForm } from './Profile'
 import type { UiStrings } from './strings'
 import { THEMES, applyTheme, themeId } from './theme'
@@ -29,7 +30,7 @@ export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImp
     <Sheet open={open} onOpenChange={(o) => { if (!o) { setEditing(false); onClose() } }}>
       <SheetContent side="left" className="w-[88%] max-w-sm overflow-y-auto pb-8">
         <SheetHeader className="pb-1">
-          <SheetTitle className="font-display text-2xl">{t.menu}</SheetTitle>
+          <SheetTitle className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight"><Logo size={34} />{t.menu}</SheetTitle>
           <div className="gold-rule mt-2" />
         </SheetHeader>
         <div className="space-y-6 px-4 text-sm">
@@ -45,6 +46,7 @@ export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImp
                   {st.ownerName && <div className="flex items-center gap-1.5"><User className="size-3.5 shrink-0" />{st.ownerName}</div>}
                   {st.shopAddress && <div className="flex items-start gap-1.5"><MapPin className="mt-0.5 size-3.5 shrink-0" /><span>{st.shopAddress}</span></div>}
                   {st.shopPhone && <div className="flex items-center gap-1.5"><Phone className="size-3.5 shrink-0" />{st.shopPhone}</div>}
+                  {st.shopUpi && <div className="flex items-center gap-1.5"><IndianRupee className="size-3.5 shrink-0" /><span className="truncate">{st.shopUpi}</span></div>}
                 </div>
                 <button onClick={() => setEditing(true)} className="mt-2 flex min-h-11 items-center gap-1.5 font-semibold text-primary"><Pencil className="size-4" />{t.editProfile}</button>
               </div>

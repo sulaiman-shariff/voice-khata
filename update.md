@@ -10,7 +10,61 @@ npm run server      # voice function on ws://localhost:8787 (reads .env, restart
 npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (587 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (592 pass) and `npx tsc -b` (clean).
+
+---
+
+## 6. Customers pay from the reminder (UPI), welcome page + logo, ready for Capacitor
+
+**Status:** built and committed locally. Type check and unit tests pass. **Not yet tested by hand**: the owner tests it.
+
+### Getting paid (UPI)
+- **Shop UPI ID:** the shop profile has a **UPI ID** field (sign-up and ☰ → Edit profile), validated as `name@bank`. Until it is set, the customer screen's reminder box says so.
+- **Reminder text:** with a UPI ID set, every reminder (manual, voice or automatic) gets two lines:
+  `💳 Pay ₹500: https://<site>/pay?pa=…&pn=…&am=500&tn=Khata: Ramesh`
+  `UPI: sharma@okaxis`
+- **Why an https link:** WhatsApp does not make `upi://` links tappable, so the reminder links to a **pay page** instead.
+- **The pay page** (`/pay`, `src/pages/PayPage.tsx`) is what the customer opens, in English with Hindi beside it. It shows:
+  - the shop and the amount, which the customer can change to pay part of it,
+  - **"Pay with UPI app"**: a standard `upi://pay?pa&pn&am&cu=INR&tn` link that opens GPay, PhonePe, Paytm, BHIM or any UPI app with everything filled in,
+  - a **QR code** for paying from another phone,
+  - the **UPI ID** with a copy button.
+- **Where the money goes:** straight from the customer's UPI app to the shop's account. KhataBhai never holds or sees it.
+- **Not built — marking the khata paid automatically:** that needs a payment gateway (Razorpay, Cashfree or PhonePe PG) with a webhook, and a way to reach the phone's ledger. Until then the shopkeeper says "Ramesh ne 500 diye" as usual. This part is left to the friend.
+- **Files:** `src/lib/pay.ts` (`isUpiId`, `upiUri`, `payPageUrl`, `readPayRequest`, "Pay" in 10 languages), `src/lib/remind.ts` (pay lines), `src/pages/PayPage.tsx`, `src/App.tsx` (`/pay` route), `vercel.json` (`/pay` rewrite), `src/ui/Profile.tsx`, `src/ui/Menu.tsx`, `src/ui/Sheets.tsx`, strings `EXTRA5`. New dependency: `qrcode`.
+
+### Welcome page and logo
+- **First open:** **Welcome to KhataBhai** (logo, "Your voice khata. Speak, it writes." / "बोलो, खाता लिख जाएगा।", a rotating example in 5 languages, three feature cards, "Get started") → choose language → shop sign-up → app.
+- **The logo** (`src/ui/Logo.tsx`, placeholder art) is a speech bubble holding a ₹, with two ledger rules underneath. In the app it takes the theme's colours; `public/icon.svg` is the same mark in fixed colours for the tab, the PWA and the app icon. It also appears in the menu and on the pay page.
+- `public/manifest.webmanifest` uses the new colours.
+
+### Ready for Capacitor (APK)
+In the APK the UI is served from inside the app (`https://localhost` on Android, `capacitor://localhost` on iOS), not from the server. So:
+- **Server address:** every API call and the voice socket now go through `src/lib/api.ts`. Set **`VITE_API_BASE=https://<deployed-site>`** when building the APK. On the web it stays same-origin, so nothing changes there.
+- **Customer links:** links customers open (pay page, confirm links) use **`VITE_PUBLIC_URL`**, which defaults to `VITE_API_BASE`, never the app's own `https://localhost`.
+- **Server CORS** (`server/http.ts`):
+  - **Allowed origins:** the Vercel site, local dev (localhost and LAN), and `https://localhost` / `capacitor://localhost` / `ionic://localhost`. Extra ones go in `ALLOWED_ORIGINS`.
+  - **HTTP functions** (`remind`, `import`, `backup`, `confirm`) answer preflights and add CORS headers.
+  - **The voice socket** uses the same allow-list.
+  - **Before this change:** `backup` and `confirm` had no origin check at all, and voice did not allow LAN addresses.
+- **Steps for the friend:**
+  1. `npm i @capacitor/core @capacitor/cli @capacitor/android && npx cap init KhataBhai com.khatabhai.app --web-dir dist`
+  2. Build: `VITE_API_BASE=https://<deployed-site> npm run build && npx cap add android && npx cap sync`
+  3. In `android/app/src/main/AndroidManifest.xml`, add permissions `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS` and `CAMERA` (for the photo import). `INTERNET` is already there. Capacitor's WebView asks for the mic when `getUserMedia` runs.
+  4. Icons: export `public/icon.svg` to a 1024×1024 PNG at `assets/icon.png`, then `npx @capacitor/assets generate --android`.
+  5. `npx cap open android` → build the APK in Android Studio.
+- **Check in the APK:**
+  - the mic in hands-free mode,
+  - WhatsApp fallback links (`window.open` to `wa.me` should hand over to WhatsApp),
+  - the photo picker (`<input type=file capture>`).
+- **Files:** `src/lib/api.ts`, `src/lib/backup.ts`, `src/lib/remind.ts`, `src/ui/ImportSheet.tsx`, `src/pages/ConfirmPage.tsx`, `src/App.tsx`, `server/http.ts`, `api/*.ts`, `.env.example`.
+
+### Tests added
+- `src/lib/pay.test.ts`: UPI ID check, `upi://` link fields, pay page query parsing.
+- `server/http.test.ts`: allowed and refused origins, preflight, CORS headers.
+
+### Feedback and fixes
+_(to be filled in from the owner's testing)_
 
 ---
 

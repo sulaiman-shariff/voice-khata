@@ -6,6 +6,7 @@ import { type Direction, displayName } from '../../shared/ledger.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
 import type { LedgerOp } from '../../shared/protocol.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { api } from '@/lib/api'
 import type { KhataStore } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { dayDiff, rs, today } from './format'
@@ -68,7 +69,7 @@ export function ImportSheet({ store, open, t, sink, onReading, onClose, onChange
     try {
       const image = await shrink(f)
       setPreview(image)
-      const res = await fetch('/api/import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image }) })
+      const res = await fetch(api('/api/import'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image }) })
       const j = (await res.json().catch(() => ({}))) as { rows?: (ImportRow & { unsure?: boolean })[]; error?: string }
       if (!res.ok || !j.rows) throw new Error(j.error ?? `HTTP ${res.status}`)
       if (!j.rows.length) toast(t.noRows)
