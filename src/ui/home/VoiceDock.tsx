@@ -42,8 +42,10 @@ export function VoiceDock({ v, t, handsFree, ready, onTyping, onHeight, onTag }:
   const offline = v.on && (v.net === 'offline' || v.status === 'offline')
   const words = v.heard ? v.heard.split(/\s+/) : []
   return (
-    <footer ref={ref} className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <div className="pointer-events-auto space-y-3">
+    // solid behind the cards, captions and orb (the list scrolls under them), with only a thin fade above
+    <footer ref={ref} className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-background px-4 pt-3 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))]">
+      <div aria-hidden className="absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
+      <div className="pointer-events-auto relative space-y-3">
         <AnimatePresence mode="popLayout" initial={false}>
           {v.pending ? (
             <motion.div key="pending" layout {...cardMotion}>
