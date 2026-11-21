@@ -1,3 +1,4 @@
+import { isNative, keepAwake } from '@/lib/native'
 /**
  * The voice session: one voice client, its status and captions, the open question, and the
  * mic button's tap / hold logic. Navigation (which sheet or tab a turn opens) is handed back to
@@ -200,6 +201,7 @@ export function useVoice(store: KhataStore, t: UiStrings, nav: VoiceNav) {
 
   // keep the screen awake while the khata is listening
   useEffect(() => {
+    if (isNative) { keepAwake(on); return () => keepAwake(false) }
     if (!on || !('wakeLock' in navigator)) return
     let lock: WakeLockSentinel | null = null
     void navigator.wakeLock.request('screen').then((l) => (lock = l)).catch(() => {})

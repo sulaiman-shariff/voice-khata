@@ -44,7 +44,7 @@ export function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => voi
 
   if (step === 'welcome') {
     return (
-      <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pt-14 pb-8">
+      <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pb-8" style={{ paddingTop: 'max(3.5rem, calc(env(safe-area-inset-top) + 1.5rem))' }}>
         <motion.div variants={list} initial="hidden" animate="show" className="flex flex-1 flex-col items-center text-center">
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 20 }}>
             <Logo size={96} className="drop-shadow-md" />
@@ -77,7 +77,7 @@ export function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => voi
   }
 
   return (
-    <motion.div initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-5 pt-8 pb-6">
+    <motion.div initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-5 pb-6" style={{ paddingTop: 'max(2rem, calc(env(safe-area-inset-top) + 1rem))' }}>
       <Wordmark size={48} />
       <h1 className="mt-8 text-2xl font-semibold tracking-tight">{both(ONBOARD.choose)}</h1>
       <div className="gold-rule mt-4" />

@@ -21,6 +21,8 @@ export interface Settings {
   readBackAll?: boolean
   /** shop profile from the sign-up step (sign-up shows until profileDone) */
   profileDone?: boolean
+  /** the microphone-permission step has been shown (once) */
+  micAsked?: boolean
   ownerName?: string
   shopAddress?: string
   shopPhone?: string

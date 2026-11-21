@@ -1,3 +1,4 @@
+import { openExternal } from '@/lib/native'
 import { toast } from 'sonner'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
 import type { RemindResult } from '@/lib/remind'
@@ -6,7 +7,7 @@ import type { UiStrings } from './strings'
 export function shareWhatsApp(text: string, phone?: string) {
   const digits = phone?.replace(/\D/g, '') ?? ''
   const to = digits.length === 10 ? `91${digits}` : digits
-  window.open(`https://wa.me/${to}?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
+  openExternal(`https://wa.me/${to}?text=${encodeURIComponent(text)}`)
 }
 
 export function remindLink(store: KhataStore, cid: string, text: string) {

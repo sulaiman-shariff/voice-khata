@@ -1,4 +1,7 @@
-import { Plus } from 'lucide-react'
+import { isNative, onBackButton } from '@/lib/native'
+import { useOnline } from '@/lib/online'
+import { MicStep } from '@/ui/home/MicStep'
+import { Plus, WifiOff } from 'lucide-react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
@@ -113,6 +116,7 @@ function Home({ store }: { store: KhataStore }) {
   /** "kal de dunga" on WhatsApp: a promise offered, written only on a tap */
   const [suggestion, setSuggestion] = useState<SyncNotice | null>(null)
   const [cash, setCash] = useState<CashMode>(null)
+  const online = useOnline()
 
   const setTab = (next: Tab) => {
     setTabDir(TAB_ORDER.indexOf(next) >= TAB_ORDER.indexOf(tab) ? 1 : -1)
@@ -259,10 +263,26 @@ function Home({ store }: { store: KhataStore }) {
   const all = useMemo(() => state.order.map((id) => state.entries.get(id)!), [state])
   const due = useMemo(() => dues(state), [state])
 
+  // Android back button: close the topmost layer, else let the app minimise
+  const back = useRef<() => boolean>(() => false)
+  useEffect(() => {
+    back.current = () => {
+      if (qr) setQr(null)
+      else if (cash) setCash(null)
+      else if (entry) closeEntry()
+      else if (typing) setTyping(false)
+      else if (sheet) setSheet(null)
+      else if (cid) setCid(null)
+      else return false
+      return true
+    }
+  })
+  useEffect(() => onBackButton(() => back.current()), [])
+
   if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto })} />
   if (!settings.profileDone) {
     return (
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto h-full max-w-md overflow-y-auto px-5 pt-8 pb-8">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto h-full max-w-md overflow-y-auto px-5 pb-8" style={{ paddingTop: SAFE_TOP }}>
         <Wordmark size={48} />
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">{t.signupTitle}</h1>
         <div className="gold-rule mt-3 mb-5" />
@@ -270,6 +290,8 @@ function Home({ store }: { store: KhataStore }) {
       </motion.div>
     )
   }
+
+  if (isNative && !settings.micAsked) return <MicStep t={t} onDone={() => void store.updateSettings({ micAsked: true })} />
 
   const { lenaPaise, denaPaise } = lenaDena(state)
   const owedCount = due.length + supplierDues(state).length
@@ -323,6 +345,15 @@ function Home({ store }: { store: KhataStore }) {
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
       <Header t={t} settings={settings} dueCount={due.length} onMenu={() => setSheet('menu')} onBell={() => setSheet('collect')} onLanguage={setLanguage} />
+      <AnimatePresence initial={false}>
+        {!online && (
+          <motion.div role="status" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-warn/12 px-3 py-2 text-sm font-medium text-warn">
+              <WifiOff className="size-4 shrink-0" /><span>{t.offlineStrip}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <StatsRow t={t} lena={lenaPaise} dena={denaPaise} />
 
       <div className="mx-4 mt-3 flex gap-2">
@@ -382,7 +413,10 @@ function Home({ store }: { store: KhataStore }) {
       <ListSheet store={store} view={listView} t={t} onClose={() => setListView(null)}
         onCustomer={(c) => { setListView(null); setCid(c) }} onEntry={(eid) => { setListView(null); setEntry({ kind: 'edit', eid }) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={snapshot} />
-      <Toaster position="top-center" />
+      <Toaster position="top-center" offset={{ top: 'calc(env(safe-area-inset-top) + 16px)' }} />
     </div>
   )
 }
+
+/** Page top padding that clears the status bar when the app draws edge-to-edge (Android 15+). */
+export const SAFE_TOP = 'max(2rem, calc(env(safe-area-inset-top) + 1rem))'

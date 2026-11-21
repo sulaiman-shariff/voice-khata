@@ -10,7 +10,49 @@ npm run server      # voice function on ws://localhost:8787 (reads .env, restart
 npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (595 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (597 pass) and `npx tsc -b` (clean).
+
+---
+
+## 10. Android app (Capacitor)
+
+**Status:** code is built, and type check, unit tests, web build and `cap sync` all pass. **The APK has not been built on a device yet.**
+
+**What it is:**
+- A native Android app (`com.khatabhai.app`, "KhataBhai") that carries the UI inside the APK.
+- It talks to the Vercel backend, set in `.env.android`, which `vite build --mode android` reads.
+- The web build is unchanged and stays same-origin.
+
+**Native pieces** (`src/lib/native.ts`, each does nothing on the web):
+- **WhatsApp:** `openExternal()` opens `wa.me` links in WhatsApp through `@capacitor/app-launcher`, falling back to `window.open`. Used by `remind.ts` and `Sheets.tsx`.
+- **Screen awake:** `keepAwake()` (`@capacitor-community/keep-awake`) keeps the screen on while the khata listens. The web still uses `navigator.wakeLock`.
+- **Status bar:** `syncStatusBar()` gives a solid status bar in the theme's background colour, with matching icon style. It is re-applied by `applyTheme()`.
+- **Back button:** `onBackButton()` closes the top layer: entry, then typing, then the open sheet, then the customer. With nothing open it minimizes the app.
+- **Splash:** `hideSplash()` hides it after the first frame.
+- **Offline banner:** `useOnline()` (`src/lib/online.ts`, `@capacitor/network` in the app) shows "No internet — voice is paused, your khata is safe".
+- **Mic step during onboarding:** a one-time "Allow microphone" step after the shop profile. It is skipped when the permission is already granted, and remembered as `micAsked` in settings.
+
+**Android project** (`android/`, committed):
+- **Permissions:** `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS` and `CAMERA` (camera not required).
+- **Icons and splash:** generated from `public/icon.svg` by `scripts/make-app-assets.mjs` and `@capacitor/assets`.
+
+**Build and install** (needs Android Studio installed once, for its Java and SDK; phone with USB debugging on):
+```
+npm run apk           # cap sync, then gradlew assembleDebug; sets JAVA_HOME / ANDROID_HOME / local.properties itself
+npm run apk:install   # adb install -r, with adb found under the Android SDK
+```
+Debug the app's WebView from the PC at `chrome://inspect`.
+
+**Backend:** the deployed Vercel site must include `server/http.ts`'s CORS allow-list, which accepts `https://localhost`. Otherwise reminders and backup are refused, though voice already works.
+
+**Check on the phone:**
+- the mic step, then hands-free voice
+- a reminder opens WhatsApp
+- photo import opens the camera
+- the back button
+- the status bar in light and dark themes
+- the screen stays awake while listening
+- the offline banner when you switch on airplane mode
 
 ---
 

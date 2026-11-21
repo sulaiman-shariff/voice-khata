@@ -1,6 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import { hideSplash, syncStatusBar } from './lib/native'
+
+syncStatusBar() // one ivory look: status bar matches it from the start
 
 // caches the wake-word model and its runtime (production builds only)
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -32,4 +35,5 @@ void resetIfAsked().then(async (resetting) => {
       <App />
     </StrictMode>,
   )
+  requestAnimationFrame(hideSplash) // splash goes after the first frame
 })
