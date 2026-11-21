@@ -15,6 +15,7 @@ import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
 import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
 import { isNative, keepAwake, onBackButton } from '@/lib/native'
+import { useOnline } from '@/lib/online'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
@@ -75,6 +76,7 @@ function Home({ store }: { store: KhataStore }) {
   const [footerH, setFooterH] = useState(260)
   const [fresh, setFresh] = useState<string | null>(null)
   const [on, setOn] = useState(false)
+  const online = useOnline()
   const [net, setNet] = useState<'good' | 'slow' | 'offline'>('good')
   const [entry, setEntry] = useState<EntryMode>(null)
   const [entryFrom, setEntryFrom] = useState<string | null>(null)
@@ -271,6 +273,8 @@ function Home({ store }: { store: KhataStore }) {
     )
   }
 
+  if (!settings.micAsked) return <MicStep t={t} onDone={() => void store.updateSettings({ micAsked: true })} />
+
   const day = daySummary(state, today())
   const all = state.order.map((id) => state.entries.get(id)!)
   const due = dues(state)
@@ -313,7 +317,13 @@ function Home({ store }: { store: KhataStore }) {
         </div>
       </header>
 
-      {on && status === 'offline' && (
+      {!online && (
+        <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300">
+          <WifiOff className="size-4 shrink-0" /><span>{t.offlineStrip}</span>
+        </div>
+      )}
+
+      {online && on && status === 'offline' && (
         <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300">
           <WifiOff className="size-4 shrink-0" /><span>{t.offlineBanner}</span>
         </div>
@@ -480,6 +490,50 @@ function phoneLang(): Lang {
 
 function Brand() {
   return <Wordmark size={48} />
+}
+
+/** One-time "allow microphone" step; skipped silently when already granted (or the WebView can't tell). */
+function MicStep({ t, onDone }: { t: ReturnType<typeof ui>; onDone: () => void }) {
+  const [denied, setDenied] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let dead = false
+    void (async () => {
+      try {
+        const p = await navigator.permissions?.query({ name: 'microphone' as PermissionName })
+        if (!dead && p?.state === 'granted') onDone()
+      } catch { /* not supported: show the step */ }
+    })()
+    return () => { dead = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const allow = async () => {
+    setBusy(true)
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true })
+      s.getTracks().forEach((x) => x.stop())
+      onDone()
+    } catch { setDenied(true); setBusy(false) }
+  }
+  return (
+    <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pt-8 pb-8">
+      <Brand />
+      <div className="flex flex-1 flex-col items-center justify-center text-center">
+        <span className="grid size-20 place-items-center rounded-full bg-primary/10 text-primary"><Mic className="size-10" /></span>
+        <h1 className="mt-6 font-display text-3xl font-semibold">{t.micTitle}</h1>
+        <div className="gold-rule mt-3 mb-4" />
+        <p className="text-lg text-muted-foreground">{t.micBody}</p>
+        {denied && <p role="alert" className="mt-5 rounded-xl bg-amber-500/15 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">{t.micDenied}</p>}
+      </div>
+      {denied ? (
+        <button onClick={onDone} className="mt-8 flex h-14 w-full items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground shadow-md active:scale-[.98]">{t.micAnyway}</button>
+      ) : (
+        <>
+          <button disabled={busy} onClick={() => void allow()} className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-lg font-semibold text-primary-foreground shadow-md active:scale-[.98] disabled:opacity-60"><Mic className="size-5" />{t.micAllow}</button>
+          <button onClick={onDone} className="mt-3 min-h-11 text-sm text-muted-foreground underline">{t.micSkip}</button>
+        </>
+      )}
+    </div>
+  )
 }
 
 function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => void }) {
