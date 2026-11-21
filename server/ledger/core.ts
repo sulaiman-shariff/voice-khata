@@ -53,10 +53,10 @@ export type Pending =
   | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
   | { kind: 'which'; draft: Draft; queue: Draft[]; options: SnapCustomer[] }
   /**
-   * Erase everything. With requireTap (the agent's erase_all) a spoken yes only arms it
-   * (spokenYes); the on-screen button tap then erases. Without it, a yes erases (the old flow).
+   * Erase everything. With requireType (the agent's erase_all) only the typed word erases;
+   * a spoken or tapped yes never does. Without it, a yes erases (the old flow).
    */
-  | { kind: 'delete'; requireTap?: boolean; spokenYes?: boolean }
+  | { kind: 'delete'; requireType?: string }
   /** one question for a list that shared a single direction word */
   | { kind: 'batch'; drafts: Draft[] }
   /**
@@ -527,21 +527,22 @@ export class LedgerCore {
     const p = this.pending
     const acc: Reply = { parts: [], ops: [] }
     if (p.kind === 'batch') return this.answerBatch(p.drafts, text, intent, meta)
+    if (p.kind === 'delete' && p.requireType) {
+      // typed on the phone (answer / text), exactly the word: nothing spoken can do this
+      const norm = (x: string) => x.normalize('NFC').trim().toLowerCase()
+      if (this.turnSrc === 'tap' && norm(text) === norm(p.requireType)) {
+        this.pending = null
+        return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
+      }
+      // a yes (spoken or tapped) is not enough: keep waiting for the word
+      if (intent.type === 'yes') return { parts: [R.eraseType(p.requireType)], ops: [] }
+    }
     if (intent.type === 'undo' || (intent.type === 'no' && p.kind !== 'confusable')) {
       this.pending = null
       if (p.kind === 'delete') return { parts: [R.notSaved()], ops: [] }
       return { parts: [R.notSaved()], ops: [] }
     }
     if (p.kind === 'delete') {
-      if (p.requireTap && intent.type === 'yes') {
-        // erase_all: a spoken yes arms it, then only the on-screen button erases
-        if (this.turnSrc === 'tap' && p.spokenYes) {
-          this.pending = null
-          return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
-        }
-        if (this.turnSrc !== 'tap') this.pending = { kind: 'delete', requireTap: true, spokenYes: true }
-        return { parts: [this.turnSrc !== 'tap' ? R.eraseTap() : R.eraseAsk()], ops: [] }
-      }
       this.pending = null
       if (intent.type === 'yes') return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
       return { parts: [R.notSaved()], ops: [] }
@@ -854,7 +855,7 @@ export class LedgerCore {
     this.expireStale()
     const p = this.pending
     if (!p) return null
-    if (p.kind === 'delete') return p.requireTap ? { kind: 'delete', requireTap: true, armed: p.spokenYes === true } : { kind: 'delete' }
+    if (p.kind === 'delete') return p.requireType ? { kind: 'delete', requireType: p.requireType } : { kind: 'delete' }
     if (p.kind === 'modify') return p.view
     if (p.kind === 'batch') {
       const dir = p.drafts.find((d) => d.direction)?.direction ?? null

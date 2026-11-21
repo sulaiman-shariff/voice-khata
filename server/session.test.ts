@@ -794,19 +794,27 @@ describe('save anyway', () => {
   })
 })
 
-describe('erase needs a spoken yes and then the tap', () => {
-  const armedOf = (out: ServerMsg[]) => (out.filter((m) => m.type === 'pending').at(-1) as { pending: PendingView | null }).pending
-  it('a tap alone does not erase; a spoken haan arms it and the next tap erases', async () => {
+describe('erase needs the typed word', () => {
+  const setup = () => {
     const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en' })
-    h.s.pending = { kind: 'delete', requireTap: true }
-    await h.tap('yes')
-    expect(h.ops()).toEqual([])
-    h.s.onClient({ type: 'hello', lang: 'en', snapshot: h.s.snap, firstRun: false, ptt: false })
-    expect(armedOf(h.out)?.armed).toBe(false)
+    h.s.pending = { kind: 'delete', requireType: 'DELETE' }
+    return h
+  }
+  it('a spoken haan and a yes tap do not erase', async () => {
+    const h = setup()
     await h.turn('haan')
-    expect(h.ops()).toEqual([])
-    expect(armedOf(h.out)).toMatchObject({ kind: 'delete', requireTap: true, armed: true })
     await h.tap('yes')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('delete')
+  })
+  it('answer(word) erases', async () => {
+    const h = setup()
+    await h.answer('delete')
     expect(h.ops()).toEqual([{ op: 'delete_all' }])
+  })
+  it('answer(wrong word) does not erase', async () => {
+    const h = setup()
+    await h.answer('DELETED')
+    expect(h.ops()).toEqual([])
   })
 })

@@ -1,7 +1,7 @@
 import { Download, MessageCircle, Share2, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { balance, dues } from '../../shared/ledger.js'
-import { LANG_NAME, LANGS, type Lang } from '../../shared/replies.js'
+import { LANG_NAME, LANGS, type Lang, eraseWord } from '../../shared/replies.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
@@ -9,7 +9,7 @@ import { clientLog } from '@/lib/log'
 import { cn } from '@/lib/utils'
 import { dayLabel, entryDay, initials, rs } from './format'
 import { Passbook } from './Ledger'
-import { EntryRow } from './parts'
+import { EntryRow, EraseTyped } from './parts'
 import type { UiStrings } from './strings'
 
 const NOTES_EN = [
@@ -134,7 +134,7 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
   const st = store.settings
   const [name, setName] = useState(st.shopName)
   const [debugLogs, setDebugLogs] = useState(clientLog.enabled)
-  /** first tap arms the full reset, a second tap (within 5 s) does it */
+  /** the first tap shows the typed-word confirmation; the reset runs only when the word is typed */
   const [resetArmed, setResetArmed] = useState(false)
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { setResetArmed(false); onClose() } }}>
@@ -176,19 +176,15 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
           </div>
           {/* tucked away: wipes this browser's ledger and settings and starts from the first screen */}
           <div className="pt-2 text-center">
-            <button
-              onClick={() => {
-                if (!resetArmed) {
-                  setResetArmed(true)
-                  setTimeout(() => setResetArmed(false), 5000)
-                  return
-                }
-                location.assign(`${location.pathname}?reset=1`)
-              }}
-              className={cn('min-h-11 px-3 text-xs underline-offset-4', resetArmed ? 'font-semibold text-destructive' : 'text-muted-foreground/70 underline')}
-            >
-              {resetArmed ? t.resetConfirm : t.resetBrowser}
-            </button>
+            {!resetArmed ? (
+              <button onClick={() => setResetArmed(true)} className="min-h-11 px-3 text-xs text-muted-foreground/70 underline underline-offset-4">{t.resetBrowser}</button>
+            ) : (
+              <div className="space-y-1 text-left">
+                <div className="text-sm font-semibold text-destructive">{t.resetBrowser}</div>
+                <div className="text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{eraseWord(st.lang ?? 'hi')}</b></div>
+                <EraseTyped word={eraseWord(st.lang ?? 'hi')} t={t} onErase={() => location.assign(`${location.pathname}?reset=1`)} />
+              </div>
+            )}
           </div>
         </div>
       </SheetContent>

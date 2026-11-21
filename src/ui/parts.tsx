@@ -88,7 +88,7 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
       {p.kind === 'delete' ? (
         <div>
           <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
-          {p.requireTap && <div className="mt-1 text-sm text-muted-foreground">{p.armed ? t.eraseNeedsTap : t.sayHaanFirst}</div>}
+          {p.requireType && <div className="mt-1 text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{p.requireType}</b></div>}
         </div>
       ) : (
         <div className="flex items-end justify-between gap-3">
@@ -125,10 +125,10 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
             {!p.amounts?.length && <TextAnswer label={t.amount} send={t.send} numeric onSubmit={onAnswer} />}
             <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
           </>
-        ) : p.kind === 'delete' && p.requireTap ? (
+        ) : p.kind === 'delete' && p.requireType ? (
           <>
-            <button disabled={!p.armed} onClick={() => onAnswer('haan')} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-destructive text-lg font-semibold text-white active:scale-[.97] disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
-            <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+            <EraseTyped word={p.requireType} t={t} onErase={onAnswer} />
+            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
           </>
         ) : (
           <>
@@ -138,6 +138,21 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
         )}
       </div>
     </div>
+  )
+}
+
+/** Erase confirmation: the button stays disabled until the word is typed; it submits the word. */
+export function EraseTyped({ word, t, onErase, className }: { word: string; t: UiStrings; onErase: (w: string) => void; className?: string }) {
+  const [v, setV] = useState('')
+  const ok = v.normalize('NFC').trim().toLowerCase() === word.normalize('NFC').toLowerCase()
+  return (
+    <form className={cn('col-span-full flex gap-2', className)} onSubmit={(e) => { e.preventDefault(); if (ok) onErase(word) }}>
+      <input
+        value={v} onChange={(e) => setV(e.target.value)} aria-label={word} placeholder={word} maxLength={20} autoComplete="off" autoCapitalize="off"
+        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+      />
+      <button type="submit" disabled={!ok} className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-2xl bg-destructive px-4 text-lg font-semibold text-white disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
+    </form>
   )
 }
 

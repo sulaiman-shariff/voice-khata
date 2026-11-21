@@ -101,10 +101,8 @@ export interface PendingView {
   options?: string[]
   /** amount: the amounts to choose from (rupees), shown as buttons */
   amounts?: number[]
-  /** delete: a spoken yes is not enough, the on-screen button must be tapped */
-  requireTap?: boolean
-  /** delete + requireTap: the spoken yes was heard, the button now erases */
-  armed?: boolean
+  /** delete: only typing this word (an answer / typed text) erases; a spoken or tapped yes never does */
+  requireType?: string
 }
 
 /** A setting the agent changed by voice; the phone applies and stores it. */

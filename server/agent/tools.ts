@@ -6,8 +6,8 @@
  *  - add_entries builds Drafts with path 'llm' and reasons from validate(), so amounts not heard
  *    are dropped, and direction-guessed / name-changed lead to confirm.
  *  - Remove, move, merge, settle and erase always go through a pending question.
- *  - erase_all creates pending.kind === 'delete' with view.requireTap = true: a spoken yes only
- *    arms it, the on-screen button tap erases.
+ *  - erase_all creates pending.kind === 'delete' with requireType = the localized word: only typing it erases.
+ *    erases; a spoken or tapped yes never does.
  *  - send_reminder refuses unless remindersOptIn && adult, and asks for confirmation; nothing is
  *    sent by the server, the phone gets a `ready` card and the shopkeeper taps to send.
  *  - Answers for show and query tools are computed from core.snap (balances; history via
@@ -16,7 +16,7 @@
 import { type Intent, directionAnswer, parseFast } from '../../shared/intent.js'
 import { formatINR } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { LANGS, LANG_NAME, type Lang, guardReply, say, sayMore } from '../../shared/replies.js'
+import { LANGS, LANG_NAME, type Lang, eraseWord, guardReply, say, sayMore } from '../../shared/replies.js'
 import { LedgerCore, type Reply, type TurnMeta } from '../ledger/core.js'
 import type { GeminiTool } from '../parse/gemini.js'
 import { type LlmReading, validate } from '../parse/llm.js'
@@ -288,9 +288,9 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       return { parts: [R.statementReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text } }
     }
     case 'erase_all':
-      // a spoken yes arms it, then only the on-screen button erases (LedgerCore.answerPending)
-      core.pending = { kind: 'delete', requireTap: true }
-      return speak(R.eraseAsk())
+      // only the typed word erases (LedgerCore.answerPending)
+      core.pending = { kind: 'delete', requireType: eraseWord(lang) }
+      return speak(R.eraseType(eraseWord(lang)))
 
     // ------------------------------------------------------------------ show and ask
     case 'show_customer':

@@ -16,10 +16,10 @@ const ent = (eid: string, cid: string, rupees: number, direction: 'credit' | 'pa
   eid, cid, paise: rupees * 100, direction, day: today,
 })
 
-function setup(customers: SnapCustomer[], entries: SnapEntry[] = []) {
+function setup(customers: SnapCustomer[], entries: SnapEntry[] = [], lang: 'en' | 'hi' = 'en') {
   let n = 0
   let now = 1_000_000
-  const core = new LedgerCore({ lang: () => 'en', now: () => now, newId: () => `id${++n}`, log: nullLogger })
+  const core = new LedgerCore({ lang: () => lang, now: () => now, newId: () => `id${++n}`, log: nullLogger })
   core.snap.customers = customers
   core.snap.entries = entries
   core.snap.last = entries[0] ?? null
@@ -103,29 +103,43 @@ describe('agent tools', () => {
     expect(core.snap.customers.map((c) => [c.name, c.balancePaise])).toEqual([['Ramesh', 25000]])
   })
 
-  it('erase_all needs a spoken yes and then a tap', () => {
+  it('erase_all: only the typed word erases, never a spoken or tapped yes', () => {
     const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
     const r = run('erase_all', {}, 'sab data mita do')
     expect(r.ops).toEqual([])
-    expect(core.pending?.kind).toBe('delete')
-    expect(core.pendingView()?.requireTap).toBe(true)
+    expect(r.parts).toEqual([R.eraseType('DELETE')])
+    expect(core.pendingView()).toEqual({ kind: 'delete', requireType: 'DELETE' })
     core.turnSrc = 'voice'
     const v = core.answerPending('haan', parseFast('haan'), meta('haan'))!
     expect(v.ops).toEqual([])
-    expect(v.parts).toEqual([R.eraseTap()])
     expect(core.pending?.kind).toBe('delete')
-    core.turnSrc = 'tap'
-    const t = core.answerPending('yes', { type: 'yes' }, meta('yes'))!
-    expect(t.ops).toEqual([{ op: 'delete_all' }])
-  })
-
-  it('erase_all: a tap alone, before the spoken yes, erases nothing', () => {
-    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
-    run('erase_all', {}, 'sab data mita do')
     core.turnSrc = 'tap'
     const t = core.answerPending('yes', { type: 'yes' }, meta('yes'))!
     expect(t.ops).toEqual([])
     expect(core.pending?.kind).toBe('delete')
+    const w = core.answerPending('delete ', parseFast('delete'), meta('delete'))!
+    expect(w.ops).toEqual([{ op: 'delete_all' }])
+  })
+
+  it('erase_all: the word spoken (not typed) does not erase', () => {
+    const { core, run, meta } = setup([])
+    run('erase_all', {}, 'x')
+    core.turnSrc = 'voice'
+    expect(core.answerPending('DELETE', parseFast('DELETE'), meta('DELETE'))!.ops).toEqual([])
+  })
+
+  it('erase_all: a wrong typed word does not erase', () => {
+    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
+    run('erase_all', {}, 'sab data mita do')
+    core.turnSrc = 'tap'
+    expect(core.answerPending('DELET', parseFast('DELET'), meta('DELET'))!.ops).toEqual([])
+    expect(core.pending).toBeNull()
+  })
+
+  it('erase_all speaks the localized word', () => {
+    const { run, core } = setup([], [], 'hi')
+    run('erase_all', {}, 'x')
+    expect(core.pendingView()?.requireType).toBe('मिटाओ')
   })
 
   it('send_reminder to a customer without consent is refused with a spoken reason', () => {
