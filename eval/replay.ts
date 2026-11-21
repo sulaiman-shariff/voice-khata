@@ -22,7 +22,8 @@ import fs from 'node:fs'
 import { mentionsMoney } from '../shared/intent.js'
 import type { LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot } from '../shared/protocol.js'
 import { AGENT_SYSTEM, type AgentContext, type ToolCall, decide } from '../server/agent/agent.js'
-import { GEMINI_TOOLS, TOOL_SCHEMAS } from '../server/agent/tools.js'
+import { GEMINI_TOOLS } from '../server/agent/tools.js'
+import { vertexDeclaration } from '../server/parse/gemini.js'
 import { Session } from '../server/session.js'
 
 type Step = { say: string } | { tap: 'yes' | 'no' | 'undo' } | { answer: string } | { type: string }
@@ -41,8 +42,8 @@ const CACHE = 'eval/corpus/agent_cache.json'
 type Cached = { calls: ToolCall[]; ms: number }
 const cache: Record<string, Cached> = (!record || args.includes('--fill')) && fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {}
 const agentMs: number[] = []
-// the key covers the prompt and the tool declarations too: change either and the cache is stale
-const PROMPT_HASH = crypto.createHash('sha1').update(AGENT_SYSTEM).update(JSON.stringify(TOOL_SCHEMAS)).digest('hex')
+// the key covers the prompt and the tool declarations as sent too: change either and the cache is stale
+const PROMPT_HASH = crypto.createHash('sha1').update(AGENT_SYSTEM).update(JSON.stringify(GEMINI_TOOLS.map(vertexDeclaration))).digest('hex')
 const requestKey = (ctx: AgentContext) => crypto.createHash('sha1').update(PROMPT_HASH).update(JSON.stringify(ctx)).digest('hex')
 const only = args.includes('--sid') ? args[args.indexOf('--sid') + 1] : null
 const convs: Conv[] = JSON.parse(fs.readFileSync(file, 'utf8'))

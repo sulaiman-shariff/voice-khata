@@ -23,6 +23,17 @@ describe('spotWake', () => {
     expect(spotWake('khata', true).found).toBe(false)
     expect(spotWake('bhai 300', true).found).toBe(false)
   })
+  it('catches how recognisers mishear it at the start of a turn', () => {
+    for (const t of ['Hata bhai, Ramesh 300 udhaar', 'ata bhai Suresh ka hisaab', 'Khadha bhai Mohan 50 jama', 'Aata Bhai.', 'Hatabhai Ramesh 300',
+      'हटा भाई रमेश 300', 'आता भाई', 'खड़ा भाई सुरेश', 'ಹಾತಾ ಭಾಯ್ ರಮೇಶ್', 'ಆತಾ ಭಾಯ್', 'ಖಾದಾ ಭಾಯ್']) expect(spotWake(t).found, t).toBe(true)
+    expect(spotWake('Hata bhai, Ramesh 300 udhaar').rest).toBe('Ramesh 300 udhaar')
+  })
+  it('ordinary chatter does not wake', () => {
+    for (const t of ['aata hai', 'abhi aata hai bhai', 'bhai sahab', 'bhai sahab aaiye', 'hata do', 'isko hata do', 'isko hata bhai', 'khana kha lo',
+      'khana', 'aata do kilo', 'आता है', 'भाई साहब', 'हटा दो', 'खाना खा लो', 'ಹಟ ಮಾಡಬೇಡ', 'kal aata bhai', 'ata hai bhai', 'hata', 'bhai']) {
+      expect(spotWake(t).found, t).toBe(false)
+    }
+  })
   it('ignores talk that merely has khata or bhai', () => {
     expect(spotWake('Ramesh ka khata kholo').found).toBe(false)
     expect(spotWake('bhai 300 do').found).toBe(false)

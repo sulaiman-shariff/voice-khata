@@ -6,6 +6,14 @@ import { phoneticKey } from './names.js'
 
 const FIRST = new Set(['khata', 'khate', 'kate'].map((k) => phoneticKey(k)))
 const SECOND = new Set(['bhai', 'bayi', 'bye', 'bai'].map((k) => phoneticKey(k)))
+/**
+ * How speech recognisers mishear "khata" ("Hata bhai", "ata bhai", "Khadha bhai"). These are also
+ * everyday words ("hata do", "aata hai"), so they count only as the first word of the utterance and
+ * only before "bhai" itself: "isko hata bhai" or "aata hai" never wake.
+ */
+const WEAK_FIRST = new Set(['hata', 'aata', 'khadha', 'gaata'].map((k) => phoneticKey(k)))
+const BHAI = phoneticKey('bhai')
+const WEAK_JOINED = new Set([...WEAK_FIRST].map((k) => k + 'a' + BHAI))
 /** joined keys the phone's own detector may have heard (compared at edit distance 1) */
 const KHATABHAI = phoneticKey('khatabhai')
 const JOINED = [phoneticKey('khata') + phoneticKey('bhai'), KHATABHAI]
@@ -28,6 +36,8 @@ function find(text: string, fuzzy: boolean): { start: number; end: number } | nu
   for (let i = 0; i < toks.length; i++) {
     if (toks[i].key === KHATABHAI) return { start: toks[i].start, end: toks[i].end }
     if (FIRST.has(toks[i].key) && toks[i + 1] && SECOND.has(toks[i + 1].key)) return { start: toks[i].start, end: toks[i + 1].end }
+    if (i === 0 && WEAK_FIRST.has(toks[0].key) && toks[1]?.key === BHAI) return { start: toks[0].start, end: toks[1].end }
+    if (i === 0 && WEAK_JOINED.has(toks[0].key)) return { start: toks[0].start, end: toks[0].end }
     if (fuzzy) {
       if (toks[i].key.length >= 4 && JOINED.some((j) => lev1(toks[i].key, j))) return { start: toks[i].start, end: toks[i].end }
       const next = toks[i + 1]
