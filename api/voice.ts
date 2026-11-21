@@ -24,7 +24,26 @@ let warmed = false
 /** Browsers always send Origin: only our own pages may open a session (scripts without Origin are the eval harness). */
 const ALLOWED_ORIGIN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const perIp = new Map<string, number>()
-const MAX_PER_IP = 6
+/**
+ * Abuse guard. A phone holds one session (two for a few seconds while it swaps sockets). The
+ * server sees a client's close some time after it happens, so a limit of 6 refused fresh
+ * sessions from a client that never had more than 4 open (measured on a preview); 12 leaves room.
+ */
+const MAX_PER_IP = 12
+/** A socket whose client stopped answering pings is terminated, so it cannot hold an IP slot forever. */
+const HEARTBEAT_MS = 30_000
+const alive = new WeakSet<WebSocket>()
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!alive.has(ws)) {
+      ws.terminate()
+      continue
+    }
+    alive.delete(ws)
+    ws.ping()
+  }
+}, HEARTBEAT_MS)
+heartbeat.unref?.()
 
 wss.on('connection', (ws, req) => {
   const origin = req.headers.origin
@@ -39,11 +58,18 @@ wss.on('connection', (ws, req) => {
     return
   }
   perIp.set(ip, n)
-  ws.on('close', () => {
+  let released = false
+  const release = () => {
+    if (released) return
+    released = true
     const left = (perIp.get(ip) ?? 1) - 1
     if (left <= 0) perIp.delete(ip)
     else perIp.set(ip, left)
-  })
+  }
+  ws.on('close', release)
+  ws.on('error', release)
+  alive.add(ws)
+  ws.on('pong', () => alive.add(ws))
   const key = process.env.GNANI_API_KEY ?? ''
   if (!warmed) {
     warmed = true

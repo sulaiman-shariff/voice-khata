@@ -246,7 +246,7 @@ for (const [v, ...ws] of IA) add('num', v, ...ws)
 
 // Currency + glue.
 for (const w of ['₹', 'rs', 'rs.', 'inr', 'रु', 'रू', 'रुपया', 'रुपये', 'रुपए', 'रूपये', 'rupaye', 'rupees', 'rupee',
-  'rupiya', 'rupaiya', 'rupay', 'ரூ', 'ரூபாய்', 'ರೂ', 'ರೂಪಾಯಿ', 'రూ', 'రూపాయలు', 'రూపాయి', 'টাকা', 'রুপি',
+  'rupiya', 'rupaiya', 'rupay', 'ரூ', 'ரூபாய்', 'ரூபா', 'ರೂ', 'ರೂಪಾಯಿ', 'రూ', 'రూపాయలు', 'రూపాయి', 'రూపాయల', 'টাকা', 'রুপি',
   'રૂપિયા', 'ਰੁਪਏ', 'രൂപ', 'rupayi']) add('currency', 0, w)
 for (const w of ['पैसे', 'पैसा', 'paise', 'paisa', 'பைசா', 'ಪೈಸೆ', 'పైసలు']) add('paise', 0, w)
 for (const w of ['and']) add('and', 0, w) // only English "and" glues inside a number ("one hundred and five")
@@ -503,6 +503,12 @@ function makeSpan(toks: Tok[], s: number, e: number, ev: { value: number; flags:
 }
 
 /** True if the (folded) token is a number word, scale, fraction or numeral. */
+/** Rupee / paise words in any language ("ரூபா", "రూపాయల", "रुपये"): part of an amount, never a name. */
+export function isCurrencyWord(t: string): boolean {
+  const e = LEX.get(t)
+  return !!e && (e.kind === 'currency' || e.kind === 'paise')
+}
+
 export function isNumberWord(t: string): boolean {
   if (/^\d/.test(t)) return true
   const e = LEX.get(t)

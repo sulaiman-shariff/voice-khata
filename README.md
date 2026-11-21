@@ -87,6 +87,8 @@ Measured on production (Vercel bom1, 13 Nov), 7 Hindi conversation turns: speech
 | Done talking (p50) | 4.0 s | 3.4 s |
 | Exact amounts | 60/60 clean, 56/60 street | 60/60 clean, 57/60 street |
 
+On Vercel (bom1, measured from the same machine, same suite): production before 912 / 1,682 ms (clean p50 / p95) and 991 / 2,215 ms (street), against a preview with these changes at 843 / 1,263 ms and 907 / 1,212 ms. Exact amounts were the same (60/60 clean, 56/60 street, 0 silent wrong). The preview was reached with the local Vercel development OIDC token (`x-vercel-trusted-oidc-idp-token`, read by `eval/e2e_suite.ts`). Measuring it found the per-IP session guard refusing new sessions from a client that had at most 4 open, because the server learns of a close late. The limit is now 12, each socket frees its slot once, and a 30 s ping terminates dead sockets.
+
 Where a clean turn's time goes: Prisma's final transcript arrives about 800 ms after the shopkeeper stops, parsing takes 0 ms, and Timbre starts in about 150 ms (0 ms for cached phrases). Timbre's time to first audio does not grow with text length (a 300-character paragraph starts as fast as "लिख दिया"), so replies are not split into pieces. The end of turn is left as it is: Prisma's partials lag about one word, and committing on `speech_end` was measured and did not help.
 
 ## Gnani services used

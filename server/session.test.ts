@@ -577,3 +577,14 @@ describe('feels instant', () => {
     expect(h.said.join(' ')).not.toContain('एक सेकंड')
   })
 })
+
+describe('colloquial rupee words do not trigger the language rescue', () => {
+  it.each(['ரமேஷ், 400 ரூபா.', 'రమేష్, 400 రూపాయల.'])('%s asks the direction without a REST call', async (text) => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh')], { transcribe2: async () => { calls++; return { text: '' } } })
+    h.s.lang = text.includes('ரூ') ? 'ta' : 'te'
+    await h.turn(text)
+    expect(calls).toBe(0)
+    expect(h.s.pending?.kind).toBe('direction')
+  })
+})

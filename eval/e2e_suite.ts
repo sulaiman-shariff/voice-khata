@@ -152,9 +152,15 @@ async function runScenario(lang: string, spec: LangSpec, sc: Scenario, cond: Con
   let cursor = noise ? hash32(`${lang}|${sc.id}|${cond.label}`) % noise.length : 0
   let gain = 0
 
-  const ws = new WebSocket(URL_)
+  // protected Vercel previews: the local development OIDC token passes Deployment Protection
+  // (run under `vercel env run -- ...`; never printed)
+  const oidc = process.env.VERCEL_OIDC_TOKEN
+  const ws = new WebSocket(URL_, oidc && URL_.startsWith('wss://') ? { headers: { 'x-vercel-trusted-oidc-idp-token': oidc } } : undefined)
   const msgs: Rec[] = []
   ws.on('message', (d, bin) => msgs.push({ t: performance.now(), m: bin ? { type: 'audio', bytes: (d as Buffer).length } : JSON.parse(d.toString()) }))
+  // E2E_DUMP=1: print every non-audio server message (debugging a deployment)
+  if (process.env.E2E_DUMP) ws.on('message', (d, bin) => { if (!bin) console.log(`  [${lang} ${sc.id}] +${Math.round(performance.now() - t0)}ms ${d.toString().slice(0, 160)}`) })
+  const t0 = performance.now()
   ws.on('error', (e) => msgs.push({ t: performance.now(), m: { type: 'error', message: String(e) } }))
   await new Promise<void>((res, rej) => { ws.on('open', () => res()); ws.on('error', rej) })
   ws.send(JSON.stringify({ type: 'hello', lang, snapshot: snapshotFor(spec), firstRun: false, ptt: false }))

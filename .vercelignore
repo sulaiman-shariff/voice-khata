@@ -7,3 +7,4 @@ eval/
 *.npy
 *.parquet
 *.zip
+*.mp4

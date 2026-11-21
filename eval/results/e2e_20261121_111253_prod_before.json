@@ -1,0 +1,6936 @@
+{
+ "url": "wss://voice-khata-delta.vercel.app/api/voice",
+ "conditions": [
+  {
+   "noise": "none",
+   "snr": null,
+   "label": "clean"
+  },
+  {
+   "noise": "street",
+   "snr": 5,
+   "label": "street 5dB"
+  }
+ ],
+ "langs": [
+  "hi",
+  "kn",
+  "ta",
+  "te"
+ ],
+ "streamedSecondsSummed": 976.3341518000004,
+ "wallSeconds": 250.5743791,
+ "summaries": {
+  "hi|clean": {
+   "entryN": 15,
+   "exact": 15,
+   "direct": 14,
+   "askedOk": 1,
+   "asked": 1,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 15,
+   "corrN": 2,
+   "corrOk": 2,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 896.6494999999995,
+   "p95": 2253.8909999999996,
+   "latN": 18
+  },
+  "hi|street 5dB": {
+   "entryN": 15,
+   "exact": 14,
+   "direct": 5,
+   "askedOk": 9,
+   "asked": 9,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 1,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 14,
+   "corrN": 2,
+   "corrOk": 2,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 951.5767999999953,
+   "p95": 7164.627399999998,
+   "latN": 18
+  },
+  "kn|clean": {
+   "entryN": 15,
+   "exact": 15,
+   "direct": 14,
+   "askedOk": 1,
+   "asked": 1,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 15,
+   "corrN": 2,
+   "corrOk": 2,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 904.1738000000041,
+   "p95": 1095.4632999999958,
+   "latN": 18
+  },
+  "kn|street 5dB": {
+   "entryN": 15,
+   "exact": 15,
+   "direct": 7,
+   "askedOk": 8,
+   "asked": 7,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 15,
+   "corrN": 2,
+   "corrOk": 1,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 1056.6167000000132,
+   "p95": 2215.4755000000005,
+   "latN": 17
+  },
+  "ta|clean": {
+   "entryN": 15,
+   "exact": 15,
+   "direct": 14,
+   "askedOk": 1,
+   "asked": 1,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 15,
+   "corrN": 2,
+   "corrOk": 2,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 965.4538999999932,
+   "p95": 1991.5746999999974,
+   "latN": 18
+  },
+  "ta|street 5dB": {
+   "entryN": 15,
+   "exact": 13,
+   "direct": 7,
+   "askedOk": 6,
+   "asked": 7,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 2,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 13,
+   "corrN": 2,
+   "corrOk": 2,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 967.8102999999828,
+   "p95": 2018.8366000000096,
+   "latN": 18
+  },
+  "te|clean": {
+   "entryN": 15,
+   "exact": 15,
+   "direct": 14,
+   "askedOk": 1,
+   "asked": 1,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 15,
+   "corrN": 2,
+   "corrOk": 2,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 999.0737999999983,
+   "p95": 2109.920100000003,
+   "latN": 18
+  },
+  "te|street 5dB": {
+   "entryN": 15,
+   "exact": 14,
+   "direct": 6,
+   "askedOk": 8,
+   "asked": 8,
+   "entryTurns": 14,
+   "askedWrong": 0,
+   "noSave": 1,
+   "silentWrong": 0,
+   "dirN": 15,
+   "dirOk": 14,
+   "corrN": 2,
+   "corrOk": 0,
+   "queryN": 1,
+   "queryOk": 1,
+   "pendN": 1,
+   "pendOk": 1,
+   "skipped": 0,
+   "p50": 1037.3396999999823,
+   "p95": 2602.800099999993,
+   "latN": 16
+  },
+  "ALL|clean": {
+   "entryN": 60,
+   "exact": 60,
+   "direct": 56,
+   "askedOk": 4,
+   "asked": 4,
+   "entryTurns": 56,
+   "askedWrong": 0,
+   "noSave": 0,
+   "silentWrong": 0,
+   "dirN": 60,
+   "dirOk": 60,
+   "corrN": 8,
+   "corrOk": 8,
+   "queryN": 4,
+   "queryOk": 4,
+   "pendN": 4,
+   "pendOk": 4,
+   "skipped": 0,
+   "p50": 912.4559000000008,
+   "p95": 1681.5953000000009,
+   "latN": 72
+  },
+  "ALL|street 5dB": {
+   "entryN": 60,
+   "exact": 56,
+   "direct": 25,
+   "askedOk": 31,
+   "asked": 31,
+   "entryTurns": 56,
+   "askedWrong": 0,
+   "noSave": 4,
+   "silentWrong": 0,
+   "dirN": 60,
+   "dirOk": 56,
+   "corrN": 8,
+   "corrOk": 5,
+   "queryN": 4,
+   "queryOk": 4,
+   "pendN": 4,
+   "pendOk": 4,
+   "skipped": 0,
+   "p50": 990.6101999999955,
+   "p95": 2215.4755000000005,
+   "latN": 69
+  }
+ },
+ "turns": [
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "सुरेश ने सौ रुपये दिए।",
+   "heard": [
+    "सुरेश ने 100 रुपए दिए।"
+   ],
+   "replied": [
+    "सुरेश, 100 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 963.5199000000002,
+   "snrDb": 81.50682118855364,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "मोहन ने पाँच सौ रुपये वापस किए।",
+   "heard": [
+    "मोहन ने 500 रुपये वापस किए।"
+   ],
+   "replied": [
+    "मोहन, 500 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 869.3581000000004,
+   "snrDb": 81.52762318515933,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "गीता का सत्तर रुपये उधार लिखो।",
+   "heard": [
+    "गीता का 70 रुपये उधार लिखो।"
+   ],
+   "replied": [
+    "गीता का नया खाता खोला। गीता, 70 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:गीता",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 769.4685,
+   "snrDb": 77.2980234063685,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "रमेश का तीन सौ चालीस रुपये उधार लिख दो।",
+   "heard": [
+    "रमेश का 340 रुपये उधार लिख दो।"
+   ],
+   "replied": [
+    "रमेश, 340 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 762.3257000000003,
+   "snrDb": 80.2085879786388,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "रमेश का डेढ़ सौ उधार।",
+   "heard": [
+    "रमेश का 150 उधार।"
+   ],
+   "replied": [
+    "रमेश, 150 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 768.3186000000005,
+   "snrDb": 80.2095023331416,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "सुरेश का सवा सौ रुपये उधार।",
+   "heard": [
+    "सुरेश का 125 रुपए उधार।"
+   ],
+   "replied": [
+    "सुरेश, 125 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 993.1507999999994,
+   "snrDb": 79.17533497925027,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "मोहन का बारह सौ रुपये उधार।",
+   "heard": [
+    "मोहन का 1200 रुपये उधार।"
+   ],
+   "replied": [
+    "मोहन, 1,200 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 994.9000999999989,
+   "snrDb": 82.43186658939378,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "रमेश का दो सौ रुपये उधार।",
+   "heard": [
+    "रमेश का 200 रुपये उधार।"
+   ],
+   "replied": [
+    "रमेश, 200 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 978.7417999999998,
+   "snrDb": 81.69729494939438,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "नहीं, तीन सौ।",
+   "heard": [
+    "नहीं, 300।"
+   ],
+   "replied": [
+    "ठीक किया: रमेश, 300 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 641.1126999999997,
+   "snrDb": 81.96414262166498,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "सुरेश का कितना बाकी है?",
+   "heard": [
+    "सुरेश का कितना बाकी है?"
+   ],
+   "replied": [
+    "सुरेश का कुल बाकी 500 रुपये है।"
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 1141.8006999999998,
+   "snrDb": 79.02639195702665,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "रमेश चार सौ।",
+   "heard": [
+    "रमेश, 400।"
+   ],
+   "replied": [
+    "रमेश, 400 रुपये, उधार दिया या जमा किया?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 2253.8909999999996,
+   "snrDb": 81.93913867092574,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "उधार।",
+   "heard": [
+    "उधार"
+   ],
+   "replied": [
+    "रमेश, 400 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 801.9567999999999,
+   "snrDb": 77.35428724081908,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "सुरेश कल दो सौ रुपये देगा।",
+   "heard": [
+    "सुरेश कल 200 रुपए देगा।",
+    "हाँ।"
+   ],
+   "replied": [
+    "सुरेश, 200 रुपये जमा, सही है?",
+    "सुरेश कल 200 रुपये देंगे, याद रखूँगी।"
+   ],
+   "asked": [
+    "confirm(सुरेश 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 896.6494999999995,
+   "snrDb": 80.73208853569315,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "मोहन ने साठ रुपये दिए।",
+   "heard": [
+    "मोहन ने 60 रुपए दिए।"
+   ],
+   "replied": [
+    "मोहन, 60 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 912.4559000000008,
+   "snrDb": 82.47627486448849,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "रमेश का सौ रुपये उधार और सुरेश ने पचास रुपये जमा किए।",
+   "heard": [
+    "रमेश का 100 रुपये उधार और सुरेश ने 50 रुपये जमा किए।"
+   ],
+   "replied": [
+    "रमेश, 100 रुपये उधार। सुरेश, 50 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 793.3912999999993,
+   "snrDb": 79.36910414148144,
+   "entryOutcomes": [
+    "direct_ok",
+    "direct_ok"
+   ],
+   "dirOk": [
+    true,
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "रमेश को तीन सौ रुपये दिए।",
+   "heard": [
+    "रमेश को 300 रुपए दिए।"
+   ],
+   "replied": [
+    "रमेश, 300 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 993.7920999999988,
+   "snrDb": 81.89596821247034,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ಮುನ್ನೂರ ನಲವತ್ತು ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 340 ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 340 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 813.3002000000015,
+   "snrDb": 82.03991352315009,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ನೂರು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+   "heard": [
+    "ಸುರೇಶ್ 100 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+   ],
+   "replied": [
+    "ಸುರೇಶ್, 100 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 951.2099000000017,
+   "snrDb": 80.92136056324925,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "सुरेश का सौ रुपये उधार।",
+   "heard": [
+    "सुरेश का 100 रुपये उधार।"
+   ],
+   "replied": [
+    "सुरेश, 100 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 863.3146000000015,
+   "snrDb": 80.23503649126441,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "नहीं, जमा।",
+   "heard": [
+    "नहीं जमा।"
+   ],
+   "replied": [
+    "ठीक किया: सुरेश, 100 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "direction": "payment"
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 666.4758000000002,
+   "snrDb": 77.60364156063264,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "ಮೋಹನ್ ಐನೂರು ರೂಪಾಯಿ ಕಟ್ಟಿದರು.",
+   "heard": [
+    "ಮೋಹನ್ 500 ರೂಪಾಯಿ ಕಟ್ಟಿದರು."
+   ],
+   "replied": [
+    "ಮೋಹನ್, 500 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 844.8065999999999,
+   "snrDb": 81.87898088347553,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ನೂರೈವತ್ತು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 150 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 150 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 908.8451000000023,
+   "snrDb": 82.13995496972518,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "ಗೀತಾ ಅವರ ಎಪ್ಪತ್ತು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಗೀತಾ ಅವರ 70 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಗೀತಾ ಅವರ ಹೊಸ ಖಾತೆ ತೆರೆದಿದ್ದೇನೆ. ಗೀತಾ, 70 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:ಗೀತಾ",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 941.390000000003,
+   "snrDb": 77.98653534949342,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ಅವರ ನೂರ ಇಪ್ಪತ್ತೈದು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಸುರೇಶ್ ಅವರ 125 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಸುರೇಶ್, 125 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 898.9955999999984,
+   "snrDb": 82.54138283159102,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "ಮೋಹನ್ ಅವರ ಒಂದು ಸಾವಿರದ ಇನ್ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಮೋಹನ್ ಅವರ 1200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಮೋಹನ್, 1,200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 917.8928000000014,
+   "snrDb": 81.5009600705085,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ಅವರ ಬಾಕಿ ಎಷ್ಟು?",
+   "heard": [
+    "ಸುರೇಶ್ ಅವರ ಬಾಕಿ ಎಷ್ಟು?"
+   ],
+   "replied": [
+    "ಸುರೇಶ್ ಅವರ ಒಟ್ಟು ಬಾಕಿ 500 ರೂಪಾಯಿ."
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 904.1738000000041,
+   "snrDb": 81.65779140563153,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ನಾನೂರು ರೂಪಾಯಿ.",
+   "heard": [
+    "ರಮೇಶ್, 400 ರೂಪಾಯಿ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 400 ರೂಪಾಯಿ, ಸಾಲ ಕೊಟ್ಟಿದ್ದಾ ಅಥವಾ ಅವರು ಕಟ್ಟಿದ್ದಾ?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 964.8782999999967,
+   "snrDb": 82.99641843369844,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "ಸಾಲ.",
+   "heard": [
+    "ಸಾಲ"
+   ],
+   "replied": [
+    "ರಮೇಶ್, 400 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 889.1941000000006,
+   "snrDb": 76.40310568734327,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ಇನ್ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 859.2694999999949,
+   "snrDb": 84.19384400832394,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "ಇಲ್ಲ, ಮುನ್ನೂರು.",
+   "heard": [
+    "ಇಲ್ಲ, 300."
+   ],
+   "replied": [
+    "ಸರಿಪಡಿಸಿದೆ: ರಮೇಶ್, 300 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 809.027700000006,
+   "snrDb": 78.97344509593115,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ನಾಳೆ ಇನ್ನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರೆ.",
+   "heard": [
+    "ಸುರೇಶ್ ನಾಳೆ 200 ರೂಪಾಯಿ ಕೊಡುತ್ತಾರೆ.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ಸುರೇಶ್, 200 ರೂಪಾಯಿ ಜಮಾ, ಸರಿನಾ?",
+    "ಸುರೇಶ್ ನಾಳೆ 200 ರೂಪಾಯಿ ಕೊಡುತ್ತಾರೆ, ನೆನಪಿಟ್ಟುಕೊಳ್ಳುತ್ತೇನೆ."
+   ],
+   "asked": [
+    "confirm(ಸುರೇಶ್ 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 994.5310000000027,
+   "snrDb": 80.99826876243927,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ನೂರು ರೂಪಾಯಿ ಸಾಲ ಮತ್ತು ಸುರೇಶ್ ಐವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 100 ರೂಪಾಯಿ ಸಾಲ ಮತ್ತು ಸುರೇಶ್ 50 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 100 ರೂಪಾಯಿ ಸಾಲ. ಸುರೇಶ್, 50 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1092.5046000000002,
+   "snrDb": 81.39536689968915,
+   "entryOutcomes": [
+    "direct_ok",
+    "direct_ok"
+   ],
+   "dirOk": [
+    true,
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "ಮೋಹನ್ ಅರವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+   "heard": [
+    "ಮೋಹನ್ 60 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+   ],
+   "replied": [
+    "ಮೋಹನ್, 60 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1095.4632999999958,
+   "snrDb": 81.59181723925042,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "ರಮೇಶ್‌ಗೆ ಮುನ್ನೂರು ರೂಪಾಯಿ ಕೊಟ್ಟೆ.",
+   "heard": [
+    "ರಮೇಶ್ ಗೆ 300 ರೂಪಾಯಿ ಕೊಟ್ಟೆ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 300 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 208.45440000000235,
+   "snrDb": 81.459273137963,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "சுரேஷ் நூறு ரூபாய் கட்டினார்.",
+   "heard": [
+    "சுரேஷ் 100 ரூபாய் கட்டினார்."
+   ],
+   "replied": [
+    "சுரேஷ், 100 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 974.0385000000024,
+   "snrDb": 83.92229198865792,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "ரமேஷுக்கு முன்னூற்று நாற்பது ரூபாய் கடன் எழுதுங்கள்.",
+   "heard": [
+    "ரமேஷுக்கு 340 ரூபாய் கடன் எழுதுங்கள்."
+   ],
+   "replied": [
+    "ரமேஷ், 340 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 663.5264999999999,
+   "snrDb": 81.39181108046577,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "மோகன் ஐநூறு ரூபாய் கொடுத்தார்.",
+   "heard": [
+    "மோகன் 500 ரூபாய் கொடுத்தார்."
+   ],
+   "replied": [
+    "மோகன், 500 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 881.7726999999941,
+   "snrDb": 80.62774477122963,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ಅವರ ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಸುರೇಶ್ ಅವರ 100 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಸುರೇಶ್, 100 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 897.8048999999955,
+   "snrDb": 82.31708261534335,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "ಇಲ್ಲ, ಜಮಾ.",
+   "heard": [
+    "ಇಲ್ಲ, ಜಮಾ."
+   ],
+   "replied": [
+    "ಸರಿಪಡಿಸಿದೆ: ಸುರೇಶ್, 100 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "direction": "payment"
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 659.9694999999992,
+   "snrDb": 77.77538867507076,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "கீதாவுக்கு எழுபது ரூபாய் கடன்.",
+   "heard": [
+    "கீதாவுக்கு 70 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "கீதாவ அவர்களுக்குப் புதிய கணக்கு திறந்தேன். கீதாவ, 70 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:கீதாவ",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1040.1980999999942,
+   "snrDb": 82.03319484244676,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "ரமேஷ் நூற்று ஐம்பது ரூபாய் கடன்.",
+   "heard": [
+    "ரமேஷ், 150 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "ரமேஷ், 150 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1140.5899999999965,
+   "snrDb": 81.7042675834592,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "சுரேஷ் நூற்று இருபத்தைந்து ரூபாய் கடன்.",
+   "heard": [
+    "சுரேஷ், 125 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "சுரேஷ், 125 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1029.5597000000053,
+   "snrDb": 79.17664683025987,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "மோகன் ஆயிரத்து இருநூறு ரூபாய் கடன்.",
+   "heard": [
+    "மோகன், 1200 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "மோகன், 1,200 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1224.0768000000025,
+   "snrDb": 80.38918061477405,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "சுரேஷுக்கு எவ்வளவு பாக்கி?",
+   "heard": [
+    "சுரேஷுக்கு எவ்வளோ பாக்கி?"
+   ],
+   "replied": [
+    "சுரேஷ் அவர்களின் மொத்த பாக்கி 500 ரூபாய்."
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 848.3201000000045,
+   "snrDb": 81.10096329819402,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "ரமேஷ் இருநூறு ரூபாய் கடன்.",
+   "heard": [
+    "ரமேஷ், 200 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "ரமேஷ், 200 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1066.069199999998,
+   "snrDb": 83.70023546181298,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "இல்லை, முன்னூறு.",
+   "heard": [
+    "இல்லை, 300."
+   ],
+   "replied": [
+    "திருத்தினேன்: ரமேஷ், 300 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 660.3148000000001,
+   "snrDb": 78.98019119158089,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "சுரேஷ் நாளைக்கு இருநூறு ரூபாய் கொடுப்பார்.",
+   "heard": [
+    "சுரேஷ் நாளைக்கு 200 ரூபாய் கொடுப்பார்.",
+    "ஆமாம்"
+   ],
+   "replied": [
+    "சுரேஷ், 200 ரூபாய் வரவு, சரியா?",
+    "சுரேஷ் நாளை 200 ரூபாய் தருவார், நினைவில் வைக்கிறேன்."
+   ],
+   "asked": [
+    "confirm(சுரேஷ் 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 982.3835000000036,
+   "snrDb": 83.34457038316415,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "ரமேஷ் நானூறு ரூபாய்.",
+   "heard": [
+    "ரமேஷ், 400 ரூபா."
+   ],
+   "replied": [
+    "ரமேஷ், 400 ரூபாய், கடனாகக் கொடுத்ததா, அவர் கட்டியதா?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 1991.5746999999974,
+   "snrDb": 83.60601724400881,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "கடன்.",
+   "heard": [
+    "கடன்"
+   ],
+   "replied": [
+    "ரமேஷ், 400 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 859.8168000000005,
+   "snrDb": 77.35542170884726,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "ரமேஷ் நூறு ரூபாய் கடன் மற்றும் சுரேஷ் ஐம்பது ரூபாய் கட்டினார்.",
+   "heard": [
+    "ரமேஷ் 100 ரூபாய் கடன் மற்றும் சுரேஷ் 50 ரூபாய் கட்டினார்."
+   ],
+   "replied": [
+    "ரமேஷ், 100 ரூபாய் கடன். சுரேஷ், 50 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 965.4538999999932,
+   "snrDb": 81.37971119217461,
+   "entryOutcomes": [
+    "direct_ok",
+    "direct_ok"
+   ],
+   "dirOk": [
+    true,
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "மோகன் அறுபது ரூபாய் கட்டினார்.",
+   "heard": [
+    "மோகன் 60 ரூபாய் கட்டினார்."
+   ],
+   "replied": [
+    "மோகன், 60 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 884.7666000000027,
+   "snrDb": 81.38485697131705,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "ரமேஷுக்கு முன்னூறு ரூபாய் கொடுத்தேன்.",
+   "heard": [
+    "ரமேஷுக்கு 300 ரூபாய் கொடுத்தேன்."
+   ],
+   "replied": [
+    "ரமேஷ், 300 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 953.7535999999964,
+   "snrDb": 83.41904976407821,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "సురేష్ వంద రూపాయలు కట్టాడు.",
+   "heard": [
+    "సురేష్ 100 రూపాయలు కట్టాడు."
+   ],
+   "replied": [
+    "సురేష్, 100 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 928.699299999993,
+   "snrDb": 83.30502065902976,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "రమేష్ కి మూడు వందల నలభై రూపాయలు అప్పు రాయండి.",
+   "heard": [
+    "రమేష్ కి 340 రూపాయలు అప్పు రాయండి."
+   ],
+   "replied": [
+    "రమేష్, 340 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1145.3117000000057,
+   "snrDb": 81.14271532531976,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "சுரேஷ் நூறு ரூபாய் கடன்.",
+   "heard": [
+    "சுரேஷ், 100 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "சுரேஷ், 100 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 902.1854000000021,
+   "snrDb": 83.24954122312639,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "இல்லை, வரவு.",
+   "heard": [
+    "இல்லை, வரவு."
+   ],
+   "replied": [
+    "திருத்தினேன்: சுரேஷ், 100 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "direction": "payment"
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 588.9346000000078,
+   "snrDb": 75.84535801194973,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "మోహన్ ఐదు వందల రూపాయలు ఇచ్చాడు.",
+   "heard": [
+    "మోహన్ 500 రూపాయలు ఇచ్చాడు."
+   ],
+   "replied": [
+    "మోహన్, 500 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 798.6275000000023,
+   "snrDb": 80.40563714555213,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "రమేష్ నూట యాభై రూపాయలు అప్పు.",
+   "heard": [
+    "రమేష్, 150 రూపాయల అప్పు."
+   ],
+   "replied": [
+    "రమేష్, 150 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1058.3715999999986,
+   "snrDb": 81.8291214998007,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "గీత డెబ్బై రూపాయలు అప్పు.",
+   "heard": [
+    "గీత, 70 రూపాయలు అప్పు."
+   ],
+   "replied": [
+    "గీత గారికి కొత్త ఖాతా తెరిచాను. గీత, 70 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:గీత",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1376.7455000000045,
+   "snrDb": 80.47209138841123,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "సురేష్ నూట ఇరవై ఐదు రూపాయలు అప్పు.",
+   "heard": [
+    "సురేష్, 125 రూపాయలు అప్పు."
+   ],
+   "replied": [
+    "సురేష్, 125 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1681.5953000000009,
+   "snrDb": 80.70321101089291,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "సురేష్ కి ఎంత బాకీ ఉంది?",
+   "heard": [
+    "సురేష్ కి ఎంత బాకీ ఉంది?"
+   ],
+   "replied": [
+    "సురేష్ గారి మొత్తం బాకీ 500 రూపాయలు."
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 829.1203999999998,
+   "snrDb": 81.95597667540228,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "రమేష్ రెండు వందల రూపాయలు అప్పు.",
+   "heard": [
+    "రమేష్, 200 రూపాయల అప్పు."
+   ],
+   "replied": [
+    "రమేష్, 200 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 824.542300000001,
+   "snrDb": 82.34162120250325,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "కాదు, మూడు వందలు.",
+   "heard": [
+    "కాదు, 300."
+   ],
+   "replied": [
+    "సరిచేశాను: రమేష్, 300 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 846.5675999999949,
+   "snrDb": 76.99494311880046,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "మోహన్ వెయ్యి రెండు వందల రూపాయలు అప్పు.",
+   "heard": [
+    "మోహన్, 1200 రూపాయల అప్పు."
+   ],
+   "replied": [
+    "మోహన్, 1,200 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 952.053899999999,
+   "snrDb": 81.49642430243843,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "రమేష్ నాలుగు వందలు.",
+   "heard": [
+    "రమేష్, 400."
+   ],
+   "replied": [
+    "రమేష్, 400 రూపాయలు, అప్పుగా ఇచ్చారా, వారు కట్టారా?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 2109.920100000003,
+   "snrDb": 83.69127842998972,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "అప్పు.",
+   "heard": [
+    "అప్పు"
+   ],
+   "replied": [
+    "రమేష్, 400 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 817.7332999999926,
+   "snrDb": 76.02127095578024,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "సురేష్ రేపు రెండు వందల రూపాయలు ఇస్తాడు.",
+   "heard": [
+    "సురేష్ రేపు 200 రూపాయలు ఇస్తాడు.",
+    "అవును"
+   ],
+   "replied": [
+    "సురేష్, 200 రూపాయలు జమ, సరేనా?",
+    "సురేష్ రేపు 200 రూపాయలు ఇస్తారు, గుర్తుంచుకుంటాను."
+   ],
+   "asked": [
+    "confirm(సురేష్ 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 999.0737999999983,
+   "snrDb": 82.4852067810456,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "మోహన్ అరవై రూపాయలు కట్టాడు.",
+   "heard": [
+    "మోహన్ 60 రూపాయలు కట్టాడు."
+   ],
+   "replied": [
+    "మోహన్, 60 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 841.9639000000025,
+   "snrDb": 83.07653102498101,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "రమేష్ కి మూడు వందల రూపాయలు ఇచ్చాను.",
+   "heard": [
+    "రమేష్ కి 300 రూపాయలు ఇచ్చాను."
+   ],
+   "replied": [
+    "రమేష్, 300 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 858.0077000000019,
+   "snrDb": 84.35422992158267,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "రమేష్ వంద రూపాయలు అప్పు మరియు సురేష్ యాభై రూపాయలు ఇచ్చాడు.",
+   "heard": [
+    "రమేష్ 100 రూపాయలు అప్పు మరియు సురేష్ 50 రూపాయలు ఇచ్చాడు."
+   ],
+   "replied": [
+    "రమేష్, 100 రూపాయలు అప్పు. సురేష్, 50 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1075.1022999999986,
+   "snrDb": 81.36344067240053,
+   "entryOutcomes": [
+    "direct_ok",
+    "direct_ok"
+   ],
+   "dirOk": [
+    true,
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "रमेश का तीन सौ चालीस रुपये उधार लिख दो।",
+   "heard": [
+    "रमेश का 340 रुपये उधार लेते हैं।"
+   ],
+   "replied": [
+    "रमेश, 340 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1067.6747999999934,
+   "snrDb": 11.786863692581964,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "సురేష్ వంద రూపాయలు అప్పు.",
+   "heard": [
+    "సురేష్, 100 రూపాయల అప్పు."
+   ],
+   "replied": [
+    "సురేష్, 100 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1493.059899999993,
+   "snrDb": 80.964034477832,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "clean",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "కాదు, జమ.",
+   "heard": [
+    "కాదు, జమ."
+   ],
+   "replied": [
+    "సరిచేశాను: సురేష్, 100 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "direction": "payment"
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 1115.8243999999977,
+   "snrDb": 77.17774083919115,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "सुरेश ने सौ रुपये दिए।",
+   "heard": [
+    "सुरेश ने 100 रुपए दिए।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। सुरेश, 100 रुपये जमा, सही है?",
+    "सुरेश, 100 रुपये जमा।"
+   ],
+   "asked": [
+    "confirm(सुरेश 100 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 868.4101999999984,
+   "snrDb": 7.826618117315627,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "मोहन ने पाँच सौ रुपये वापस किए।",
+   "heard": [
+    "मोहन ने 500 रुपये वापस किए।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। मोहन, 500 रुपये जमा, सही है?",
+    "मोहन, 500 रुपये जमा।"
+   ],
+   "asked": [
+    "confirm(मोहन 500 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1221.3542000000016,
+   "snrDb": 10.822800465357004,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "रमेश का डेढ़ सौ उधार।",
+   "heard": [
+    "रमेश का 150 उधार।"
+   ],
+   "replied": [
+    "रमेश, 150 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 928.3638999999966,
+   "snrDb": 12.355417203037511,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "गीता का सत्तर रुपये उधार लिखो।",
+   "heard": [
+    "गीता का 70 रुपये उधार लिखो।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। गीता, 70 रुपये उधार, सही है?",
+    "गीता का नया खाता खोला। गीता, 70 रुपये उधार।"
+   ],
+   "asked": [
+    "confirm(गीता 70 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:गीता",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 453.78830000000016,
+   "snrDb": 8.727744451047041,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "सुरेश का कितना बाकी है?",
+   "heard": [
+    "सुरेश का कितना बाकी है?"
+   ],
+   "replied": [
+    "सुरेश का कुल बाकी 500 रुपये है।"
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 1085.8424999999988,
+   "snrDb": 12.608061852585724,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "मोहन का बारह सौ रुपये उधार।",
+   "heard": [
+    "मोहन का 1200 रुपये उधार।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। मोहन, 1,200 रुपये उधार, सही है?",
+    "मोहन, 1,200 रुपये उधार।"
+   ],
+   "asked": [
+    "confirm(मोहन 1200 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 889.1258999999991,
+   "snrDb": 8.179280927086948,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "रमेश का दो सौ रुपये उधार।",
+   "heard": [
+    "रमेश का 200 रुपये होगा।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। रमेश, 200 रुपये उधार, सही है?",
+    "रमेश, 200 रुपये उधार।"
+   ],
+   "asked": [
+    "confirm(रमेश 200 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 2135.8353999999963,
+   "snrDb": 6.293256137745593,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "नहीं, तीन सौ।",
+   "heard": [
+    "नहीं, 300।"
+   ],
+   "replied": [
+    "ठीक किया: रमेश, 300 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 831.9464000000007,
+   "snrDb": 17.621272221285235,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "सुरेश कल दो सौ रुपये देगा।",
+   "heard": [
+    "सुरेश कल 200 रुपये देगा।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। सुरेश, 200 रुपये जमा, सही है?",
+    "सुरेश कल 200 रुपये देंगे, याद रखूँगी।"
+   ],
+   "asked": [
+    "confirm(सुरेश 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1401.502800000002,
+   "snrDb": 8.748951530995623,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "मोहन ने साठ रुपये दिए।",
+   "heard": [
+    "मोहन ने 60 रुपए दिए।"
+   ],
+   "replied": [
+    "मोहन, 60 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1036.824700000012,
+   "snrDb": 13.715316732272935,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "रमेश चार सौ।",
+   "heard": [
+    "रमेश 400।"
+   ],
+   "replied": [
+    "रमेश, 400 रुपये, उधार दिया या जमा किया?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 7164.627399999998,
+   "snrDb": 8.26779407340622,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "उधार।",
+   "heard": [
+    "उधार",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। रमेश, 400 रुपये उधार, सही है?",
+    "रमेश, 400 रुपये उधार।"
+   ],
+   "asked": [
+    "confirm(रमेश 400 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 719.6009999999951,
+   "snrDb": 13.408503452649699,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "रमेश का सौ रुपये उधार और सुरेश ने पचास रुपये जमा किए।",
+   "heard": [
+    "रमेश का 100 रुपये उधार और सुरेश ने 50 रुपये जमा किए।",
+    "हाँ।",
+    "हाँ।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। रमेश, 100 रुपये उधार, सही है?",
+    "रमेश, 100 रुपये उधार। शोर ज़्यादा है। सुरेश, 50 रुपये जमा, सही है?",
+    "सुरेश, 50 रुपये जमा।"
+   ],
+   "asked": [
+    "confirm(रमेश 100 credit)",
+    "confirm(सुरेश 50 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 788.8718999999983,
+   "snrDb": 8.49552313168821,
+   "entryOutcomes": [
+    "asked_ok",
+    "asked_ok"
+   ],
+   "dirOk": [
+    true,
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "रमेश को तीन सौ रुपये दिए।",
+   "heard": [
+    "रमेश को 300 रुपए दिए।"
+   ],
+   "replied": [
+    "रमेश, 300 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 937.2633000000205,
+   "snrDb": 11.13429422186564,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "सुरेश का सौ रुपये उधार।",
+   "heard": [
+    "सुरेश का 100 रुपये उधार है।"
+   ],
+   "replied": [
+    "सुरेश, 100 रुपये उधार।"
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1030.026199999993,
+   "snrDb": 16.75387431162885,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "नहीं, जमा।",
+   "heard": [
+    "नहीं जमा।"
+   ],
+   "replied": [
+    "ठीक किया: सुरेश, 100 रुपये जमा।"
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "direction": "payment"
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 661.8857999999891,
+   "snrDb": 14.687158554909349,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ನೂರು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+   "heard": [
+    "ಸುರೇಶ್ 100 ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ಸುರೇಶ್, 100 ರೂಪಾಯಿ ಜಮಾ, ಸರಿನಾ?",
+    "ಸುರೇಶ್, 100 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [
+    "confirm(ಸುರೇಶ್ 100 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 2215.4755000000005,
+   "snrDb": 9.271820337209899,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "ಮೋಹನ್ ಐನೂರು ರೂಪಾಯಿ ಕಟ್ಟಿದರು.",
+   "heard": [
+    "ಮೋಹನ್ 500 ರೂಪಾಯಿ ಕಟ್ಟಿದರು.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ಮೋಹನ್, 500 ರೂಪಾಯಿ ಜಮಾ, ಸರಿನಾ?",
+    "ಮೋಹನ್, 500 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [
+    "confirm(ಮೋಹನ್ 500 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1094.9922000000079,
+   "snrDb": 10.85367808493601,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "ಗೀತಾ ಅವರ ಎಪ್ಪತ್ತು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಗೀತಾ ಅವರ 70 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಗೀತಾ ಅವರ ಹೊಸ ಖಾತೆ ತೆರೆದಿದ್ದೇನೆ. ಗೀತಾ, 70 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:ಗೀತಾ",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1222.3525000000081,
+   "snrDb": 13.344926825702782,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ಮುನ್ನೂರ ನಲವತ್ತು ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 340 ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ರಮೇಶ್, 340 ರೂಪಾಯಿ ಸಾಲ, ಸರಿನಾ?",
+    "ರಮೇಶ್, 340 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [
+    "confirm(ರಮೇಶ್ 340 credit)",
+    "confirm(ರಮೇಶ್ 340 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 687.7658999999985,
+   "snrDb": 9.732609752930017,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ನೂರೈವತ್ತು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 150 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 150 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1056.6167000000132,
+   "snrDb": 14.498874686161468,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "hi",
+   "cond": "street 5dB",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "सुरेश का सवा सौ रुपये उधार।",
+   "heard": [
+    "सुरेश का 125 रुपए उधार।"
+   ],
+   "replied": [
+    "शोर ज़्यादा है। सुरेश, 125 रुपये उधार, सही है?"
+   ],
+   "asked": [
+    "confirm(सुरेश 125 credit)",
+    "confirm(सुरेश 125 credit)",
+    "confirm(सुरेश 125 credit)",
+    "confirm(सुरेश 125 credit)",
+    "confirm(सुरेश 125 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#0 not saved",
+   "latencyMs": 951.5767999999953,
+   "snrDb": 10.392540689190543,
+   "entryOutcomes": [
+    "no_save"
+   ],
+   "dirOk": [
+    false
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "ಮೋಹನ್ ಅವರ ಒಂದು ಸಾವಿರದ ಇನ್ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಮೋಹನ್ ಅವರ 1200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಮೋಹನ್, 1,200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1081.7692000000097,
+   "snrDb": 14.458767871780083,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ಅವರ ನೂರ ಇಪ್ಪತ್ತೈದು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಸುರೇಶ್ ಅವರ 125 ರೂಪಾಯಿ ಸಾಲ.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ಸುರೇಶ್, 125 ರೂಪಾಯಿ ಸಾಲ, ಸರಿನಾ?",
+    "ಸುರೇಶ್, 125 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [
+    "confirm(ಸುರೇಶ್ 125 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1120.9135999999999,
+   "snrDb": 10.513963326934906,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ಅವರ ಬಾಕಿ ಎಷ್ಟು?",
+   "heard": [
+    "ಸುರೇಶ್ ಅವರ ಬಾಕಿ ಎಷ್ಟು?"
+   ],
+   "replied": [
+    "ಸುರೇಶ್ ಅವರ ಒಟ್ಟು ಬಾಕಿ 500 ರೂಪಾಯಿ."
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 955.9762999999803,
+   "snrDb": 11.660090760226982,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ನಾಳೆ ಇನ್ನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರೆ.",
+   "heard": [
+    "ಸುರೇಶ್ ನಾಳೆ 200 ರೂಪಾಯಿ ಕೊಡ್ತಾರೆ.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ಸುರೇಶ್, 200 ರೂಪಾಯಿ ಜಮಾ, ಸರಿನಾ?",
+    "ಸುರೇಶ್ ನಾಳೆ 200 ರೂಪಾಯಿ ಕೊಡುತ್ತಾರೆ, ನೆನಪಿಟ್ಟುಕೊಳ್ಳುತ್ತೇನೆ."
+   ],
+   "asked": [
+    "confirm(ಸುರೇಶ್ 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 990.6101999999955,
+   "snrDb": 11.627930261656726,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ನಾನೂರು ರೂಪಾಯಿ.",
+   "heard": [
+    "ರಮೇಶ್, 400 ರೂಪಾಯಿ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 400 ರೂಪಾಯಿ, ಸಾಲ ಕೊಟ್ಟಿದ್ದಾ ಅಥವಾ ಅವರು ಕಟ್ಟಿದ್ದಾ?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 840.3467999999993,
+   "snrDb": 12.268969193067988,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "ಸಾಲ.",
+   "heard": [
+    "ಸಾಲ"
+   ],
+   "replied": [
+    "ರಮೇಶ್, 400 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 936.0759000000253,
+   "snrDb": null,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ಇನ್ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 200 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1816.0315000000119,
+   "snrDb": 12.523742644593273,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "ಇಲ್ಲ, ಮುನ್ನೂರು.",
+   "heard": [
+    "ಇಲ್ಲ, 300."
+   ],
+   "replied": [
+    "ಸರಿಪಡಿಸಿದೆ: ರಮೇಶ್, 300 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 1078.334899999987,
+   "snrDb": 7.628146454688651,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "ರಮೇಶ್‌ಗೆ ಮುನ್ನೂರು ರೂಪಾಯಿ ಕೊಟ್ಟೆ.",
+   "heard": [
+    "ರಮೇಶ್ ಗೆ 300 ರೂಪಾಯಿ ಕೊಟ್ಟೆ."
+   ],
+   "replied": [
+    "ರಮೇಶ್, 300 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": -0.3795000000100117,
+   "snrDb": 11.98307808266142,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "ಮೋಹನ್ ಅರವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+   "heard": [
+    "ಮೋಹನ್ 60 ರೂಪಾಯಿ ಕೊಟ್ಟನು.",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ಮೋಹನ್, 60 ರೂಪಾಯಿ ಜಮಾ, ಸರಿನಾ?",
+    "ಮೋಹನ್, 60 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [
+    "confirm(ಮೋಹನ್ 60 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 923.8728999999876,
+   "snrDb": 6.750345223317218,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "ಸುರೇಶ್ ಅವರ ನೂರು ರೂಪಾಯಿ ಸಾಲ.",
+   "heard": [
+    "ಸುರೇಶ್ ಅವರ 100 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "replied": [
+    "ಸುರೇಶ್, 100 ರೂಪಾಯಿ ಸಾಲ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1018.8279000000039,
+   "snrDb": 12.925692798186827,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "ಇಲ್ಲ, ಜಮಾ.",
+   "heard": [
+    "ಇಲ್ಲ"
+   ],
+   "replied": [],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "fail",
+   "reason": "no amend (said: ; pending null)",
+   "latencyMs": null,
+   "snrDb": 14.982968144191817,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "kn",
+   "cond": "street 5dB",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "ರಮೇಶ್ ಅವರ ನೂರು ರೂಪಾಯಿ ಸಾಲ ಮತ್ತು ಸುರೇಶ್ ಐವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+   "heard": [
+    "ರಮೇಶ್ ಅವರ 100 ರೂಪಾಯಿ ಸಾಲ ಮತ್ತು ಸುರೇಶ್ 50 ರೂಪಾಯಿ ಕೊಟ್ಟರು.",
+    "ಹೌದು",
+    "ಹೌದು"
+   ],
+   "replied": [
+    "ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ರಮೇಶ್, 100 ರೂಪಾಯಿ ಸಾಲ, ಸರಿನಾ?",
+    "ರಮೇಶ್, 100 ರೂಪಾಯಿ ಸಾಲ. ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ಸುರೇಶ್, 50 ರೂಪಾಯಿ ಜಮಾ, ಸರಿನಾ?",
+    "ಸುರೇಶ್, 50 ರೂಪಾಯಿ ಜಮಾ."
+   ],
+   "asked": [
+    "confirm(ರಮೇಶ್ 100 credit)",
+    "confirm(ಸುರೇಶ್ 50 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1195.4206999999878,
+   "snrDb": 9.086203763158192,
+   "entryOutcomes": [
+    "asked_ok",
+    "asked_ok"
+   ],
+   "dirOk": [
+    true,
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "மோகன் ஐநூறு ரூபாய் கொடுத்தார்.",
+   "heard": [
+    "மோகன் 500 ரூபாய் கொடுத்தார்."
+   ],
+   "replied": [
+    "மோகன், 500 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1218.8306999999913,
+   "snrDb": 12.501563040770742,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "சுரேஷ் நூறு ரூபாய் கட்டினார்.",
+   "heard": [
+    "சுரேஷ் 100 ரூபாய் கட்டினார்."
+   ],
+   "replied": [
+    "சுரேஷ், 100 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1202.3507999999856,
+   "snrDb": 11.089044338929984,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "கீதாவுக்கு எழுபது ரூபாய் கடன்.",
+   "heard": [
+    "கீதாவுக்கு 70 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "கீதாவ அவர்களுக்குப் புதிய கணக்கு திறந்தேன். கீதாவ, 70 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:கீதாவ",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 2018.8366000000096,
+   "snrDb": 13.618612013755989,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "சுரேஷ் நூற்று இருபத்தைந்து ரூபாய் கடன்.",
+   "heard": [
+    "சுரேஷ், 125 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "சுரேஷ், 125 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1643.1094999999914,
+   "snrDb": 13.371309747611324,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "மோகன் ஆயிரத்து இருநூறு ரூபாய் கடன்.",
+   "heard": [
+    "மோகன் 1200 ரூபாய் கடன்."
+   ],
+   "replied": [
+    "மோகன், 1,200 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1546.7829999999958,
+   "snrDb": 12.41750839349367,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "சுரேஷுக்கு எவ்வளவு பாக்கி?",
+   "heard": [
+    "சுரேஷுக்கு எவ்வளோ பாக்கி?"
+   ],
+   "replied": [
+    "சுரேஷ் அவர்களின் மொத்த பாக்கி 500 ரூபாய்."
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 946.4869999999937,
+   "snrDb": 15.86941827080857,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "ரமேஷுக்கு முன்னூற்று நாற்பது ரூபாய் கடன் எழுதுங்கள்.",
+   "heard": [
+    "ரமேஷுக்கு 340 ரூபாய் கடன் எழுத வேண்டும்.",
+    "ஆமாம்."
+   ],
+   "replied": [
+    "சத்தம் அதிகம். ரமேஷ், 340 ரூபாய் கடன், சரியா?",
+    "ரமேஷ், 340 ரூபாய் கடன்."
+   ],
+   "asked": [
+    "confirm(ரமேஷ் 340 credit)",
+    "confirm(ரமேஷ் 340 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 953.2436000000162,
+   "snrDb": 10.573464746519168,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "ரமேஷ் இருநூறு ரூபாய் கடன்.",
+   "heard": [
+    "ரமேஷ், 200 ரூபாய் கடன்.",
+    "ஆமாம்."
+   ],
+   "replied": [
+    "சத்தம் அதிகம். ரமேஷ், 200 ரூபாய் கடன், சரியா?",
+    "ரமேஷ், 200 ரூபாய் கடன்."
+   ],
+   "asked": [
+    "confirm(ரமேஷ் 200 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1022.2958999999973,
+   "snrDb": 10.631777602168007,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "இல்லை, முன்னூறு.",
+   "heard": [
+    "இல்லை, 300."
+   ],
+   "replied": [
+    "திருத்தினேன்: ரமேஷ், 300 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "paise": 30000
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 634.7852999999886,
+   "snrDb": 12.643604134753673,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "ரமேஷ் நூற்று ஐம்பது ரூபாய் கடன்.",
+   "heard": [
+    "ரமேஷ், 150 ரூபாய் கடன்.",
+    "ஆமாம்."
+   ],
+   "replied": [
+    "சத்தம் அதிகம். ரமேஷ், 150 ரூபாய் கடன், சரியா?",
+    "ரமேஷ், 150 ரூபாய் கடன்."
+   ],
+   "asked": [
+    "confirm(ரமேஷ் 150 credit)",
+    "confirm(ரமேஷ் 150 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 955.4271000000008,
+   "snrDb": 7.038473302748221,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "ரமேஷ் நானூறு ரூபாய்.",
+   "heard": [
+    "ரமேஷ், 400 ரூபாய்."
+   ],
+   "replied": [
+    "ரமேஷ், 400 ரூபாய், கடனாகக் கொடுத்ததா, அவர் கட்டியதா?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 988.4000999999989,
+   "snrDb": 13.420759206139799,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "கடன்.",
+   "heard": [
+    "கடன்"
+   ],
+   "replied": [
+    "ரமேஷ், 400 ரூபாய் கடன்."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 950.1888999999792,
+   "snrDb": null,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "சுரேஷ் நாளைக்கு இருநூறு ரூபாய் கொடுப்பார்.",
+   "heard": [
+    "சுரேஷ் நாளைக்கு 200 ரூபாய் கொடுப்பார்.",
+    "ஆமாம்."
+   ],
+   "replied": [
+    "சத்தம் அதிகம். சுரேஷ், 200 ரூபாய் வரவு, சரியா?",
+    "சுரேஷ் நாளை 200 ரூபாய் தருவார், நினைவில் வைக்கிறேன்."
+   ],
+   "asked": [
+    "confirm(சுரேஷ் 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1025.1805999999924,
+   "snrDb": 10.409379224354582,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "மோகன் அறுபது ரூபாய் கட்டினார்.",
+   "heard": [
+    "மோகன் 60 ரூபாய் கட்டினார்."
+   ],
+   "replied": [
+    "மோகன், 60 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 816.1162999999942,
+   "snrDb": 11.056600634397975,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "ரமேஷுக்கு முன்னூறு ரூபாய் கொடுத்தேன்.",
+   "heard": [
+    "ரமேஷுக்கு 300 ரூபாய் கொடுத்தேன்.",
+    "ஆமாம்."
+   ],
+   "replied": [
+    "சத்தம் அதிகம். ரமேஷ், 300 ரூபாய் கடன், சரியா?",
+    "ரமேஷ், 300 ரூபாய் கடன்."
+   ],
+   "asked": [
+    "confirm(ரமேஷ் 300 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 967.8102999999828,
+   "snrDb": 10.6005958882753,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "ரமேஷ் நூறு ரூபாய் கடன் மற்றும் சுரேஷ் ஐம்பது ரூபாய் கட்டினார்.",
+   "heard": [
+    "ரமேஷ் 100 ரூபாய் கடன் மற்றும் சுரேஷ்.",
+    "50 ரூபாய் கட்டினேன், ஆமாம்.",
+    "கடன்",
+    "இல்லை"
+   ],
+   "replied": [
+    "சத்தம் அதிகம். ரமேஷ், 100 ரூபாய் கடன், சரியா?",
+    "சரி, எழுதவில்லை. கட்டினேன், 50 ரூபாய், கடனாகக் கொடுத்ததா, அவர் கட்டியதா?",
+    "சத்தம் அதிகம். கட்டினேன், 50 ரூபாய் கடன், சரியா?",
+    "சரி, எழுதவில்லை."
+   ],
+   "asked": [
+    "confirm(ரமேஷ் 100 credit)",
+    "direction(கட்டினேன் 50)",
+    "confirm(கட்டினேன் 50 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#0 not saved (readback wrong, user said no); #1 not saved (readback wrong, user said no)",
+   "latencyMs": -646.0347000000183,
+   "snrDb": 9.186083919315763,
+   "entryOutcomes": [
+    "no_save",
+    "no_save"
+   ],
+   "dirOk": [
+    false,
+    false
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "சுரேஷ் நூறு ரூபாய் கடன்.",
+   "heard": [
+    "சுரேஷ், 100 ரூபாய் கடன்.",
+    "ஆமாம்."
+   ],
+   "replied": [
+    "சத்தம் அதிகம். சுரேஷ், 100 ரூபாய் கடன், சரியா?",
+    "சுரேஷ், 100 ரூபாய் கடன்."
+   ],
+   "asked": [
+    "confirm(சுரேஷ் 100 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 953.8695999999763,
+   "snrDb": 9.063011470251286,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "ta",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "இல்லை, வரவு.",
+   "heard": [
+    "இல்லை, வரவு."
+   ],
+   "replied": [
+    "திருத்தினேன்: சுரேஷ், 100 ரூபாய் வரவு."
+   ],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [
+     {
+      "direction": "payment"
+     }
+    ],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 665.4163000000117,
+   "snrDb": null,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "credit",
+   "kind": "credit",
+   "turn": 0,
+   "say": "రమేష్ కి మూడు వందల నలభై రూపాయలు అప్పు రాయండి.",
+   "heard": [
+    "రమేష్ కి 340 రూపాయల అప్పు రాయండి.",
+    "అవును"
+   ],
+   "replied": [
+    "శబ్దం ఎక్కువగా ఉంది. రమేష్, 340 రూపాయలు అప్పు, సరేనా?",
+    "రమేష్, 340 రూపాయలు అప్పు."
+   ],
+   "asked": [
+    "confirm(రమేష్ 340 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 34000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1094.0890999999829,
+   "snrDb": 9.87993324659794,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "pay_marker",
+   "kind": "payment via case marker",
+   "turn": 0,
+   "say": "సురేష్ వంద రూపాయలు కట్టాడు.",
+   "heard": [
+    "సురేష్ 100 రూపాయలు కట్టాడు.",
+    "అవును"
+   ],
+   "replied": [
+    "శబ్దం ఎక్కువగా ఉంది. సురేష్, 100 రూపాయలు జమ, సరేనా?",
+    "సురేష్, 100 రూపాయలు జమ."
+   ],
+   "asked": [
+    "confirm(సురేష్ 100 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1304.7477000000072,
+   "snrDb": 7.787111911612088,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "pay_verb",
+   "kind": "payment verb",
+   "turn": 0,
+   "say": "మోహన్ ఐదు వందల రూపాయలు ఇచ్చాడు.",
+   "heard": [
+    "మోహన్ 500 రూపాయలు ఇచ్చాడు."
+   ],
+   "replied": [
+    "మోహన్, 500 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 50000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 942.4765999999945,
+   "snrDb": 11.597858213276062,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "new_customer",
+   "kind": "new customer",
+   "turn": 0,
+   "say": "గీత డెబ్బై రూపాయలు అప్పు.",
+   "heard": [
+    "గీత, 70 రూపాయలు అప్పు."
+   ],
+   "replied": [
+    "గీత గారికి కొత్త ఖాతా తెరిచాను. గీత, 70 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "new",
+      "paise": 7000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "new:గీత",
+      "paise": 7000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 900.3441999999923,
+   "snrDb": 15.48862495425787,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "sawa_sau",
+   "kind": "sawa sau / 125",
+   "turn": 0,
+   "say": "సురేష్ నూట ఇరవై ఐదు రూపాయలు అప్పు.",
+   "heard": [
+    "సురేష్, 125 రూపాయలు అప్పు."
+   ],
+   "replied": [
+    "సురేష్, 125 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 12500,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1037.3396999999823,
+   "snrDb": 12.796686635869667,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "dedh_sau",
+   "kind": "dedh sau / 150",
+   "turn": 0,
+   "say": "రమేష్ నూట యాభై రూపాయలు అప్పు.",
+   "heard": [
+    "రమేష్, 150 రూపాయలు.",
+    "అప్పు",
+    "అవును"
+   ],
+   "replied": [
+    "రమేష్, 150 రూపాయలు, అప్పుగా ఇచ్చారా, వారు కట్టారా?",
+    "శబ్దం ఎక్కువగా ఉంది. రమేష్, 150 రూపాయలు అప్పు, సరేనా?",
+    "రమేష్, 150 రూపాయలు అప్పు."
+   ],
+   "asked": [
+    "direction(రమేష్ 150)",
+    "confirm(రమేష్ 150 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 15000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 593.4042999999947,
+   "snrDb": 8.160913498205813,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 0,
+   "say": "రమేష్ రెండు వందల రూపాయలు అప్పు.",
+   "heard": [
+    "రమేష్, 200 రూపాయల అప్పు."
+   ],
+   "replied": [
+    "రమేష్, 200 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 20000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1117.091999999975,
+   "snrDb": 15.864054717436959,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "correct_amount",
+   "kind": "correction of amount",
+   "turn": 1,
+   "say": "కాదు, మూడు వందలు.",
+   "heard": [
+    "కాదు"
+   ],
+   "replied": [],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "paise": 30000
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "fail",
+   "reason": "no amend (said: ; pending null)",
+   "latencyMs": null,
+   "snrDb": null,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "query",
+   "kind": "balance query",
+   "turn": 0,
+   "say": "సురేష్ కి ఎంత బాకీ ఉంది?",
+   "heard": [
+    "సురేష్ కి ఎంత బాకీ ఉంది?"
+   ],
+   "replied": [
+    "సురేష్ గారి మొత్తం బాకీ 500 రూపాయలు."
+   ],
+   "asked": [],
+   "expect": {
+    "said": [
+     "500"
+    ]
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 1031.473100000003,
+   "snrDb": 11.800655249800641,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "query"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "scale_1200",
+   "kind": "1200 (elided/compound scale)",
+   "turn": 0,
+   "say": "మోహన్ వెయ్యి రెండు వందల రూపాయలు అప్పు.",
+   "heard": [
+    "మోహన్, 1200 రూపాయల అప్పు.",
+    "అవును"
+   ],
+   "replied": [
+    "శబ్దం ఎక్కువగా ఉంది. మోహన్, 1,200 రూపాయలు అప్పు, సరేనా?",
+    "మోహన్, 1,200 రూపాయలు అప్పు."
+   ],
+   "asked": [
+    "confirm(మోహన్ 1200 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 120000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 1066.7010999999766,
+   "snrDb": 10.461502482541293,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "confusable_60",
+   "kind": "60 vs 7 confusable",
+   "turn": 0,
+   "say": "మోహన్ అరవై రూపాయలు కట్టాడు.",
+   "heard": [
+    "మోహన్ 60 రూపాయలు కట్టాడు."
+   ],
+   "replied": [
+    "మోహన్, 60 రూపాయలు జమ."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_mohan",
+      "paise": 6000,
+      "dir": "payment",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "direct_ok",
+   "reason": "",
+   "latencyMs": 1117.2970999999961,
+   "snrDb": 12.419462936645843,
+   "entryOutcomes": [
+    "direct_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "two_entries",
+   "kind": "two entries in one sentence",
+   "turn": 0,
+   "say": "రమేష్ వంద రూపాయలు అప్పు మరియు సురేష్ యాభై రూపాయలు ఇచ్చాడు.",
+   "heard": [
+    "రమేష్ 100 రూపాయలు అప్పు మరియు సురేష్."
+   ],
+   "replied": [
+    "రమేష్, 100 రూపాయలు అప్పు."
+   ],
+   "asked": [],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     },
+     {
+      "cid": "c_suresh",
+      "paise": 5000,
+      "direction": "payment",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "no_save",
+   "reason": "#1 not saved",
+   "latencyMs": -295.8208999999915,
+   "snrDb": 11.03026475139448,
+   "entryOutcomes": [
+    "direct_ok",
+    "no_save"
+   ],
+   "dirOk": [
+    true,
+    false
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "promise",
+   "kind": "promise to pay tomorrow",
+   "turn": 0,
+   "say": "సురేష్ రేపు రెండు వందల రూపాయలు ఇస్తాడు.",
+   "heard": [
+    "సురేష్ రేపు 200 రూపాయలు ఇస్తాడు.",
+    "అవును"
+   ],
+   "replied": [
+    "సురేష్, 200 రూపాయలు జమ, సరేనా?",
+    "సురేష్ రేపు 200 రూపాయలు ఇస్తారు, గుర్తుంచుకుంటాను."
+   ],
+   "asked": [
+    "confirm(సురేష్ 200 payment)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "direction": "payment",
+      "promise": true
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 20000,
+      "dir": "payment",
+      "promise": true
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 984.3994999999995,
+   "snrDb": 12.212737427945468,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 0,
+   "say": "రమేష్ నాలుగు వందలు.",
+   "heard": [
+    "రమేష్, 400."
+   ],
+   "replied": [
+    "రమేష్, 400 రూపాయలు, అప్పుగా ఇచ్చారా, వారు కట్టారా?"
+   ],
+   "asked": [],
+   "expect": {
+    "pending": "direction"
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "ok",
+   "reason": "",
+   "latencyMs": 2235.291499999992,
+   "snrDb": 6.051461603832862,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "pending"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "missing_dir",
+   "kind": "missing direction then one word",
+   "turn": 1,
+   "say": "అప్పు.",
+   "heard": [
+    "అప్పు",
+    "అవును."
+   ],
+   "replied": [
+    "శబ్దం ఎక్కువగా ఉంది. రమేష్, 400 రూపాయలు అప్పు, సరేనా?",
+    "రమేష్, 400 రూపాయలు అప్పు."
+   ],
+   "asked": [
+    "confirm(రమేష్ 400 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 40000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 940.1338000000105,
+   "snrDb": null,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "give_credit",
+   "kind": "shopkeeper gave -> credit",
+   "turn": 0,
+   "say": "రమేష్ కి మూడు వందల రూపాయలు ఇచ్చాను.",
+   "heard": [
+    "రమేష్ కి 300 రూపాయలు ఇచ్చాను.",
+    "అవును"
+   ],
+   "replied": [
+    "శబ్దం ఎక్కువగా ఉంది. రమేష్, 300 రూపాయలు అప్పు, సరేనా?",
+    "రమేష్, 300 రూపాయలు అప్పు."
+   ],
+   "asked": [
+    "confirm(రమేష్ 300 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_ramesh",
+      "paise": 30000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 816.0374000000011,
+   "snrDb": 9.646370693703016,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 0,
+   "say": "సురేష్ వంద రూపాయలు అప్పు.",
+   "heard": [
+    "సురేష్, 100 రూపాయల.",
+    "అప్పు",
+    "అవును"
+   ],
+   "replied": [
+    "సురేష్, 100 రూపాయలు, అప్పుగా ఇచ్చారా, వారు కట్టారా?",
+    "శబ్దం ఎక్కువగా ఉంది. సురేష్, 100 రూపాయలు అప్పు, సరేనా?",
+    "సురేష్, 100 రూపాయలు అప్పు."
+   ],
+   "asked": [
+    "direction(సురేష్ 100)",
+    "confirm(సురేష్ 100 credit)"
+   ],
+   "expect": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "direction": "credit",
+      "promise": false
+     }
+    ]
+   },
+   "got": {
+    "entries": [
+     {
+      "cid": "c_suresh",
+      "paise": 10000,
+      "dir": "credit",
+      "promise": false
+     }
+    ],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "asked_ok",
+   "reason": "",
+   "latencyMs": 2602.800099999993,
+   "snrDb": null,
+   "entryOutcomes": [
+    "asked_ok"
+   ],
+   "dirOk": [
+    true
+   ],
+   "kindOf": "entry"
+  },
+  {
+   "lang": "te",
+   "cond": "street 5dB",
+   "scenario": "correct_dir",
+   "kind": "correction of direction",
+   "turn": 1,
+   "say": "కాదు, జమ.",
+   "heard": [
+    "కాదు."
+   ],
+   "replied": [],
+   "asked": [],
+   "expect": {
+    "amend": {
+     "direction": "payment"
+    }
+   },
+   "got": {
+    "entries": [],
+    "amends": [],
+    "other": []
+   },
+   "outcome": "fail",
+   "reason": "no amend (said: ; pending null)",
+   "latencyMs": null,
+   "snrDb": 7.627348257327222,
+   "entryOutcomes": [],
+   "dirOk": [],
+   "kindOf": "amend"
+  }
+ ]
+}

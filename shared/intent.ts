@@ -10,7 +10,7 @@
  *   1. explicit credit marker (udhaar, baaki, saala, kadan, appu) 2. clear/cancel marker (jama,
  *   chuka, kattida, katta) 3. case marker / verb person (ne/ko, -ge/-kku/-ki, kottaru/kotte).
  */
-import { type AmountSpan, fold, isNumberWord, parseAmounts, tokenize } from './numbers.js'
+import { type AmountSpan, fold, isCurrencyWord, isNumberWord, parseAmounts, tokenize } from './numbers.js'
 
 export type Direction = 'credit' | 'payment'
 
@@ -150,7 +150,7 @@ function stopWord(t: string): boolean {
   return CREDIT.has(t) || PAYMENT.has(t) || GIVE.has(t) || TOOK.has(t) || GAYA.has(t) || CASE.has(t) ||
     DATE_WORDS.has(t) || CONJ.has(t) || NEG.has(t) || YES.has(t) || QUERY.has(t) || FILLER.has(t) ||
     PAST.has(t) || FUTURE.has(t) || GAVE_3P.has(t) || GAVE_1P.has(t) || UNDO.has(t) || isNumberish(t) || MONTH.has(t) || SUMMARY.has(t) || BACKREF.has(t) || ALL.has(t) || BOTH.has(t) || CHANGE.has(t) ||
-    isNumberWord(t)
+    isNumberWord(t) || isCurrencyWord(t)
 }
 
 interface NameHit {
