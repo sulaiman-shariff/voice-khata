@@ -84,19 +84,22 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 ### Twilio setup (free trial, step by step)
 1. Sign up at twilio.com (free trial) and verify your own phone number.
-2. Open **Console → Messaging → Try it out → Send a WhatsApp message**. Twilio shows the **sandbox number** `+1 415 523 8886` and a join code like `join bright-river`.
-3. Each phone that should receive reminders (start with your own) sends **`join <your-code>`** on WhatsApp to `+1 415 523 8886`. Trial limits:
+2. Open **Console → Try it out → Send a WhatsApp message**. Twilio shows the trial sender number and a join code. **Use the number your console shows.**
+   - Accounts created in Nov 2026 get `+1 737 221 2163` with `join twilio-trial`.
+   - Older sandboxes use `+1 415 523 8886`.
+   - This trial sends only to **one verified tester number at a time** (the one selected in "Select your tester"). Swapping the recipient needs a new join.
+3. The tester phone sends **`join <your-code>`** on WhatsApp to the trial number (or scans the QR code). Trial limits:
    - **Only joined numbers get messages.** Twilio error 63015 means the number hasn't joined.
    - **The 24-hour window:** free-form text arrives only within 24 h of that phone's last message to the sandbox. Sending "join …" again, or any message, reopens it.
 4. Copy **Account SID** and **Auth Token** from Console → Account Info. Add them to `voice-khata/.env`:
    ```
    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
    TWILIO_AUTH_TOKEN=your_auth_token
-   TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+   TWILIO_WHATSAPP_FROM=whatsapp:+17372212163   # the trial number your console shows
    ```
 5. Restart `npm run server`. In the app: ☰ → WhatsApp reminders should show "✓ Sent from your Twilio WhatsApp number".
 6. **Test:**
-   - Open a customer who owes money and enter your (joined) number.
+   - Open a customer who owes money and enter **the tester number** (the joined one).
    - Turn on Adult + Allow reminders.
    - Tap **Send reminder**. The WhatsApp message should arrive within seconds.
 7. **Production, later:** register your own WhatsApp sender in Twilio, get a message **template** approved (variables {{1}} name, {{2}} amount, {{3}} shop), and set `TWILIO_WHATSAPP_FROM` and `TWILIO_CONTENT_SID`. Then any customer can be reminded at any time, with no join and no 24 h window. On Vercel, add the same env vars in the project settings.
