@@ -74,8 +74,6 @@ type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number;
 const UTT_AUDIO_MAX = 20 * 16000 * 2
 /** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
 const STT_REFRESH_MS = 14 * 60_000
-/** A hard (LLM) turn that has not been read by now says a short filler. */
-export const FILLER_AFTER_MS = 400
 /** How long an unreadable turn waits for Prisma REST to hear it in another language. */
 const RESCUE_WAIT_MS = 1500
 /** How long a noisy turn waits for the second reading before going on without it. */
@@ -173,9 +171,7 @@ export class Session {
   private sttRetries = 0
   private sttOpenedAt = 0
   private closed = false
-  private speaking: { ac: AbortController; text: string; ducked: boolean; until: number; filler?: boolean } | null = null
-  /** the filler being spoken, so the reply waits for its audio instead of interleaving with it */
-  private fillerP: Promise<unknown> | null = null
+  private speaking: { ac: AbortController; text: string; ducked: boolean; until: number } | null = null
   private chain: Promise<void> = Promise.resolve()
   private now: () => number
   private newId: () => string
@@ -281,7 +277,7 @@ export class Session {
   /** The phrases that are spoken often and never change, ready in memory for this language and speed. */
   private warmPhrases() {
     const R = say(this.lang)
-    this.deps.warm?.([R.ack(), R.filler(), R.didNotCatch()], LOCALE[this.lang], this.speed)
+    this.deps.warm?.([R.ack(), R.didNotCatch()], LOCALE[this.lang], this.speed)
   }
 
   private keyterms(): string[] {
@@ -463,17 +459,18 @@ export class Session {
       // the rest of a list the recogniser split at a breath: one turn, as spoken
       clearTimeout(this.held.timer)
       // a list continues after a comma; a sentence cut after "रमेश का" continues with a space
-      const sep = dangling(this.held.text.replace(/[।.]\s*$/, '')) ? ' ' : ', '
+      const heldText = this.held.text.replace(/[।.]\s*$/, '')
+      const sep = dangling(heldText) || this.loneName(heldText) ? ' ' : ', '
       text = `${this.held.text.trim().replace(/[।.]$/, '')}${sep}${text.trim()}`
       const both = this.held.t.pcm && pcm ? Buffer.concat([this.held.t.pcm, pcm]) : pcm
       t = { ...t, noisy: t.noisy || this.held.t.noisy, snrDb: minSnr(t.snrDb, this.held.t.snrDb), pcm: both }
       this.log.info('held_joined', { text, heldMs: this.now() - this.held.since })
       this.held = null
-    } else if (commitAt === null && !this.ptt && !this.pending && (midList(text) || dangling(text))) {
+    } else if (commitAt === null && !this.ptt && !this.pending && (midList(text) || dangling(text) || this.loneName(text))) {
       const since = this.now()
       this.held = { text, t, since, timer: setTimeout(() => this.releaseHeld(), MID_LIST_HOLD_MS) }
       this.held.timer.unref?.()
-      this.log.info('held', { text, why: midList(text) ? 'mid_list' : 'dangling' })
+      this.log.info('held', { text, why: midList(text) ? 'mid_list' : dangling(text) ? 'dangling' : 'lone_name' })
       this.deps.send({ type: 'partial', text })
       return
     }
@@ -647,23 +644,23 @@ export class Session {
     const rescue = wantRescue ? rest : null
 
     let unsureChange = false
-    let fillerSaid = false
     if (!this.pending && this.needsLlm(text, intent)) {
       const change = this.isChangeTalk(text, intent)
       const l0 = this.now()
-      // a model turn takes ~1-1.5 s: say "one second" if it is not back soon, so it never feels dead
-      const filler = setTimeout(() => {
-        fillerSaid = true
-        this.fillerP = this.speak(say(this.lang).filler(), { filler: true })
-      }, FILLER_AFTER_MS)
-      filler.unref?.()
       try {
         const ctx = this.llmContext()
-        const reading = await this.deps.llm(text, ctx).finally(() => clearTimeout(filler))
+        const reading = await this.deps.llm(text, ctx)
         const v = validate(text, reading, ctx.contextAmounts, ctx.recent?.length ?? 0)
-        this.log.info('llm', { turn, text, ms: this.now() - l0, filler: fillerSaid, reading, validated: v.type })
-        // a model "no"/"unknown" never overrides a usable fast reading
+        this.log.info('llm', { turn, text, ms: this.now() - l0, reading, validated: v.type })
+        // a model "no"/"unknown" never overrides a usable fast reading - unless the model is sure it
+        // is chatter and the fast reading is only a stray number ("it says 1 second...": no rupee
+        // word, no direction)
+        const weakFast = intent.type === 'entries' && intent.entries.every((e) => !e.direction && !e.amount.hasCurrency)
         if ((v.type !== 'unknown' && v.type !== 'no') || intent.type === 'unknown') intent = v
+        else if (weakFast && reading.intent === 'chitchat' && reading.sure) {
+          this.log.info('chatter_over_number', { turn, text })
+          intent = { type: 'unknown' }
+        }
         else if (change) unsureChange = true
         path = 'llm'
       } catch (e) {
@@ -711,7 +708,7 @@ export class Session {
       const r = await this.speak(reply.parts.join(' '))
       firstAudioAt = r.first
       spoken = r
-    } else if (fillerSaid) this.deps.send({ type: 'audio_end' }) // the filler was all we had to say
+    }
 
     if (t) {
       const base = t.speechEnd
@@ -1048,7 +1045,16 @@ export class Session {
     const m = matchName(d.heardName!, this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
     const near = m.filter((x) => x.score >= NAME_NEAR)
     if (!near.length) {
-      d.newName = titleCase(d.heardName!)
+      // before opening a new account: does the heard name contain a customer we already have?
+      // ("ಸುರೇಶ್ ಹೆಸರಿಂದ", "Sureshdu", "ಸುರೇಶ್ದು" -> Suresh). Then read it back instead of guessing.
+      const inside = this.knownWithin(d.heardName!)
+      if (inside) {
+        this.log.info('name_guard', { heard: d.heardName, matched: inside.name })
+        d.cid = inside.cid
+        d.nameSure = false
+        return 'ok'
+      }
+      d.newName = titleCase(newCustomerName(d.heardName!))
       d.nameSure = true
       return 'ok'
     }
@@ -1057,6 +1063,40 @@ export class Session {
     d.cid = near[0].id
     d.nameSure = near[0].score >= NAME_SURE
     return 'ok'
+  }
+
+  /**
+   * The one known customer whose name is contained in `heard`: a word of it, two adjacent words,
+   * or a word without a possessive ending (Kannada -ದು/-ದ/-ರ, Latin -du/-da/-ra, Hindi -ka/-ki/-ke
+   * glued on). Null when none or more than one customer fits.
+   */
+  private knownWithin(heard: string): SnapCustomer | null {
+    const people = this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] }))
+    if (!people.length) return null
+    const words = heard.split(/[\s,.;:!?।]+/).filter(Boolean)
+    const tries = new Set<string>()
+    for (let i = 0; i < words.length; i++) {
+      tries.add(words[i])
+      if (i + 1 < words.length) tries.add(`${words[i]} ${words[i + 1]}`)
+      for (const suf of ['ದು', 'ದ', 'ರ', 'du', 'da', 'ra', 'ka', 'ki', 'ke', 'ಅವರ'])
+        if (words[i].length > suf.length + 2 && words[i].toLowerCase().endsWith(suf)) tries.add(words[i].slice(0, -suf.length))
+    }
+    const hits = new Set<string>()
+    for (const t of tries) {
+      const best = matchName(t, people)[0]
+      if (best && best.score >= NAME_SURE) hits.add(best.id)
+    }
+    if (hits.size !== 1) return null
+    return this.snap.customers.find((c) => c.cid === [...hits][0]) ?? null
+  }
+
+  /** A turn that is only a known customer's name ("ಸುರೇಶ್", then a pause, then "300 ರೂಪಾಯಿ ಸಾಲ"). */
+  private loneName(text: string): boolean {
+    if (parseFast(text).type !== 'unknown') return false
+    const n = nameAnswer(text)
+    if (!n || n.split(' ').length > 3) return false
+    const best = matchName(n, this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))[0]
+    return !!best && best.score >= NAME_SURE
   }
 
   private customerName(d: Draft): string {
@@ -1451,20 +1491,15 @@ export class Session {
 
   // ------------------------------------------------------------------ speech out
   /** Speak and stream audio; returns the time first audio was sent (or null). */
-  private async speak(spoken: string, opts: { filler?: boolean } = {}): Promise<{ first: number | null; bytes: number; cached: boolean }> {
-    // never talk over ourselves; a filler is the one thing the real reply follows instead of cutting
-    if (!this.speaking?.filler) this.bargeIn()
+  private async speak(spoken: string): Promise<{ first: number | null; bytes: number; cached: boolean }> {
+    this.bargeIn() // never talk over ourselves
     const ac = new AbortController()
     const start = this.now()
     let bytes = 0
     let cached = false
     const text = stripTags(spoken) // what the screen shows and what can echo back
-    const prev = this.speaking?.filler ? this.speaking : null
-    this.speaking = { ac, text: prev ? `${prev.text} ${text}` : text, ducked: false, until: start + 60_000, filler: opts.filler }
-    if (prev) prev.ac.signal.addEventListener('abort', () => ac.abort()) // a barge-in on the filler cuts the reply too
-    if (!opts.filler) this.deps.send({ type: 'say', text })
-    if (prev && this.fillerP) await this.fillerP.catch(() => {})
-    this.fillerP = null
+    this.speaking = { ac, text, ducked: false, until: start + 60_000 }
+    this.deps.send({ type: 'say', text })
     let first: number | null = null
     // a stalled TTS socket must not block every later turn
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -1494,13 +1529,12 @@ export class Session {
     }
     if (ac.signal.aborted && first === null && this.speaking?.ac === ac) this.log.warn('tts_no_audio', { text, waitedMs: this.now() - start })
     this.log.debug('speak', {
-      text, filler: !!opts.filler, cached, bytes, firstAudioMs: first === null ? null : first - start,
+      text, cached, bytes, firstAudioMs: first === null ? null : first - start,
       totalMs: this.now() - start, cut: ac.signal.aborted,
     })
     this.lastSaid = { text: this.speaking?.ac === ac ? this.speaking.text : text, until: (first ?? start) + (bytes / 32000) * 1000 + 1500 }
     if (!ac.signal.aborted) {
-      // a filler's audio runs straight into the reply: one playback, one audio_end
-      if (!opts.filler) this.deps.send({ type: 'audio_end' })
+      this.deps.send({ type: 'audio_end' })
       // the phone plays in real time: we are "speaking" until that audio has played out
       if (this.speaking?.ac === ac) this.speaking.until = (first ?? start) + (bytes / 32000) * 1000 + 300
     }
@@ -1516,6 +1550,23 @@ export class Session {
     this.speaking?.ac.abort()
     this.stt?.close()
   }
+}
+
+/**
+ * The name for a new account: a Kannada possessive -ದು glued after a consonant ("ಸುರೇಶ್ದು",
+ * "Suresh's") is dropped, so the account is "ಸುರೇಶ್". Names that end in ದು by themselves
+ * ("ಬಿಂದು") are kept: there the ದು follows a vowel sign or anusvara, not a virama.
+ */
+export function newCustomerName(heard: string): string {
+  return heard
+    .split(' ')
+    .map((w) => {
+      if (w.length > 3 && w.endsWith('್ದು')) return w.slice(0, -2)
+      // the same possessive heard in Latin ("Sureshdu"); not after n, so Bindu / Indu / Pandu stay
+      if (/^[a-z]{3,}[b-df-hj-mp-tv-z]du$/i.test(w) && !/ndu$/i.test(w)) return w.slice(0, -2)
+      return w
+    })
+    .join(' ')
 }
 
 /** YYYY-MM-DD in India, offset by n days (the shop's calendar, not the server's). */

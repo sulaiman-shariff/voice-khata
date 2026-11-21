@@ -45,7 +45,7 @@ const S = (...w: string[]): Set<string> => new Set(w.map((x) => fold(x)))
 const CREDIT = S('udhaar', 'udhar', 'udhari', 'उधार', 'उधारी', 'baaki', 'baki', 'बाकी', 'बाक़ी', 'bakaya', 'बकाया',
   'khate', 'खाते', 'khata', 'खाता', 'chadha', 'चढ़ा', 'चढ़ाओ', 'credit', 'owes', 'owe', 'due', 'loan',
   'put', 'write', 'note', 'record', 'enter', 'tab', 'account', 'borrowed', 'borrow', 'bought', 'buy', 'purchased', 'spent', 'tab', 'outstanding', 'unpaid', 'dues', 'add', 'added',
-  'ಸಾಲ', 'ಉದ್ರಿ', 'ಬಾಕಿ', 'saala', 'udri', 'கடன்', 'கடனுக்கு', 'பாக்கி', 'kadan', 'అప్పు', 'బాకీ', 'ఉద్దెర', 'appu',
+  'ಸಾಲ', 'ಉದ್ರಿ', 'ಬಾಕಿ', 'saala', 'sala', 'udri', 'கடன்', 'கடனுக்கு', 'பாக்கி', 'kadan', 'అప్పు', 'బాకీ', 'ఉద్దెర', 'appu',
   'उधारी', 'ধার', 'বাকি', 'ઉધાર', 'બાકી', 'ਉਧਾਰ', 'ਬਾਕੀ', 'കടം', 'ബാക്കി', 'उधार')
 const PAYMENT = S('jama', 'जमा', 'chuka', 'चुका', 'chukaya', 'चुकाया', 'chukta', 'चुकता', 'wapas', 'वापस', 'vapas',
   'paid', 'pay', 'payment', 'returned', 'repaid', 'cleared', 'nakad', 'नकद', 'cash', 'bhar', 'भर', 'bhara', 'भरा',
@@ -54,7 +54,9 @@ const PAYMENT = S('jama', 'जमा', 'chuka', 'चुका', 'chukaya', 'च�
   'வரவு', 'కట్టాడు', 'కట్టారు', 'తీర్చాడు', 'తీర్చారు', 'జమ', 'জমা', 'শোধ', 'જમા', 'ચૂકવ્યા', 'ਜਮ੍ਹਾ', 'ജമ')
 // verbs of giving: direction then comes from who gave (case marker / person ending)
 const GIVE = S('diya', 'diye', 'di', 'de', 'दिया', 'दिए', 'दिये', 'दी', 'दे', 'gave', 'given', 'दिले', 'दिलं', 'দিয়েছে',
-  'আপ્યા', 'આપ્યા', 'ਦਿੱਤੇ', 'ਦਿੱਤਾ')
+  'আপ્યા', 'આપ્યા', 'ਦਿੱਤੇ', 'ਦਿੱਤਾ',
+  // Kannada "having given" / "give" (Latin too: an English session hears "300 rupees kottu")
+  'ಕೊಟ್ಟು', 'kottu', 'ಕೊಡು', 'kodu', 'ಕೊಡಿ', 'kodi')
 // customer-gave verb forms (3rd person / toward speaker) -> payment
 const GAVE_3P = S('ಕೊಟ್ಟ', 'ಕೊಟ್ಟರು', 'ಕೊಟ್ರು', 'ಕೊಟ್ಟನು', 'ಕೊಟ್ಟಳು', 'kotta', 'kottaru', 'kottru',
   'கொடுத்தார்', 'கொடுத்தான்', 'கொடுத்தாள்', 'தந்தார்', 'தந்தான்', 'koduthaar', 'ఇచ్చాడు', 'ఇచ్చారు', 'ఇచ్చింది', 'ichchadu',
@@ -123,6 +125,15 @@ const FILLER = S('hua', 'हुआ', 'hui', 'हुई', 'hue', 'हुए', 'ba
   'an', 'of', 'his', 'her', 'their', 'in', 'into', 'at', 'got', 'get', 'rupees', 'rupee', 'just', 'by', 'with', 'amount', 'is', 'was',
   'and', 'he', 'she', 'they', 'it', 'this', 'that', 's', 'give', 'giving', 'goods', 'ration', 'made', 'make', 'did', 'done', 'kindly', 'also', 'more', 'extra', 'today', 'rupaya', 'rupay', 'only', 'total', 'him', 'them', 'mr', 'mrs', 'saaman', 'सामान', 'saman', 'maal', 'माल', 'ki', 'ke', 'le', 'ले', 'lena', 'लेना', 'dena', 'देना', 'wala', 'wale', 'वाले', 'वाला', 'ರೂಪಾಯಿ', 'ரூபாய்', 'రూపాయలు', 'sir', 'madam')
 
+/**
+ * "Name" and "account" words: "ಸುರೇಶ್ ಹೆಸರಿಂದ" (in Suresh's name), "Suresh ke naam se", "in the name
+ * of Suresh". They tell us a name follows or precedes; they are never part of it.
+ */
+const NAME_WORDS = S('naam', 'नाम', 'naame', 'नामे', 'name', 'names', 'named', 'ಹೆಸರು', 'ಹೆಸರಿಂದ', 'ಹೆಸರಿಗೆ', 'ಹೆಸರಲ್ಲಿ',
+  'ಹೆಸರಿನಲ್ಲಿ', 'ಹೆಸರಿನ', 'ಹೆಸರ', 'hesaru', 'hesarinda', 'hesarige', 'hesaralli', 'பெயர்', 'பெயரில்', 'பெயருக்கு', 'பேர்ல',
+  'பேரு', 'peyar', 'పేరు', 'పేరుతో', 'పేరుమీద', 'peru', 'പേര്', 'പേരിൽ', 'peril', 'नाव', 'नावाने', 'नावावर', 'নাম', 'নামে',
+  'নামের', 'નામ', 'નામે', 'ਨਾਂ', 'ਨਾਮ', 'ਨਾਂਅ', 'ಖಾತೆ', 'ಖಾತಾ', 'ಖಾತೆಗೆ', 'கணக்கு', 'கணக்கில்', 'ఖాతా', 'ఖాతాలో', 'ഖാത')
+
 // Case suffixes glued to the name (Dravidian, Marathi): dative marks the recipient (credit),
 // Marathi -ने marks the agent. Longest first so ுக்கு wins over க்கு.
 const byLen = (a: string[]): string[] => a.map((w) => fold(w)).sort((x, y) => y.length - x.length)
@@ -150,7 +161,7 @@ function stopWord(t: string): boolean {
   return CREDIT.has(t) || PAYMENT.has(t) || GIVE.has(t) || TOOK.has(t) || GAYA.has(t) || CASE.has(t) ||
     DATE_WORDS.has(t) || CONJ.has(t) || NEG.has(t) || YES.has(t) || QUERY.has(t) || FILLER.has(t) ||
     PAST.has(t) || FUTURE.has(t) || GAVE_3P.has(t) || GAVE_1P.has(t) || UNDO.has(t) || isNumberish(t) || MONTH.has(t) || SUMMARY.has(t) || BACKREF.has(t) || ALL.has(t) || BOTH.has(t) || CHANGE.has(t) ||
-    isNumberWord(t) || isCurrencyWord(t)
+    isNumberWord(t) || isCurrencyWord(t) || NAME_WORDS.has(t)
 }
 
 interface NameHit {

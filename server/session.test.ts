@@ -554,27 +554,17 @@ describe('feels instant', () => {
 
   it('warms the fixed phrases for the session language on hello', () => {
     const h = harness()
-    expect(h.warmed[0]).toEqual(['लिख दिया।', 'एक सेकंड।', expect.any(String)])
+    expect(h.warmed[0]).toEqual(['लिख दिया।', expect.any(String)])
   })
 
-  it('a slow model turn says the filler first, then the answer', async () => {
+  it('a slow model turn never says a filler (no "one second" over the shopkeeper)', async () => {
     const h = harness([], {
       llmMs: 600,
       llm: () => ({ intent: 'entries', sure: false, unsure_reason: 'name is a relation', entries: [{ name: 'Pinky ki mummy', amount: 500, direction: 'payment', day_offset: 0, promise: false }] }),
     })
     await h.turn('wo jo Pinky ki mummy hai na, unka paanch sau')
-    expect(h.said[0]).toBe('एक सेकंड।')
-    expect(h.said.length).toBeGreaterThan(1)
-    expect(h.out.filter((m) => m.type === 'say').map((m) => (m as { text: string }).text).join(' ')).not.toContain('एक सेकंड')
-  })
-
-  it('a fast model turn says no filler', async () => {
-    const h = harness([], {
-      llm: () => ({ intent: 'entries', sure: false, unsure_reason: 'name is a relation', entries: [{ name: 'Pinky ki mummy', amount: 500, direction: 'payment', day_offset: 0, promise: false }] }),
-    })
-    await h.turn('wo jo Pinky ki mummy hai na, unka paanch sau')
-    expect(h.s.pending?.kind).toBe('confirm')
     expect(h.said.join(' ')).not.toContain('एक सेकंड')
+    expect(h.s.pending?.kind).toBe('confirm')
   })
 })
 
@@ -633,5 +623,101 @@ describe('continuity across a dropped connection', () => {
     const ops = h.out.find((m) => m.type === 'ops') as { seq?: number }
     expect(ops.seq).toBe(1)
     h.s.onClient({ type: 'ack', seq: 1 })
+  })
+})
+
+describe('name guard (cases from the 21 Nov production logs)', () => {
+  it('"ಸುರೇಶ್ ಹೆಸರಿಂದ" as the answer to "whose name?" is Suresh, not a new customer', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'kn'
+    await h.turn('300 ರೂಪಾಯಿ ಸಾಲ.')
+    expect(h.s.pending?.kind).toBe('name')
+    await h.turn('ಸುರೇಶ್ ಹೆಸರಿಂದ.')
+    expect(h.ops().some((o) => o.op === 'add_customer')).toBe(false)
+    expect(h.s.pending?.kind).toBe('confirm') // the name came as an answer: read back once
+    expect(h.said.join(' ')).toMatch(/Suresh/)
+    expect(h.said.join(' ')).not.toMatch(/ಹೆಸರಿಂದ/)
+    await h.turn('ಹೌದು')
+    expect(h.entries()).toEqual([expect.objectContaining({ cid: 's', paise: 30000, direction: 'credit' })])
+  })
+
+  it('"Ramesh ke naam se 300 udhaar" is Ramesh', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('Ramesh ke naam se 300 udhaar')
+    expect(h.ops().some((o) => o.op === 'add_customer')).toBe(false)
+    expect(h.entries()[0]).toMatchObject({ cid: 'r', paise: 30000 })
+  })
+
+  it('a model reading "ಸುರೇಶ್ದು" (Suresh\'s) is the existing Suresh', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      llm: () => ({ intent: 'entries', sure: true, entries: [{ name: 'ಸುರೇಶ್ದು', amount: 300, direction: 'credit', day_offset: 0, promise: false }] }),
+    })
+    await h.turn('Sureshdu 300 rupees sala aite.')
+    expect(h.ops().some((o) => o.op === 'add_customer')).toBe(false)
+    expect(h.entries()[0]).toMatchObject({ cid: 's', paise: 30000 })
+  })
+
+  it('with no Suresh yet, "Sureshdu" (Suresh\'s) opens an account called Suresh', async () => {
+    const h = harness([cust('m', 'Mahi')], {
+      llm: () => ({ intent: 'entries', sure: true, entries: [{ name: 'ಸುರೇಶ್ದು', amount: 300, direction: 'credit', day_offset: 0, promise: false }] }),
+    })
+    await h.turn('Sureshdu 300 rupees sala aite.')
+    expect(h.ops().find((o) => o.op === 'add_customer')).toMatchObject({ name: 'Suresh' })
+  })
+
+  it('a model name that only contains a known customer ("Suresh hesaru account") is that customer', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      llm: () => ({ intent: 'entries', sure: true, entries: [{ name: 'Suresh mele', amount: 300, direction: 'credit', day_offset: 0, promise: false }] }),
+    })
+    await h.turn('Suresh hesaru mele 300 sala')
+    expect(h.ops().some((o) => o.op === 'add_customer')).toBe(false)
+  })
+
+  it('"300 rupees kottu" (Kannada "gave") does not open an account called Kottu', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('300 rupees kottu.')
+    expect(h.ops().some((o) => o.op === 'add_customer')).toBe(false)
+    expect(h.s.pending?.kind).toBe('name')
+  })
+
+  it('a lone customer name is held and joined with the amount said after a pause', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'kn'
+    h.cb.onFinal!('ಸುರೇಶ್')
+    await new Promise((r) => setTimeout(r, 100))
+    expect(h.out.filter((m) => m.type === 'final')).toHaveLength(0)
+    h.cb.onFinal!('300 ರೂಪಾಯಿ ಸಾಲ.')
+    await h.s.idle()
+    const finals = h.out.filter((m): m is Extract<ServerMsg, { type: 'final' }> => m.type === 'final')
+    expect(finals.map((f) => f.text)).toEqual(['ಸುರೇಶ್ 300 ರೂಪಾಯಿ ಸಾಲ.'])
+    expect(h.s.pending?.kind === 'name').toBe(false) // never asked "whose name?"
+  })
+
+  it('a new name that contains no known customer still opens an account', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    await h.turn('Pinky ka 200 udhaar')
+    expect(h.ops()[0]).toMatchObject({ op: 'add_customer', name: 'Pinky' })
+  })
+
+  it('chatter the model is sure about beats a stray number ("it says 1 second...")', async () => {
+    const h = harness([cust('s', 'Suresh')], { llm: () => ({ intent: 'chitchat', sure: true }) })
+    h.s.lang = 'kn'
+    await h.turn('It says, "1 second before you finish saying no."')
+    expect(h.entries()).toHaveLength(0)
+    expect(h.s.pending).toBeNull()
+  })
+})
+
+describe('new account names', () => {
+  it('drop a glued possessive, keep names that really end in -du', async () => {
+    const { newCustomerName } = await import('./session.js')
+    expect(newCustomerName('ಸುರೇಶ್ದು')).toBe('ಸುರೇಶ್')
+    expect(newCustomerName('Sureshdu')).toBe('Suresh')
+    expect(newCustomerName('ಬಿಂದು')).toBe('ಬಿಂದು')
+    expect(newCustomerName('Bindu')).toBe('Bindu')
+    expect(newCustomerName('Indu')).toBe('Indu')
+    expect(newCustomerName('Pandu')).toBe('Pandu')
+    expect(newCustomerName('Pinky')).toBe('Pinky')
   })
 })

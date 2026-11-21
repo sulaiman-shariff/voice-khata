@@ -25,7 +25,7 @@ export type TtsSpeed = 0.8 | 1 | 1.2
 export const TTS_RATE = 16000
 
 /**
- * Fixed phrases (short ack, filler, "did not catch") synthesized once per instance and replayed
+ * Fixed phrases (short ack, "did not catch") synthesized once per instance and replayed
  * from memory: no Timbre round trip (~150 ms) on the turns that use them. Shared by every session
  * on a warm instance; only phrases passed to warm() are stored, so it stays a few hundred KB.
  */

@@ -154,7 +154,7 @@ function describeCandidates(spans: AmountSpan[]): string {
 let client: Anthropic | null = null
 const getClient = () => (client ??= new Anthropic({ maxRetries: 1, timeout: 6000 }))
 
-function userMessage(transcript: string, ctx: LlmContext): string {
+export function userMessage(transcript: string, ctx: LlmContext): string {
   const spans = parseAmounts(transcript)
   return [
     `Language: ${ctx.lang}`,

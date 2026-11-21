@@ -17,7 +17,7 @@ Voice Khata is a voice credit ledger for kirana shops, built for the Gnani Voice
 | Credit or payment | Decided from case markers ("ne" means payment, "ko" means credit) and, in Kannada, Tamil and Telugu, from the verb person. When direction cannot be read, the agent asks. |
 | Corrections and undo | "Nahi, 430", "galat, jama tha", "Ramesh nahi Suresh" amend the last entry. "Hata do" voids it. Nothing is erased; an amend or void is a new event in the log. |
 | Noise | A server-side energy tracker estimates the shop's noise floor and each utterance's SNR. When the SNR is below 11 dB, or cannot be estimated, the agent reads the entry back and waits for a yes or no before saving. In a quiet shop it saves, speaks a read-back and shows an undo toast. |
-| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A confident save is confirmed with a short cached "लिख दिया" (name and amount are on screen) instead of a 3 s read-back. The chime, highlight and toast no longer wait for the encrypted write. Slow model turns say "एक सेकंड" after 400 ms. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
+| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A confident save is confirmed with a short cached "लिख दिया" (name and amount are on screen) instead of a 3 s read-back. The chime, highlight and toast no longer wait for the encrypted write. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
 
@@ -66,7 +66,7 @@ sequenceDiagram
   Note over V: commit early if the last partial is a complete sentence
   V->>S: commit
   S-->>V: final_transcript
-  Note over V: fast-path parse (0 ms; LLM only if needed,<br/>"एक सेकंड" if it is slower than 400 ms)
+  Note over V: fast-path parse (0 ms; LLM only if needed)
   V->>P: ledger ops (chime, card, toast) and say text
   V->>T: text (pooled, pre-opened socket)
   T-->>V: PCM audio
