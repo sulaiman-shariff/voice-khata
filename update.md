@@ -10,7 +10,41 @@ npm run server      # voice function on ws://localhost:8787 (reads .env, restart
 npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (592 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (595 pass) and `npx tsc -b` (clean).
+
+---
+
+## 7. Friendly WhatsApp reminder wording
+
+**Owner's ask:** the reminder from the Twilio number should read like a friendly note ("hey, friendly reminder"), never like begging or harsh collecting.
+
+**The message now** (in the shop's language; English shown):
+```
+👋 Hi Ramesh! A friendly reminder from Sharma Kirana.
+
+Your khata balance is *₹500*.
+Pay whenever it suits you 👉 https://<site>/pay?…
+UPI: sharma@okaxis
+
+Thank you for shopping with us! 🙏
+— Rakesh · Jayanagar · 📞 98xxxxxxxx
+
+Sent via KhataBhai · reply STOP to stop these messages
+```
+- **Structure:**
+  - greeting from a shop the customer knows,
+  - the balance as a plain fact (bold in WhatsApp),
+  - an easy, no-pressure way to pay (only when the shop's UPI ID is set),
+  - thanks,
+  - the shop's signature (owner, address, phone),
+  - how to stop the messages.
+- **Languages:** written in all 10 (`reminderWords()` in `shared/replies.ts`), used for manual, voice and automatic reminders.
+- **Tone guard:** the BANNED list, which also guards spoken replies, now also blocks collection-agency and pleading words: *overdue, urgent, final notice/reminder/warning, pay now, failure to, kindly*. A test checks every language's reminder words against it.
+- **Voice reminders:** "Ramesh ko yaad dilao" now uses the same message, built on the phone with the profile and pay link. Before, it used the server's shorter text without the link or signature.
+- **Preview:** the customer screen's reminder box has **"See the message"**, showing exactly what will be sent.
+- **Brand:** the message says **KhataBhai**. "Khatabook" is a different, real company's brand, so it is not used.
+- **Files:** `shared/replies.ts` (`reminderWords`, `pressingWord`, BANNED), `src/lib/remind.ts` (`reminderMessage`), `src/App.tsx` (voice reminder), `src/ui/Sheets.tsx` (preview), `src/ui/strings.ts` (`msgPreview`), `src/lib/pay.ts` (unused labels removed).
+- **Tests:** `src/lib/remind.test.ts`: message layout with UPI, without UPI, and no pressing words in any language.
 
 ---
 

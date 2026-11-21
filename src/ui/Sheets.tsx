@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
 import { isUpiId } from '@/lib/pay'
-import { type RemindResult, sendReminder } from '@/lib/remind'
+import { type RemindResult, reminderMessage, sendReminder } from '@/lib/remind'
 import { cn } from '@/lib/utils'
 import { dayLabel, rs } from './format'
 import { Passbook } from './Ledger'
@@ -130,6 +130,12 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
               <MessageCircle className="size-5" />{t.remindNow}
             </button>
             {!isUpiId(store.settings.shopUpi) && <div className="rounded-md bg-gold/10 px-2.5 py-2 text-xs">{t.addUpiHint}</div>}
+            {bal > 0 && (
+              <details className="rounded-md bg-background ring-1 ring-foreground/10">
+                <summary className="flex min-h-11 cursor-pointer items-center px-3 text-xs font-semibold text-muted-foreground">{t.msgPreview}</summary>
+                <pre className="px-3 pb-3 font-sans text-[13px] leading-snug whitespace-pre-wrap">{reminderMessage(s, store.settings, c.cid)}</pre>
+              </details>
+            )}
             <div className="text-xs text-muted-foreground">
               {bal <= 0 ? t.nothingDue : !phone.trim() ? t.noPhone : !c.adult || !c.remindersOptIn ? t.notAllowed
                 : last ? `${t.lastReminded}: ${new Date(last).toLocaleString(t.loc, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}

@@ -6,7 +6,6 @@
  * WhatsApp does not make upi:// links tappable, so the reminder carries an https link to /pay
  * (src/pages/PayPage.tsx), which shows a "Pay with UPI app" button, a QR code and the UPI ID.
  */
-import type { Lang } from '../../shared/replies.js'
 import { publicUrl } from './api'
 
 /** name@bank style UPI ID (VPA). */
@@ -43,10 +42,4 @@ export function readPayRequest(search: string): PayRequest | null {
   if (!isUpiId(pa)) return null
   const am = Number.parseFloat(q.get('am') ?? '')
   return { pa, pn: q.get('pn') ?? '', am: am > 0 && am < 10_000_000 ? am : 0, tn: q.get('tn') ?? '' }
-}
-
-/** "Pay" in the reminder's language. */
-export const PAY_LABEL: Record<Lang, string> = {
-  hi: 'भुगतान करें', en: 'Pay', kn: 'ಪಾವತಿಸಿ', ta: 'செலுத்த', te: 'చెల్లించండి',
-  ml: 'പണമടയ്ക്കാൻ', mr: 'पैसे भरा', bn: 'পেমেন্ট করুন', gu: 'ચુકવણી કરો', pa: 'ਭੁਗਤਾਨ ਕਰੋ',
 }

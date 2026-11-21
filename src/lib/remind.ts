@@ -10,9 +10,9 @@
  * reminders run from the phone while the app is open, at most once every N days per customer.
  */
 import { balance, type LedgerState } from '../../shared/ledger.js'
-import { say } from '../../shared/replies.js'
+import { reminderWords } from '../../shared/replies.js'
 import { api } from './api'
-import { PAY_LABEL, isUpiId, payPageUrl } from './pay'
+import { isUpiId, payPageUrl } from './pay'
 import type { KhataStore, Settings } from './contracts'
 
 export type RemindResult =
@@ -29,18 +29,43 @@ export const canRemind = (state: LedgerState, cid: string): boolean => {
   return !!c && c.adult && c.remindersOptIn
 }
 
-/** The polite reminder in the shop's language, signed with the shop profile. */
+/**
+ * The WhatsApp reminder, in the shop's language: a friendly note from a shop the customer knows
+ * (shared/replies.ts reminderWords) — greeting, balance, an easy way to pay, thanks, the shop's
+ * signature, and how to stop these messages.
+ *
+ *   👋 Hi Ramesh! A friendly reminder from Sharma Kirana.
+ *
+ *   Your khata balance is *₹500*.
+ *   Pay whenever it suits you 👉 https://…/pay?…
+ *   UPI: sharma@okaxis
+ *
+ *   Thank you for shopping with us! 🙏
+ *   — Rakesh · Jayanagar · 📞 98…
+ *
+ *   Sent via KhataBhai · reply STOP to stop these messages
+ */
 export function reminderMessage(state: LedgerState, settings: Settings, cid: string): string {
   const c = state.customers.get(cid)!
   const owed = Math.max(0, balance(state, cid)) / 100
-  const shop = [settings.shopName, settings.shopAddress].filter(Boolean).join(', ')
-  const sign = [settings.ownerName, settings.shopPhone ? `📞 ${settings.shopPhone}` : ''].filter(Boolean).join(' · ')
-  const lang = settings.lang ?? 'hi'
-  // with the shop's UPI ID set, the customer can pay straight from the message
-  const pay = isUpiId(settings.shopUpi) && owed > 0
-    ? `💳 ${PAY_LABEL[lang]} ₹${owed.toLocaleString('en-IN')}: ${payPageUrl({ pa: settings.shopUpi!, pn: settings.shopName, am: owed, tn: `Khata: ${c.name}` })}\nUPI: ${settings.shopUpi!.trim()}`
-    : ''
-  return [say(lang).reminderText(c.name, owed, shop), pay, sign && `— ${sign}`].filter(Boolean).join('\n')
+  const w = reminderWords(settings.lang ?? 'hi')
+  const amount = `₹${owed.toLocaleString('en-IN')}`
+  const upi = isUpiId(settings.shopUpi) ? settings.shopUpi!.trim() : null
+  const pay = upi && owed > 0
+    ? [`${w.pay} ${payPageUrl({ pa: upi, pn: settings.shopName, am: owed, tn: `Khata: ${c.name}` })}`, `UPI: ${upi}`]
+    : []
+  const sign = [settings.ownerName, settings.shopAddress, settings.shopPhone ? `📞 ${settings.shopPhone}` : ''].filter(Boolean).join(' · ')
+  return [
+    w.greet(c.name, settings.shopName),
+    '',
+    w.balance(amount),
+    ...pay,
+    '',
+    w.thanks,
+    ...(sign ? [`— ${sign}`] : []),
+    '',
+    w.optOut,
+  ].join('\n')
 }
 
 function share(text: string, phone?: string) {

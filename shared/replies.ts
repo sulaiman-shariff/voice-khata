@@ -424,6 +424,8 @@ export const say = (lang: Lang): Replies => REPLIES[lang]
 const BANNED = [
   /\bloan\b/i, /\blend\b/i, /\binterest\b/i, /\bcredit (score|limit|rating)\b/i, /\bpenalt/i, /\blegal action\b/i,
   /\bdefault(er)?\b/i, /\bblacklist/i, /\bshame\b/i, /\btrust(worthy)?\b/i, /\brisky?\b/i, /\bimmediately\b/i,
+  // collection-agency pressure, and pleading
+  /\boverdue\b/i, /\burgent(ly)?\b/i, /\bfinal (notice|reminder|warning)\b/i, /\bpay now\b/i, /\bfailure to\b/i, /\bkindly\b/i,
   /ब्याज/, /कर्ज़ा? दे/, /जुर्माना/, /कानूनी/, /बेईमान/, /तुरंत चुकाओ/, /ಬಡ್ಡಿ/, /வட்டி/, /వడ్డీ/,
 ]
 export function guardReply(text: string): string | null {
@@ -522,3 +524,94 @@ const MORE: Record<Lang, MoreReplies> = {
   },
 }
 export const sayMore = (lang: Lang): MoreReplies => MORE[lang]
+
+/**
+ * The WhatsApp reminder a customer receives: a friendly note from a shop they know. Warm and
+ * factual — the balance, an easy way to pay, a thank-you. Never pleading ("kindly request",
+ * "please please") and never pressing ("overdue", "immediately", penalties). Always says how to
+ * stop the messages. The amount is in *bold* (WhatsApp formatting).
+ */
+export interface ReminderWords {
+  greet: (name: string, shop: string) => string
+  balance: (amount: string) => string
+  /** followed by the pay link */
+  pay: string
+  thanks: string
+  optOut: string
+}
+const REMINDER: Record<Lang, ReminderWords> = {
+  en: {
+    greet: (n, s) => `👋 Hi ${n}! A friendly reminder from ${s}.`,
+    balance: (a) => `Your khata balance is *${a}*.`,
+    pay: 'Pay whenever it suits you 👉',
+    thanks: 'Thank you for shopping with us! 🙏',
+    optOut: 'Sent via KhataBhai · reply STOP to stop these messages',
+  },
+  hi: {
+    greet: (n, s) => `👋 नमस्ते ${n} जी! ${s} की ओर से एक छोटी-सी याद।`,
+    balance: (a) => `आपके खाते में *${a}* बाकी हैं।`,
+    pay: 'जब सुविधा हो, यहाँ से भुगतान कर सकते हैं 👉',
+    thanks: 'हमारे साथ ख़रीदारी के लिए शुक्रिया! 🙏',
+    optOut: 'KhataBhai से भेजा गया · ये संदेश नहीं चाहिए तो "बंद" लिखें',
+  },
+  kn: {
+    greet: (n, s) => `👋 ನಮಸ್ಕಾರ ${n} ಅವರೇ! ${s} ಕಡೆಯಿಂದ ಒಂದು ಸಣ್ಣ ನೆನಪು.`,
+    balance: (a) => `ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ *${a}* ಬಾಕಿ ಇದೆ.`,
+    pay: 'ಅನುಕೂಲವಾದಾಗ ಇಲ್ಲಿ ಪಾವತಿಸಬಹುದು 👉',
+    thanks: 'ನಮ್ಮಲ್ಲಿ ಖರೀದಿಸಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ! 🙏',
+    optOut: 'KhataBhai ಮೂಲಕ ಕಳುಹಿಸಲಾಗಿದೆ · ಈ ಸಂದೇಶ ಬೇಡವಾದರೆ "ನಿಲ್ಲಿಸಿ" ಎಂದು ಉತ್ತರಿಸಿ',
+  },
+  ta: {
+    greet: (n, s) => `👋 வணக்கம் ${n}! ${s} கடையிலிருந்து ஒரு சிறிய நினைவூட்டல்.`,
+    balance: (a) => `உங்கள் கணக்கில் *${a}* பாக்கி உள்ளது.`,
+    pay: 'வசதியான நேரத்தில் இங்கே செலுத்தலாம் 👉',
+    thanks: 'எங்களிடம் வாங்கியதற்கு நன்றி! 🙏',
+    optOut: 'KhataBhai மூலம் அனுப்பப்பட்டது · இவை வேண்டாமெனில் "நிறுத்து" என்று பதில் அனுப்புங்கள்',
+  },
+  te: {
+    greet: (n, s) => `👋 నమస్కారం ${n} గారు! ${s} నుండి ఒక చిన్న గుర్తు.`,
+    balance: (a) => `మీ ఖాతాలో *${a}* బాకీ ఉంది.`,
+    pay: 'మీకు వీలైనప్పుడు ఇక్కడ చెల్లించవచ్చు 👉',
+    thanks: 'మా దగ్గర కొన్నందుకు ధన్యవాదాలు! 🙏',
+    optOut: 'KhataBhai ద్వారా పంపబడింది · ఇవి వద్దంటే "ఆపండి" అని జవాబివ్వండి',
+  },
+  ml: {
+    greet: (n, s) => `👋 നമസ്കാരം ${n}! ${s}-ൽ നിന്ന് ഒരു ചെറിയ ഓർമ്മപ്പെടുത്തൽ.`,
+    balance: (a) => `നിങ്ങളുടെ കണക്കിൽ *${a}* ബാക്കിയുണ്ട്.`,
+    pay: 'സൗകര്യം പോലെ ഇവിടെ പണമടയ്ക്കാം 👉',
+    thanks: 'ഞങ്ങളുടെ കടയിൽ നിന്ന് വാങ്ങിയതിന് നന്ദി! 🙏',
+    optOut: 'KhataBhai വഴി അയച്ചത് · ഇവ വേണ്ടെങ്കിൽ "നിർത്തുക" എന്ന് മറുപടി നൽകുക',
+  },
+  mr: {
+    greet: (n, s) => `👋 नमस्कार ${n}! ${s} कडून एक छोटीशी आठवण.`,
+    balance: (a) => `तुमच्या खात्यात *${a}* बाकी आहेत.`,
+    pay: 'सोयीनुसार इथे पैसे भरू शकता 👉',
+    thanks: 'आमच्याकडून खरेदी केल्याबद्दल धन्यवाद! 🙏',
+    optOut: 'KhataBhai मार्फत पाठवले · हे संदेश नको असल्यास "बंद" लिहा',
+  },
+  bn: {
+    greet: (n, s) => `👋 নমস্কার ${n}! ${s} থেকে একটি ছোট্ট মনে করানো।`,
+    balance: (a) => `আপনার খাতায় *${a}* বাকি আছে।`,
+    pay: 'সুবিধামতো এখানে পেমেন্ট করতে পারেন 👉',
+    thanks: 'আমাদের দোকান থেকে কেনার জন্য ধন্যবাদ! 🙏',
+    optOut: 'KhataBhai থেকে পাঠানো · এই বার্তা না চাইলে "বন্ধ" লিখুন',
+  },
+  gu: {
+    greet: (n, s) => `👋 નમસ્તે ${n}! ${s} તરફથી એક નાનકડી યાદ.`,
+    balance: (a) => `તમારા ખાતામાં *${a}* બાકી છે.`,
+    pay: 'અનુકૂળતાએ અહીંથી ચુકવણી કરી શકો 👉',
+    thanks: 'અમારી પાસેથી ખરીદી કરવા બદલ આભાર! 🙏',
+    optOut: 'KhataBhai દ્વારા મોકલેલ · આ સંદેશા ન જોઈએ તો "બંધ" લખો',
+  },
+  pa: {
+    greet: (n, s) => `👋 ਸਤ ਸ੍ਰੀ ਅਕਾਲ ${n} ਜੀ! ${s} ਵੱਲੋਂ ਇੱਕ ਛੋਟੀ ਜਿਹੀ ਯਾਦ।`,
+    balance: (a) => `ਤੁਹਾਡੇ ਖਾਤੇ ਵਿੱਚ *${a}* ਬਾਕੀ ਹਨ।`,
+    pay: 'ਸਹੂਲਤ ਅਨੁਸਾਰ ਇੱਥੋਂ ਭੁਗਤਾਨ ਕਰ ਸਕਦੇ ਹੋ 👉',
+    thanks: 'ਸਾਡੇ ਤੋਂ ਖਰੀਦਦਾਰੀ ਲਈ ਧੰਨਵਾਦ! 🙏',
+    optOut: 'KhataBhai ਰਾਹੀਂ ਭੇਜਿਆ · ਇਹ ਸੁਨੇਹੇ ਨਹੀਂ ਚਾਹੀਦੇ ਤਾਂ "ਬੰਦ" ਲਿਖੋ',
+  },
+}
+export const reminderWords = (lang: Lang): ReminderWords => REMINDER[lang]
+
+/** Does a reminder line use a pressing or judging word (the BANNED list)? For tests. */
+export const pressingWord = (text: string): boolean => BANNED.some((re) => re.test(text))

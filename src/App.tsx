@@ -129,7 +129,7 @@ function Home({ store }: { store: KhataStore }) {
         else if (s.view === 'summary') setTab('today')
         else if (s.view === 'privacy') setSheet('privacy')
       },
-      remind: (c, text) => { if (c && text) void sendReminder(store, c, { text, interactive: true }).then((r) => toastRemind(t, r)).catch((e) => clientLog.warn('remind_failed', { error: String(e) })) },
+      remind: (c) => { if (c) void sendReminder(store, c, { interactive: true }).then((r) => toastRemind(t, r)).catch((e) => clientLog.warn('remind_failed', { error: String(e) })) },
       metrics: setMetrics,
       error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),

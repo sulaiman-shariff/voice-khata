@@ -40,11 +40,11 @@ const EXTRA4 = {
 }
 /** Getting paid: the shop's UPI ID. */
 const EXTRA5 = {
-  hi: { upiId: "UPI ID (भुगतान के लिए)", upiHint: "जैसे sharma@okaxis — याद-दिहानी में “भुगतान करें” लिंक जुड़ेगा", addUpiHint: "ग्राहक संदेश से ही भुगतान कर सकें, इसके लिए ☰ → दुकान की जानकारी में अपना UPI ID डालें" },
-  en: { upiId: "UPI ID (to get paid)", upiHint: "e.g. sharma@okaxis — reminders get a “Pay” link", addUpiHint: "Add your UPI ID in ☰ → Shop profile so customers can pay straight from the reminder" },
-  kn: { upiId: "UPI ID (ಪಾವತಿಗಾಗಿ)", upiHint: "ಉದಾ sharma@okaxis — ನೆನಪಿನ ಸಂದೇಶದಲ್ಲಿ “ಪಾವತಿಸಿ” ಲಿಂಕ್ ಇರುತ್ತದೆ", addUpiHint: "ಗ್ರಾಹಕರು ಸಂದೇಶದಿಂದಲೇ ಪಾವತಿಸಲು ☰ → ಅಂಗಡಿ ವಿವರದಲ್ಲಿ UPI ID ಸೇರಿಸಿ" },
-  ta: { upiId: "UPI ID (பணம் பெற)", upiHint: "எ.கா sharma@okaxis — நினைவூட்டலில் “செலுத்த” இணைப்பு வரும்", addUpiHint: "வாடிக்கையாளர்கள் செய்தியிலிருந்தே செலுத்த ☰ → கடை விவரத்தில் UPI ID சேர்க்கவும்" },
-  te: { upiId: "UPI ID (చెల్లింపుల కోసం)", upiHint: "ఉదా sharma@okaxis — రిమైండర్‌లో “చెల్లించండి” లింక్ వస్తుంది", addUpiHint: "కస్టమర్లు సందేశం నుండే చెల్లించేందుకు ☰ → షాప్ వివరాల్లో UPI ID చేర్చండి" },
+  hi: { msgPreview: "संदेश देखें", upiId: "UPI ID (भुगतान के लिए)", upiHint: "जैसे sharma@okaxis — याद-दिहानी में “भुगतान करें” लिंक जुड़ेगा", addUpiHint: "ग्राहक संदेश से ही भुगतान कर सकें, इसके लिए ☰ → दुकान की जानकारी में अपना UPI ID डालें" },
+  en: { msgPreview: "See the message", upiId: "UPI ID (to get paid)", upiHint: "e.g. sharma@okaxis — reminders get a “Pay” link", addUpiHint: "Add your UPI ID in ☰ → Shop profile so customers can pay straight from the reminder" },
+  kn: { msgPreview: "ಸಂದೇಶ ನೋಡಿ", upiId: "UPI ID (ಪಾವತಿಗಾಗಿ)", upiHint: "ಉದಾ sharma@okaxis — ನೆನಪಿನ ಸಂದೇಶದಲ್ಲಿ “ಪಾವತಿಸಿ” ಲಿಂಕ್ ಇರುತ್ತದೆ", addUpiHint: "ಗ್ರಾಹಕರು ಸಂದೇಶದಿಂದಲೇ ಪಾವತಿಸಲು ☰ → ಅಂಗಡಿ ವಿವರದಲ್ಲಿ UPI ID ಸೇರಿಸಿ" },
+  ta: { msgPreview: "செய்தியைப் பார்க்க", upiId: "UPI ID (பணம் பெற)", upiHint: "எ.கா sharma@okaxis — நினைவூட்டலில் “செலுத்த” இணைப்பு வரும்", addUpiHint: "வாடிக்கையாளர்கள் செய்தியிலிருந்தே செலுத்த ☰ → கடை விவரத்தில் UPI ID சேர்க்கவும்" },
+  te: { msgPreview: "సందేశం చూడండి", upiId: "UPI ID (చెల్లింపుల కోసం)", upiHint: "ఉదా sharma@okaxis — రిమైండర్‌లో “చెల్లించండి” లింక్ వస్తుంది", addUpiHint: "కస్టమర్లు సందేశం నుండే చెల్లించేందుకు ☰ → షాప్ వివరాల్లో UPI ID చేర్చండి" },
 }
 const T = Object.fromEntries(
   (Object.keys(BASE) as (keyof typeof BASE)[]).map((k) => [k, { ...BASE[k], ...EXTRA[k], ...EXTRA2[k], ...EXTRA3[k], ...EXTRA4[k], ...EXTRA5[k] }]),
