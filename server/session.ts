@@ -148,6 +148,12 @@ export class Session {
       this.log.info('attention', { state })
       if (state === 'asleep') this.phoneUnconfirmed = false
       if (!this.attnQuiet) this.deps.send({ type: 'attention', state })
+      // asleep with a question nobody answered in time: drop it, so no dead card stays on screen
+      if (state === 'asleep' && this.pending && this.now() - this.ledger.pendingAt >= PENDING_TTL_MS) {
+        this.log.info('pending_expired', { kind: this.pending.kind, ageMs: this.now() - this.ledger.pendingAt, on: 'sleep' })
+        this.pending = null
+        if (!this.attnQuiet) this.deps.send({ type: 'pending', pending: null })
+      }
     })
   }
 

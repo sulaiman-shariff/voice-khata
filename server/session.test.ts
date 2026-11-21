@@ -1122,6 +1122,18 @@ describe('attention: the window and the sleep word', () => {
     expect(states(h.out)).toEqual(['asleep', 'awake', 'asleep'])
   })
 
+  it('going to sleep with an expired question clears the card', async () => {
+    vi.useFakeTimers()
+    const h = harness([cust('r', 'Ramesh')])
+    await h.typed('Ramesh 300')
+    expect(h.asks).toBe('direction')
+    h.tick(46_000)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(states(h.out).at(-1)).toBe('asleep')
+    expect(h.s.pending).toBeNull()
+    expect(h.out.at(-1)).toEqual({ type: 'pending', pending: null })
+  })
+
   it('a typed turn that leaves a question open wakes it, so the spoken answer is heard', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.typed('Ramesh 300')
