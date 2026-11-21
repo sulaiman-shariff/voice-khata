@@ -3,6 +3,7 @@ import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
 import { useMemo, useState } from 'react'
 import { type Direction, displayName } from '../../shared/ledger.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
 import type { KhataStore } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { dayDiff, relDay, rs, shiftDay, time, today } from './format'
@@ -54,6 +55,9 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
   const [dir, setDir] = useState<Direction>(e?.direction ?? 'credit')
   const [cid, setCid] = useState<string | null>(e?.cid ?? null)
   const [newName, setNewName] = useState('')
+  // a new customer's WhatsApp number and reminder consent, asked right when they are added
+  const [newPhone, setNewPhone] = useState('')
+  const [newConsent, setNewConsent] = useState(false)
   const [q, setQ] = useState('')
   // editing keeps the customer folded into one line; a new entry starts by picking one
   const [picking, setPicking] = useState(!e)
@@ -90,6 +94,7 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
     setBusy(true)
     try {
       const target = newName ? await store.addCustomer(newName) : cid!
+      if (newName && newPhone.trim()) await store.setConsent(target, { adult: newConsent, remindersOptIn: newConsent, phone: newPhone.trim() })
       if (e) {
         const ch: { paise?: number; direction?: Direction; cid?: string; day?: string } = {}
         if (paise !== e.paise) ch.paise = paise
@@ -188,6 +193,25 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
             </>
           )}
         </div>
+
+        {newName && !picking && (
+          <div className="space-y-2 rounded-lg bg-card p-3 ring-1 ring-foreground/10">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.phoneOptional} · WhatsApp</span>
+              <span className="flex h-11 items-center rounded-lg bg-background ring-1 ring-foreground/15 focus-within:ring-2 focus-within:ring-primary">
+                <span className="num border-r border-border px-2.5 text-sm text-muted-foreground">+91</span>
+                <input inputMode="tel" autoComplete="tel" value={newPhone} onChange={(ev) => setNewPhone(ev.target.value)} placeholder="98765 43210"
+                  className="num h-full min-w-0 flex-1 bg-transparent px-2.5 text-base outline-none focus-visible:outline-none" />
+              </span>
+            </label>
+            {newPhone.trim() && (
+              <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{t.consentBoth}</span>
+                <Switch checked={newConsent} onCheckedChange={setNewConsent} />
+              </label>
+            )}
+          </div>
+        )}
 
         {/* date */}
         <div>

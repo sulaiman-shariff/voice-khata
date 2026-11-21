@@ -46,9 +46,17 @@ const EXTRA5 = {
   ta: { msgPreview: "செய்தியைப் பார்க்க", upiId: "UPI ID (பணம் பெற)", upiHint: "எ.கா sharma@okaxis — நினைவூட்டலில் “செலுத்த” இணைப்பு வரும்", addUpiHint: "வாடிக்கையாளர்கள் செய்தியிலிருந்தே செலுத்த ☰ → கடை விவரத்தில் UPI ID சேர்க்கவும்" },
   te: { msgPreview: "సందేశం చూడండి", upiId: "UPI ID (చెల్లింపుల కోసం)", upiHint: "ఉదా sharma@okaxis — రిమైండర్‌లో “చెల్లించండి” లింక్ వస్తుంది", addUpiHint: "కస్టమర్లు సందేశం నుండే చెల్లించేందుకు ☰ → షాప్ వివరాల్లో UPI ID చేర్చండి" },
 }
+/** The reminders screen (bell at the top) and phone numbers. */
+const EXTRA6 = {
+  hi: { remindersNav: "याद-दिहानी", consentBoth: "वयस्क, याद दिलाने के लिए राज़ी", everyone: "सभी ग्राहक", noneDue: "अभी किसी पर कुछ बाकी नहीं", phoneOptional: "फ़ोन (ज़रूरी नहीं)", sendTo: "सभी को भेजें", addNumber: "नंबर जोड़ें" },
+  en: { remindersNav: "Reminders", consentBoth: "Adult, agreed to reminders", everyone: "All customers", noneDue: "Nobody owes anything right now", phoneOptional: "Phone (optional)", sendTo: "Send to all", addNumber: "Add number" },
+  kn: { remindersNav: "ನೆನಪುಗಳು", consentBoth: "ವಯಸ್ಕರು, ನೆನಪಿಗೆ ಒಪ್ಪಿದ್ದಾರೆ", everyone: "ಎಲ್ಲಾ ಗ್ರಾಹಕರು", noneDue: "ಈಗ ಯಾರಿಗೂ ಬಾಕಿ ಇಲ್ಲ", phoneOptional: "ಫೋನ್ (ಐಚ್ಛಿಕ)", sendTo: "ಎಲ್ಲರಿಗೂ ಕಳುಹಿಸಿ", addNumber: "ನಂಬರ್ ಸೇರಿಸಿ" },
+  ta: { remindersNav: "நினைவூட்டல்கள்", consentBoth: "வயது வந்தவர், நினைவூட்டலுக்கு ஒப்புதல்", everyone: "அனைத்து வாடிக்கையாளர்கள்", noneDue: "இப்போது யாருக்கும் பாக்கி இல்லை", phoneOptional: "தொலைபேசி (விருப்பம்)", sendTo: "அனைவருக்கும் அனுப்பு", addNumber: "எண் சேர்" },
+  te: { remindersNav: "రిమైండర్లు", consentBoth: "పెద్దవారు, రిమైండర్‌కు ఒప్పుకున్నారు", everyone: "అందరు కస్టమర్లు", noneDue: "ఇప్పుడు ఎవరికీ బాకీ లేదు", phoneOptional: "ఫోన్ (ఐచ్ఛికం)", sendTo: "అందరికీ పంపండి", addNumber: "నంబర్ చేర్చండి" },
+}
 const T = Object.fromEntries(
-  (Object.keys(BASE) as (keyof typeof BASE)[]).map((k) => [k, { ...BASE[k], ...EXTRA[k], ...EXTRA2[k], ...EXTRA3[k], ...EXTRA4[k], ...EXTRA5[k] }]),
-) as { [K in keyof typeof BASE]: (typeof BASE)[K] & (typeof EXTRA)[K] & (typeof EXTRA2)[K] & (typeof EXTRA3)[K] & (typeof EXTRA4)[K] & (typeof EXTRA5)[K] }
+  (Object.keys(BASE) as (keyof typeof BASE)[]).map((k) => [k, { ...BASE[k], ...EXTRA[k], ...EXTRA2[k], ...EXTRA3[k], ...EXTRA4[k], ...EXTRA5[k], ...EXTRA6[k] }]),
+) as { [K in keyof typeof BASE]: (typeof BASE)[K] & (typeof EXTRA)[K] & (typeof EXTRA2)[K] & (typeof EXTRA3)[K] & (typeof EXTRA4)[K] & (typeof EXTRA5)[K] & (typeof EXTRA6)[K] }
 export type UiStrings = (typeof T)['en']
 export const ui = (l: Lang | null): UiStrings => (l && l in T ? T[l as keyof typeof T] : T.hi)
 

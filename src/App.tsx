@@ -22,6 +22,7 @@ import { ui } from '@/ui/strings'
 import { Dropdown } from '@/ui/Dropdown'
 import { MenuSheet } from '@/ui/Menu'
 import { ImportSheet, type ImportSink } from '@/ui/ImportSheet'
+import { RemindSheet } from '@/ui/RemindSheet'
 import { ProfileForm } from '@/ui/Profile'
 import { applyTheme } from '@/ui/theme'
 import { Logo, Wordmark } from '@/ui/Logo'
@@ -64,7 +65,7 @@ function Home({ store }: { store: KhataStore }) {
   const [metrics, setMetrics] = useState<(TurnMetrics & { clientFirstAudioMs: number | null }) | null>(null)
   const [tab, setTab] = useState<'today' | 'dues'>('today')
   const [cid, setCid] = useState<string | null>(null)
-  const [sheet, setSheet] = useState<'menu' | 'privacy' | 'import' | null>(null)
+  const [sheet, setSheet] = useState<'menu' | 'privacy' | 'import' | 'remind' | null>(null)
   // rows read aloud from an old paper khata go straight to the open import sheet
   const importSink = useRef<ImportSink['current']>(null)
   const importHandsFree = useRef<boolean | null>(null)
@@ -270,22 +271,30 @@ function Home({ store }: { store: KhataStore }) {
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <header className="relative flex h-16 shrink-0 items-center justify-between border-b border-border px-3">
-        <button aria-label={t.menu} onClick={() => setSheet('menu')} className="grid size-11 place-items-center rounded-lg text-foreground hover:bg-muted active:scale-95">
-          <MenuIcon className="size-6" />
-        </button>
-        {/* centred on the bar itself, not between unequal neighbours */}
-        <div className="pointer-events-none absolute inset-x-30 text-center">
-          <div className="truncate text-lg leading-tight font-semibold tracking-tight">{settings.shopName}</div>
-          <div className="text-[10px] font-semibold tracking-[0.24em] text-gold uppercase">KhataBhai</div>
+      {/* top bar: menu | shop name (centred on the bar) | reminders bell + language; clears the phone's status bar in the app */}
+      <header className="relative shrink-0 border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="relative flex h-16 items-center justify-between gap-2 px-3">
+          <button aria-label={t.menu} onClick={() => setSheet('menu')} className="grid size-11 shrink-0 place-items-center rounded-lg hover:bg-muted active:scale-95">
+            <MenuIcon className="size-6" />
+          </button>
+          <div className="pointer-events-none absolute inset-x-[7.75rem] text-center">
+            <div className="truncate text-base leading-tight font-semibold tracking-tight sm:text-lg">{settings.shopName}</div>
+            <div className="mt-0.5 text-[10px] font-semibold tracking-[0.24em] text-gold uppercase">KhataBhai</div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button aria-label={t.remindersNav} onClick={() => setSheet('remind')} className="relative grid size-11 place-items-center rounded-lg hover:bg-muted active:scale-95">
+              <BellRing className="size-5" />
+              {due.length > 0 && <span className="num absolute top-1 right-1 grid min-w-4 place-items-center rounded-full bg-credit px-1 text-[10px] leading-4 font-semibold text-white">{due.length > 99 ? '99+' : due.length}</span>}
+            </button>
+            <Dropdown
+              compact label={t.language} align="right" panelClassName="w-60"
+              value={settings.autoLang !== false ? 'auto' : settings.lang}
+              options={[{ value: 'auto', label: 'Auto', hint: t.autoAny }, ...LANGS.map((l) => ({ value: l as string, label: LANG_NAME[l], hint: l.toUpperCase() }))]}
+              onChange={setLanguage}
+              button={<span className="flex items-center gap-1"><Globe className="size-4 shrink-0 text-muted-foreground" /><span>{settings.autoLang !== false ? 'Auto' : settings.lang.toUpperCase()}</span></span>}
+            />
+          </div>
         </div>
-        <Dropdown
-          label={t.language} align="right" className="w-28" panelClassName="w-60"
-          value={settings.autoLang !== false ? 'auto' : settings.lang}
-          options={[{ value: 'auto', label: 'Auto', hint: t.autoAny }, ...LANGS.map((l) => ({ value: l as string, label: LANG_NAME[l] }))]}
-          onChange={setLanguage}
-          button={<span className="flex min-w-0 items-center gap-1.5"><Globe className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{settings.autoLang !== false ? 'Auto' : LANG_NAME[settings.lang]}</span></span>}
-        />
       </header>
 
       {on && status === 'offline' && (
@@ -422,6 +431,7 @@ function Home({ store }: { store: KhataStore }) {
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved}
         onCustomer={(c) => { setEntry(null); setEntryFrom(null); setCid(c) }} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
+      <RemindSheet store={store} open={sheet === 'remind'} t={t} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <ImportSheet store={store} open={sheet === 'import'} t={t} sink={importSink} onReading={importReading} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onImport={() => setSheet('import')} onRemindAll={() => void remindAll()}
         onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll) }} />

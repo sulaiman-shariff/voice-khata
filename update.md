@@ -14,6 +14,30 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 ---
 
+## 8. Reminders bell, customer numbers, top bar spacing
+
+**Owner's feedback:**
+- Where does the shop type the customer's number?
+- They want a notification button to send a reminder by hand at any time, beside the automatic ones (for example when a customer missed one).
+- The top bar needs proper spacing: the language button was cut off ("Eng…").
+
+**Fixes:**
+- **🔔 Reminders bell in the top bar** (with a badge counting customers who owe) opens the **Reminders** screen (`src/ui/RemindSheet.tsx`).
+  - Tabs: *Dues* (everyone who owes) and *All customers*.
+  - Each row: name (same-name customers told apart), amount owed, a **+91 phone box to type the number right there** (saved when you leave the box), one switch **"Adult, agreed to reminders"** (sets both consents), a **Send** button, and when the last reminder went.
+  - **Send to all (N)** sends to everyone with a number and consent.
+  - Works any time, independent of the automatic schedule.
+- **Number when adding a customer:** creating a new customer in the add-entry sheet now asks for an optional WhatsApp number and, once one is typed, the consent switch. Both are saved with the new customer.
+- **The number is now in four places:** the bell screen, the add-entry sheet (new customers), the customer screen's reminder box, and the WhatsApp button on Dues rows (which opens the customer when the number is missing).
+- **Top bar:**
+  - **Layout:** ☰ (left) | shop name + "KHATABHAI", centred on the bar | 🔔 + language (right).
+  - **Language button:** compact, just the globe and **Auto** or a two-letter code (EN, HI, KN…), so it never truncates. The dropdown still lists the full names.
+  - **Shop name:** text-base on phones, lg on wider screens, truncated only if very long.
+  - **Status bar:** the bar pads for the phone's status bar (`env(safe-area-inset-top)`), for the Capacitor app.
+- **Files:** `src/ui/RemindSheet.tsx` (new), `src/App.tsx` (top bar, bell, sheet), `src/ui/Dropdown.tsx` (`compact`), `src/ui/EntrySheet.tsx` (new-customer number and consent), `src/ui/strings.ts` (`EXTRA6`, 5 languages).
+
+---
+
 ## 7. WhatsApp reminder wording
 
 **Owner's asks:**

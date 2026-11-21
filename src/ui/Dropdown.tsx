@@ -14,7 +14,7 @@ export interface DropdownOption<T extends string> {
  * A small listbox dropdown: opens below its button, closes on pick, outside tap or Escape.
  * `align` keeps the panel inside the screen (right for a top-right button).
  */
-export function Dropdown<T extends string>({ value, options, onChange, label, align = 'left', button, className, panelClassName }: {
+export function Dropdown<T extends string>({ value, options, onChange, label, align = 'left', button, className, panelClassName, compact }: {
   value: T
   options: DropdownOption<T>[]
   onChange: (v: T) => void
@@ -24,6 +24,8 @@ export function Dropdown<T extends string>({ value, options, onChange, label, al
   button?: ReactNode
   className?: string
   panelClassName?: string
+  /** a small top-bar button: no chevron, tight padding */
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -44,7 +46,7 @@ export function Dropdown<T extends string>({ value, options, onChange, label, al
       <button
         type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-11 w-full items-center justify-between gap-2 rounded-lg bg-card px-3 text-sm font-semibold ring-1 ring-foreground/15 active:scale-[.98]"
+        className={cn('flex h-11 w-full items-center justify-between gap-2 rounded-lg bg-card text-sm font-semibold ring-1 ring-foreground/15 active:scale-[.98]', compact ? 'px-2.5' : 'px-3')}
       >
         {button ?? (
           <span className="flex min-w-0 items-center gap-2">
@@ -52,7 +54,7 @@ export function Dropdown<T extends string>({ value, options, onChange, label, al
             <span className="truncate">{current?.label ?? label}</span>
           </span>
         )}
-        <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
+        {!compact && <ChevronDown className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')} />}
       </button>
       {open && (
         <ul
