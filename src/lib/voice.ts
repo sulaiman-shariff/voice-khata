@@ -6,6 +6,8 @@ import type { ClientMsg, ServerMsg, Snapshot, TurnMetrics } from '../../shared/p
 import type { Lang } from '../../shared/replies.js'
 import type { VoiceClient, VoiceEvents, VoiceStatus } from './contracts'
 import { clientLog as log } from './log'
+import { createWakeDetector, WAKE_MODEL_URL, type WakeDetector } from './wake'
+import { MODEL_CONTRACT } from './wake/features'
 import { NetMonitor, PING_EVERY_MS, PROBE_TIMEOUT_MS, SpeechBuffer, TurnTracker, backoffMs } from './link'
 
 export function defaultVoiceUrl(): string {
@@ -35,7 +37,28 @@ interface StartOpts {
   mic?: boolean
 }
 
-export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
+const PREROLL_MS = 2000
+
+/**
+ * The real detector, only when the trained model file is reachable (a dev server answers a missing
+ * file with index.html, so a web page is not a model). createWakeDetector itself returns null when
+ * the worker or WASM cannot load.
+ */
+async function defaultCreateDetector(): Promise<WakeDetector | null> {
+  try {
+    const r = await fetch(WAKE_MODEL_URL, { method: 'HEAD' })
+    if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return null
+    return await createWakeDetector({ threshold: MODEL_CONTRACT.threshold })
+  } catch {
+    return null
+  }
+}
+
+export interface VoiceDeps {
+  createDetector?: () => Promise<WakeDetector | null>
+}
+
+export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps = {}): VoiceClient {
   let opts: StartOpts | null = null
   let handsFree = false
   let running = false
@@ -92,6 +115,59 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let pendingMetrics: TurnMetrics | null = null
   let metricsTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** On-phone wake detector; null = none (or it failed): audio streams to the server as before. */
+  let detector: WakeDetector | null = null
+  let detectorLoading = false
+  /** asleep with a live detector: no audio leaves the phone */
+  const gated = () => detector !== null && !awake
+
+  /** The detector listens only while asleep and while the app is not speaking (its own voice must not wake it). */
+  function syncDetector() {
+    if (!detector) return
+    if (awake || status === 'speaking') detector.pause()
+    else detector.resume()
+  }
+
+  function dropDetector() {
+    const d = detector
+    detector = null
+    d?.dispose()
+  }
+
+  async function initDetector() {
+    if (detector || detectorLoading || !running) return
+    detectorLoading = true
+    try {
+      const d = await (deps.createDetector ?? defaultCreateDetector)()
+      if (!d) return
+      if (!running) { d.dispose(); return }
+      d.onWake(onDetectorWake)
+      d.onFail(() => {
+        log.warn('wake_detector_failed')
+        if (detector === d) detector = null // stream to the server again: it spots the wake word
+      })
+      detector = d
+      syncDetector()
+      log.info('wake_detector_ready')
+    } catch (e) {
+      log.warn('wake_detector_unavailable', { error: String(e) })
+    } finally {
+      detectorLoading = false
+    }
+  }
+
+  /** The phone heard the wake word: tell the server, give it the last 2 s, then live frames follow. */
+  function onDetectorWake() {
+    if (!running || awake || !detector) return
+    log.info('wake', { source: 'phone' })
+    send({ type: 'wake', source: 'phone' })
+    setAwake(true)
+    const now = performance.now()
+    if (ws && ws.readyState === WebSocket.OPEN && !swapping) {
+      for (const f of speech.replayWindow(now - PREROLL_MS, now, 0)) ws.send(f)
+    }
+  }
+
   const idleStatus = (): VoiceStatus => (awake ? 'listening' : 'asleep')
   const isBusy = () => status === 'speaking' || status === 'thinking'
 
@@ -107,6 +183,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     }
     if (status === s) return
     status = s
+    syncDetector()
     ev.status(s)
   }
 
@@ -120,6 +197,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     if (awake === a) return
     awake = a
     if (!quiet) ev.attention?.(a ? 'awake' : 'asleep') // quiet: a reconnect reset, not worth a chime
+    syncDetector()
     if (a && status === 'asleep') setStatus('listening')
     else if (!a && status === 'listening') setStatus('asleep')
   }
@@ -188,6 +266,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     }
     if (micDead || !(handsFree || pttHeld)) return
     speech.push(buf, level, now) // kept a few seconds so speech during a drop can be replayed
+    if (gated() && !pttHeld) {
+      detector?.feed(buf) // asleep: the detector listens, nothing goes to the server
+      return
+    }
     if (!ws || ws.readyState !== WebSocket.OPEN || swapping) return // not sent now; replayed after reconnect
     ws.send(buf)
   }
@@ -670,7 +752,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         log.info('mic_ready', { ms: ms() })
       }
       await setupAudio(ms)
-      if (stream) watchMic()
+      if (stream) { watchMic(); void initDetector() }
       document.addEventListener('visibilitychange', onVisibility)
       window.addEventListener('online', onOnline)
       window.addEventListener('offline', onOffline)
@@ -719,6 +801,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (!ctx) await setupAudio(() => 0)
       else if (micNode) ctx.createMediaStreamSource(s).connect(micNode)
       watchMic()
+      void initDetector()
       void resumeCtx()
       log.info('mic_attached')
     } catch (e) {
@@ -765,6 +848,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   function teardown() {
     running = false
+    dropDetector()
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)

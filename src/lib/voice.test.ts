@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientMsg, Snapshot } from '../../shared/protocol.js'
 import { createVoiceClient } from './voice'
+import type { WakeDetector } from './wake'
 
 class FakeWebSocket {
   static OPEN = 1
@@ -106,6 +107,147 @@ describe('voice client attention', () => {
     v.holdEnd()
     const types = ws.msgs().filter((m) => m.type === 'wake' || m.type === 'hold_end')
     expect(types).toEqual([{ type: 'wake', source: 'hold' }, { type: 'hold_end' }])
+    v.stop()
+  })
+})
+
+class FakeDetector implements WakeDetector {
+  fed = 0
+  paused = false
+  disposed = false
+  wakeCb: (() => void) | null = null
+  failCb: (() => void) | null = null
+  feed() { if (!this.paused) this.fed++ }
+  pause() { this.paused = true }
+  resume() { this.paused = false }
+  onWake(cb: () => void) { this.wakeCb = cb }
+  onFail(cb: () => void) { this.failCb = cb }
+  dispose() { this.disposed = true }
+}
+
+describe('voice client on-phone wake gate', () => {
+  let mics: { port: { onmessage: ((e: { data: unknown }) => void) | null } }[] = []
+  beforeEach(() => {
+    FakeWebSocket.instances = []
+    mics = []
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.stubGlobal('document', { addEventListener() {}, removeEventListener() {}, visibilityState: 'visible' })
+    vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} })
+    vi.stubGlobal('navigator', { onLine: true, mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) } })
+    vi.stubGlobal('AudioContext', class {
+      state = 'running'
+      destination = {}
+      audioWorklet = { addModule: async () => {} }
+      createMediaStreamSource() { return { connect() {} } }
+      close() { return Promise.resolve() }
+    })
+    vi.stubGlobal('AudioWorkletNode', class {
+      port: { onmessage: ((e: { data: unknown }) => void) | null; postMessage: () => void } = { onmessage: null, postMessage() {} }
+      constructor() { mics.push(this) }
+      connect() {}
+    })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  async function gated(det: FakeDetector | null) {
+    const frames: ArrayBuffer[] = []
+    const v = createVoiceClient('ws://x', {
+      status: () => {}, level: () => {}, partial: () => {}, final: () => {}, say: () => {}, ops: () => {},
+      pending: () => {}, show: () => {}, metrics: () => {}, error: () => {},
+    }, { createDetector: async () => det })
+    await v.start({ lang: 'hi', snapshot, firstRun: false, handsFree: true })
+    await new Promise((r) => setTimeout(r, 0)) // the detector loads after start
+    const ws = FakeWebSocket.instances[0]
+    ws.send = (d: string | ArrayBuffer) => { if (typeof d === 'string') ws.sent.push(d); else frames.push(d) }
+    const mic = () => mics[0].port.onmessage!
+    const frame = (n = 1) => ({ data: { buf: new Int16Array(512).fill(n).buffer, level: 0.1 } })
+    return { v, ws, frames, mic, frame }
+  }
+
+  it('frames are not sent while asleep with a detector', async () => {
+    const det = new FakeDetector()
+    const { v, frames, mic, frame } = await gated(det)
+    for (let i = 0; i < 5; i++) mic()(frame())
+    expect(frames).toHaveLength(0)
+    expect(det.fed).toBe(5)
+    v.stop()
+  })
+
+  it('a wake sends wake{phone} and the 2 s pre-roll first', async () => {
+    const det = new FakeDetector()
+    const { v, ws, frames, mic, frame } = await gated(det)
+    const order: string[] = []
+    const sendSock = ws.send.bind(ws)
+    ws.send = (d: string | ArrayBuffer) => { order.push(typeof d === 'string' ? (JSON.parse(d) as ClientMsg).type : 'frame'); sendSock(d as string) }
+    for (let i = 0; i < 100; i++) mic()(frame(i + 1)) // all within 2 s of real time
+    expect(frames).toHaveLength(0)
+    det.wakeCb!()
+    expect(order[0]).toBe('wake')
+    expect(ws.msgs()).toContainEqual({ type: 'wake', source: 'phone' })
+    expect(frames.length).toBe(100) // the whole pre-roll, oldest first
+    expect(new Int16Array(frames[0])[0]).toBe(1)
+    expect(order.slice(1).every((o) => o === 'frame')).toBe(true)
+    mic()(frame(7)) // now live
+    expect(frames).toHaveLength(101)
+    v.stop()
+  })
+
+  it('pre-roll is capped at 2 s', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] })
+    try {
+      const det = new FakeDetector()
+      const { v, frames, mic, frame } = await gated(det)
+      for (let i = 0; i < 200; i++) { vi.advanceTimersByTime(32); mic()(frame(i + 1)) } // 6.4 s
+      det.wakeCb!()
+      expect(frames.length).toBeLessThanOrEqual(63)
+      expect(frames.length).toBeGreaterThan(55)
+      v.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('no detector streams as today', async () => {
+    const { v, frames, mic, frame } = await gated(null)
+    mic()(frame())
+    expect(frames).toHaveLength(1)
+    v.stop()
+  })
+
+  it('detector onFail falls back to streaming', async () => {
+    const det = new FakeDetector()
+    const { v, frames, mic, frame } = await gated(det)
+    mic()(frame())
+    expect(frames).toHaveLength(0)
+    det.failCb!()
+    mic()(frame())
+    expect(frames).toHaveLength(1)
+    v.stop()
+  })
+
+  it('streams while the server says awake, detector paused', async () => {
+    const det = new FakeDetector()
+    const { v, ws, frames, mic, frame } = await gated(det)
+    ws.onmessage?.({ data: JSON.stringify({ type: 'attention', state: 'awake' }) })
+    mic()(frame())
+    expect(frames).toHaveLength(1)
+    expect(det.paused).toBe(true)
+    ws.onmessage?.({ data: JSON.stringify({ type: 'attention', state: 'asleep' }) })
+    expect(det.paused).toBe(false)
+    mic()(frame())
+    expect(frames).toHaveLength(1)
+    v.stop()
+  })
+
+  it('detector is paused while speaking', async () => {
+    const det = new FakeDetector()
+    const { v, ws, mic, frame } = await gated(det)
+    ws.onmessage?.({ data: JSON.stringify({ type: 'say', text: 'ok' }) })
+    expect(det.paused).toBe(true)
+    mic()(frame())
+    expect(det.fed).toBe(0)
+    ws.onmessage?.({ data: JSON.stringify({ type: 'stop_audio' }) })
+    expect(det.paused).toBe(false)
     v.stop()
   })
 })
