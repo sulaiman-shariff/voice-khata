@@ -22,6 +22,7 @@ const show = (name: string): ToolCall => ({ name: 'show_customer', args: { name 
 const bal = (name: string): ToolCall => ({ name: 'query_balance', args: { name } })
 const settle = (name: string): ToolCall => ({ name: 'settle', args: { name } })
 const nfm: ToolCall = { name: 'not_for_me', args: {} }
+const remind = (name: string): ToolCall => ({ name: 'send_reminder', args: { name } })
 
 export const SCENES: Scene[] = [
   { id: 's01_hi_basic_add', lines: [
@@ -221,8 +222,10 @@ export const SCENES: Scene[] = [
     bg('hi-IN', 'अरे वाह, कम हो गया'),
     kb('hi-IN', 'खाताभाई, रमेश ने पचास रुपये दिए', [add('Ramesh', 50, 'payment')]),
   ] },
+  // the follow-up runs into the question as one turn ("... owe? That is a lot, remind him"):
+  // answering the balance and then preparing the reminder is the right thing to do
   { id: 's35_two_requests_en', lines: [
-    kb('en-IN', 'KhataBhai, how much does Suresh owe', [bal('Suresh')]),
+    kb('en-IN', 'KhataBhai, how much does Suresh owe', [bal('Suresh'), remind('Suresh')]),
     bg('en-IN', 'That is a lot, remind him'),
     kb('en-IN', 'KhataBhai, Suresh paid two hundred', [add('Suresh', 200, 'payment')]),
   ] },
