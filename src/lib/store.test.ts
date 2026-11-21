@@ -51,7 +51,7 @@ describe('store', () => {
     await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 50000, 'credit'), entry('e2', 'c1', 20000, 'payment'),
       entry('e3', 'c1', 90000, 'payment', true), { op: 'amend', eid: 'e1', paise: 60000 }, entry('e4', 'c1', 1000, 'credit')])
     expect(balance(s.state, 'c1')).toBe(41000)
-    expect(s.snapshot().today).toEqual({ creditPaise: 61000, paymentPaise: 20000, entries: 3 })
+    expect(s.snapshot().today).toEqual({ creditPaise: 61000, paymentPaise: 20000, entries: 3, cashIn: 20000, cashOut: 0, newCustomers: 1 })
     await s.applyOps([{ op: 'void', eid: 'e4', reason: 'galat' }])
     expect(balance(s.state, 'c1')).toBe(40000)
     expect(s.snapshot().last?.eid).not.toBe('e4')

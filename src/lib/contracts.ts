@@ -2,7 +2,7 @@
  * Interfaces between the UI and the parts built separately (store, voice client, backup).
  * Implementations: src/lib/store.ts, src/lib/voice.ts, src/lib/backup.ts.
  */
-import type { Customer, Entry, LedgerState } from '../../shared/ledger.js'
+import type { CashCategory, Customer, Entry, LedgerState, PartyKind } from '../../shared/ledger.js'
 import type { LedgerOp, PendingView, ServerMsg, SettingMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
 
@@ -35,6 +35,10 @@ export interface Settings {
   reminded?: Record<string, number>
   /** how fast replies are spoken (Timbre speed); optional: older stored settings lack it (see createStore) */
   speed?: 0.8 | 1 | 1.2
+  /** the day (YYYY-MM-DD) the morning briefing was last offered: it is offered once, on the first wake of a day */
+  briefedDay?: string
+  /** "Bolkar batao payment": speak payments as they land. Missing means on. */
+  announcePayments?: boolean
 }
 
 export interface KhataStore {
@@ -48,7 +52,17 @@ export interface KhataStore {
   /** Local UI actions. */
   voidEntry(eid: string, reason: string): Promise<void>
   /** Manual edit of any entry (amount, direction, customer, day). Recorded as an amendment, never overwritten. */
-  amendEntry(eid: string, ch: { paise?: number; direction?: 'credit' | 'payment'; cid?: string; day?: string }): Promise<void>
+  amendEntry(eid: string, ch: { paise?: number; direction?: 'credit' | 'payment'; cid?: string; day?: string; due?: string | null }): Promise<void>
+  /** A galla row (no customer). Returns its eid; amend / void it with amendEntry / voidEntry. */
+  addCash(c: { paise: number; dir: 'in' | 'out'; category: CashCategory; note?: string; day?: string }): Promise<string>
+  /** Save (or clear, with '') a customer's nickname; reminders consent and phone stay as they are. */
+  setTag(cid: string, tag: string): Promise<void>
+  /** Turn an account into a supplier account, or back. */
+  setKind(cid: string, kind: PartyKind): Promise<void>
+  /** Set (or replace) a customer's instalment plan; the first instalment defaults to one interval from today. */
+  setPlan(cid: string, p: { totalPaise: number; parts: number; everyDays: number; startDay?: string }): Promise<void>
+  /** End the customer's instalment plan (no-op if none). */
+  cancelPlan(cid: string): Promise<void>
   addCustomer(name: string): Promise<string>
   setConsent(cid: string, c: { remindersOptIn: boolean; adult: boolean; phone?: string; tag?: string }): Promise<void>
   addAlias(cid: string, alias: string): Promise<void>
@@ -71,7 +85,7 @@ export interface KhataStore {
   exportReadable(): Promise<string>
 }
 // helpers the UI uses
-export type { Customer, Entry, LedgerState }
+export type { CashCategory, Customer, Entry, LedgerState, PartyKind }
 
 // ------------------------------------------------------------------ voice client (src/lib/voice.ts)
 /** 'asleep': connected, waiting for "KhataBhai" or a tap. 'listening': awake. */
@@ -138,6 +152,11 @@ export interface VoiceClient {
   holdEnd(): void
   /** Tap while awake: show asleep now (the server also times out on its own). */
   sleep(): void
+  /**
+   * The soundbox: a payment that landed off the phone (QR, link) is in the ledger; the server says
+   * it aloud. Returns false when the socket is not open (use speechSynthesis instead).
+   */
+  announce?(a: { kind: 'payment'; cid: string; paise: number; balancePaise?: number; partial?: boolean }): boolean
   /** Language changed in settings: continue the session in it, keep the mic on. */
   setLang(l: Lang): void
 }

@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Switch } from '@/components/ui/switch'
 import type { KhataStore } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
+import { Chip, NameTag, PhoneInput, Toggle, inputCls } from './kit'
 import { dayDiff, relDay, rs, shiftDay, time, today } from './format'
 import type { UiStrings } from './strings'
 
@@ -22,26 +23,10 @@ export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved, onCust
   if (!mode) return null
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-3xl pb-6">
+      <SheetContent closeLabel={t.dismiss}>
         <EntryForm key={mode.kind === 'edit' ? mode.eid : 'new'} store={store} t={t} mode={mode} onClose={onClose} onChanged={onChanged} onSaved={onSaved} onCustomer={onCustomer} />
       </SheetContent>
     </Sheet>
-  )
-}
-
-function Seg({ on, className, children, onClick }: { on: boolean; className?: string; children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button type="button" aria-pressed={on} onClick={onClick} className={cn('flex h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-base font-semibold transition-colors', on ? className : 'bg-card ring-1 ring-foreground/15')}>
-      {children}
-    </button>
-  )
-}
-
-function Chip({ on, dashed, children, onClick }: { on: boolean; dashed?: boolean; children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className={cn('flex min-h-11 max-w-full items-center gap-1 rounded-lg px-3.5 text-base font-medium ring-1', on ? 'bg-primary text-primary-foreground ring-primary' : 'bg-card ring-foreground/15', dashed && 'text-primary ring-primary/50')}>
-      <span className="truncate">{children}</span>
-    </button>
   )
 }
 
@@ -58,6 +43,9 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
   // a new customer's WhatsApp number and reminder consent, asked right when they are added
   const [newPhone, setNewPhone] = useState('')
   const [newConsent, setNewConsent] = useState(false)
+  // a second customer with the same name: one nickname each (both optional) tells them apart
+  const [newTag, setNewTag] = useState('')
+  const [oldTag, setOldTag] = useState('')
   const [q, setQ] = useState('')
   // editing keeps the customer folded into one line; a new entry starts by picking one
   const [picking, setPicking] = useState(!e)
@@ -86,6 +74,9 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
   const removed = !!e?.voided
   const dirty = !!e && (paise !== e.paise || dir !== e.direction || !!newName || (!!cid && cid !== e.cid) || day !== e.day)
   const chosen = newName ? `${newName} · ${t.newCustomer}` : cid ? displayName(s, cid) : ''
+  /** the customers already called `newName`: a twin is being created */
+  const twins = newName ? [...s.customers.values()].filter((c) => c.name.trim().toLowerCase() === newName.trim().toLowerCase()) : []
+  const untaggedTwin = twins.length === 1 && !twins[0].tag ? twins[0] : null
 
   const pick = (id: string | null, name = '') => { setCid(id); setNewName(name); setQ(''); setPicking(false) }
 
@@ -94,7 +85,12 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
     setBusy(true)
     try {
       const target = newName ? await store.addCustomer(newName) : cid!
-      if (newName && newPhone.trim()) await store.setConsent(target, { adult: newConsent, remindersOptIn: newConsent, phone: newPhone.trim() })
+      if (newName && (newPhone.trim() || newTag.trim())) {
+        await store.setConsent(target, { adult: newConsent, remindersOptIn: newConsent, phone: newPhone.trim() || undefined, tag: newTag.trim() || undefined })
+      }
+      if (untaggedTwin && oldTag.trim()) {
+        await store.setConsent(untaggedTwin.cid, { adult: untaggedTwin.adult, remindersOptIn: untaggedTwin.remindersOptIn, phone: untaggedTwin.phone, tag: oldTag.trim() })
+      }
       if (e) {
         const ch: { paise?: number; direction?: Direction; cid?: string; day?: string } = {}
         if (paise !== e.paise) ch.paise = paise
@@ -137,7 +133,7 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
         {e?.source && !typedByHand && <div className="truncate text-sm text-muted-foreground">“{e.source.transcript}”</div>}
       </SheetHeader>
       <div className="space-y-4 px-4">
-        {removed && <div className="rounded-lg bg-muted p-3 text-base text-muted-foreground">{t.removed}</div>}
+        {removed && <div className="rounded-xl bg-muted p-3 text-base text-muted-foreground">{t.removed}</div>}
 
         {/* amount */}
         <label className="flex items-baseline gap-2 border-b-2 border-gold/60 pb-1 focus-within:border-primary">
@@ -151,21 +147,21 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
 
         {/* credit / paid */}
         <div className="grid grid-cols-2 gap-2">
-          <Seg on={dir === 'credit'} className="bg-credit text-white shadow-md" onClick={() => setDir('credit')}>{t.credit}</Seg>
-          <Seg on={dir === 'payment'} className="bg-payment text-white shadow-md" onClick={() => setDir('payment')}>{t.payment}</Seg>
+          <Toggle on={dir === 'credit'} tone="credit" onClick={() => setDir('credit')}>{t.credit}</Toggle>
+          <Toggle on={dir === 'payment'} tone="payment" onClick={() => setDir('payment')}>{t.payment}</Toggle>
         </div>
 
         {/* customer: one line once chosen, a search while picking */}
         <div>
           <div className="mb-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">{t.customer}</div>
           {!picking && chosen ? (
-            <div className="flex min-h-12 items-center gap-3 rounded-lg bg-card px-3 ring-1 ring-foreground/15">
+            <div className="flex min-h-12 items-center gap-3 rounded-xl bg-card px-3 shadow-1 ring-1 ring-foreground/8">
               <User className="size-5 shrink-0 text-muted-foreground" />
               {cid && !newName && onCustomer
-                ? <button type="button" onClick={() => onCustomer(cid)} className="min-w-0 flex-1 truncate text-left text-lg font-semibold underline decoration-gold/60 underline-offset-4">{chosen}</button>
-                : <span className="min-w-0 flex-1 truncate text-lg font-semibold">{chosen}</span>}
+                ? <button type="button" onClick={() => onCustomer(cid)} className="min-w-0 flex-1 text-left text-lg font-semibold underline decoration-gold/60 underline-offset-4"><NameTag label={chosen} /></button>
+                : <NameTag label={chosen} className="min-w-0 flex-1 text-lg font-semibold" />}
               {cid && !newName && onCustomer && (
-                <button type="button" aria-label={t.remindNow} onClick={() => onCustomer(cid)} className="grid size-11 shrink-0 place-items-center rounded-lg text-payment hover:bg-payment/10">
+                <button type="button" aria-label={t.remindNow} onClick={() => onCustomer(cid)} className="grid size-11 shrink-0 place-items-center rounded-xl text-primary hover:bg-primary/8">
                   <MessageCircle className="size-5" />
                 </button>
               )}
@@ -173,7 +169,7 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
             </div>
           ) : (
             <>
-              <label className="flex h-12 items-center gap-2 rounded-lg bg-card px-3 ring-1 ring-foreground/15 focus-within:ring-2 focus-within:ring-primary">
+              <label className="flex h-12 items-center gap-2 rounded-xl bg-card px-3 shadow-1 ring-1 ring-foreground/8 focus-within:ring-2 focus-within:ring-primary">
                 <Search className="size-4 shrink-0 text-muted-foreground" />
                 <input
                   value={q} onChange={(ev) => setQ(ev.target.value)} placeholder={t.findOrNew} aria-label={t.customer} disabled={removed}
@@ -187,7 +183,7 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
                   </Chip>
                 )}
                 {customers.map((c) => (
-                  <Chip key={c.cid} on={!newName && cid === c.cid} onClick={() => pick(c.cid)}>{displayName(s, c.cid)}</Chip>
+                  <Chip key={c.cid} on={!newName && cid === c.cid} onClick={() => pick(c.cid)}><NameTag label={displayName(s, c.cid)} /></Chip>
                 ))}
               </div>
             </>
@@ -195,17 +191,28 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
         </div>
 
         {newName && !picking && (
-          <div className="space-y-2 rounded-lg bg-card p-3 ring-1 ring-foreground/10">
+          <div className="space-y-3 rounded-2xl bg-card p-3.5 shadow-1 ring-1 ring-foreground/6">
+            {twins.length > 0 && (
+              <div className="space-y-2 rounded-xl bg-gold/10 p-3">
+                <div className="text-sm font-semibold">{t.nickAlready}. {t.nickTitle}</div>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.nickNew}</span>
+                  <input value={newTag} onChange={(ev) => setNewTag(ev.target.value)} maxLength={30} placeholder={t.nickEg} aria-label={t.nickNew} className={cn(inputCls, 'h-11 bg-background')} />
+                </label>
+                {untaggedTwin && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.nickOld} · {displayName(s, untaggedTwin.cid)}</span>
+                    <input value={oldTag} onChange={(ev) => setOldTag(ev.target.value)} maxLength={30} placeholder={t.nickEg} aria-label={t.nickOld} className={cn(inputCls, 'h-11 bg-background')} />
+                  </label>
+                )}
+              </div>
+            )}
             <label className="block">
               <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.phoneOptional} · WhatsApp</span>
-              <span className="flex h-11 items-center rounded-lg bg-background ring-1 ring-foreground/15 focus-within:ring-2 focus-within:ring-primary">
-                <span className="num border-r border-border px-2.5 text-sm text-muted-foreground">+91</span>
-                <input inputMode="tel" autoComplete="tel" value={newPhone} onChange={(ev) => setNewPhone(ev.target.value)} placeholder="98765 43210"
-                  className="num h-full min-w-0 flex-1 bg-transparent px-2.5 text-base outline-none focus-visible:outline-none" />
-              </span>
+              <PhoneInput size="sm" value={newPhone} onChange={setNewPhone} label={t.phoneOptional} />
             </label>
             {newPhone.trim() && (
-              <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
+              <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
                 <span className="text-muted-foreground">{t.consentBoth}</span>
                 <Switch checked={newConsent} onCheckedChange={setNewConsent} />
               </label>
@@ -217,9 +224,9 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
         <div>
           <div className="mb-1.5 text-xs font-bold tracking-widest text-muted-foreground uppercase">{t.day}</div>
           <div className="grid grid-cols-3 gap-2">
-            <Seg on={day === today()} className="bg-primary text-primary-foreground" onClick={() => setDay(today())}>{t.today}</Seg>
-            <Seg on={day === shiftDay(-1)} className="bg-primary text-primary-foreground" onClick={() => setDay(shiftDay(-1))}>{t.yesterday}</Seg>
-            <label className={cn('relative flex h-12 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-semibold', otherDay ? 'bg-primary text-primary-foreground' : 'bg-card ring-1 ring-foreground/15')}>
+            <Toggle on={day === today()} onClick={() => setDay(today())}>{t.today}</Toggle>
+            <Toggle on={day === shiftDay(-1)} onClick={() => setDay(shiftDay(-1))}>{t.yesterday}</Toggle>
+            <label className={cn('relative flex h-12 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-semibold focus-within:ring-2 focus-within:ring-primary', otherDay ? 'bg-primary text-primary-foreground shadow-1' : 'bg-card ring-1 ring-foreground/12')}>
               <CalendarDays className="size-4 shrink-0" />
               <span className="num truncate">{otherDay ? relDay(day, t) : t.pickDate}</span>
               <input
@@ -233,14 +240,14 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
 
         <button
           onClick={() => void save()} disabled={!valid || busy || removed || (!!e && !dirty)}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-lg font-bold text-primary-foreground shadow-md disabled:opacity-40"
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-lg font-bold text-primary-foreground shadow-2 active:scale-[.98] disabled:opacity-40"
         >
           <Check className="size-5" />{e ? t.saveChanges : t.saveEntry}{valid && <span className="num">· {rs(paise)}</span>}
         </button>
 
         {e && !removed && (
           <div className="flex flex-col items-center gap-0.5 pt-1">
-            <button onClick={() => void remove()} className={cn('flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold', armed ? 'rounded-lg bg-destructive text-white' : 'text-destructive')}>
+            <button onClick={() => void remove()} className={cn('flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold', armed ? 'rounded-xl bg-destructive text-destructive-foreground' : 'text-destructive')}>
               <Trash2 className="size-4" />{armed ? t.tapAgain : t.removeEntry}
             </button>
             {(armed || e.amended) && <div className="text-xs text-muted-foreground">{e.amended ? `${t.editedNote} · ` : ''}{t.keepsHistory}</div>}
@@ -264,14 +271,14 @@ export function TypeSheet({ open, t, onClose, onSend }: { open: boolean; t: UiSt
   }
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-3xl pb-6">
+      <SheetContent closeLabel={t.dismiss}>
         <SheetHeader className="pb-0"><SheetTitle className="flex items-center gap-2 text-xl"><Keyboard className="size-5" />{t.typeInstead}</SheetTitle></SheetHeader>
         <div className="space-y-3 px-4">
           <textarea
             value={text} onChange={(ev) => setText(ev.target.value)} rows={rows} placeholder={t.typeHint} aria-label={t.typeInstead}
-            className="w-full resize-none rounded-2xl border bg-background p-3 text-lg leading-snug placeholder:text-muted-foreground/60"
+            className="w-full resize-none rounded-xl bg-card p-3 text-lg leading-snug shadow-1 ring-1 ring-foreground/10 outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary"
           />
-          <button onClick={() => void send()} disabled={!text.trim() || busy} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-lg font-bold text-primary-foreground disabled:opacity-40">
+          <button onClick={() => void send()} disabled={!text.trim() || busy} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-lg font-bold text-primary-foreground shadow-2 active:scale-[.98] disabled:opacity-40">
             <Send className="size-5" />{t.send}
           </button>
         </div>

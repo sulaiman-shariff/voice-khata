@@ -1,9 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { applySavedTheme } from './ui/theme'
-
-applySavedTheme() // themed from the first paint, before the encrypted settings load
 
 // caches the wake-word model and its runtime (production builds only)
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

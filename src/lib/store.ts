@@ -3,7 +3,8 @@
  * Persistence is behind a small interface so tests run without a browser.
  */
 import {
-  apply, balance, daySummary, displayName, dayFromOffset, emptyLedger, lastEntry, monthSummary, reduce, typicalAmount,
+  addDays, apply, balance, daySummary, displayName, dayFromOffset, dueDayOf, emptyLedger, lastEntry, monthSummary, oldestUnpaidDay,
+  planStatus, promiseDayOf, reduce, typicalAmount,
   type LedgerEvent, type LedgerState,
 } from '../../shared/ledger.js'
 import {
@@ -211,12 +212,13 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
 
   const opToEvent = (o: LedgerOp): LedgerEvent | 'delete_all' => {
     switch (o.op) {
-      case 'add_customer': return { type: 'customer_added', cid: o.cid, name: o.name, aliases: [] }
+      case 'add_customer': return { type: 'customer_added', cid: o.cid, name: o.name, aliases: [], ...(o.kind === 'supplier' ? { kind: 'supplier' as const } : {}) }
       case 'add_alias': return { type: 'alias_added', cid: o.cid, alias: o.alias }
       case 'entry':
         return {
           type: 'entry', eid: o.eid, cid: o.cid, paise: o.paise, direction: o.direction,
           day: dayFromOffset(o.dayOffset), promise: o.promise, source: o.source,
+          ...(o.due ? { due: o.due } : {}), ...(o.note ? { note: o.note } : {}),
         }
       case 'amend': {
         const ev: LedgerEvent = { type: 'entry_amended', eid: o.eid }
@@ -230,6 +232,19 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
       case 'rename_customer': return { type: 'customer_renamed', cid: o.cid, name: o.name }
       case 'merge_customers': return { type: 'customers_merged', cid: o.into, from: o.from }
       case 'set_phone': return { type: 'phone_set', cid: o.cid, phone: o.phone }
+      case 'cash':
+        return { type: 'cash', eid: o.eid, paise: o.paise, dir: o.dir, category: o.category, day: dayFromOffset(o.dayOffset), ...(o.note ? { note: o.note } : {}) }
+      case 'set_plan':
+        return {
+          type: 'plan_set', cid: o.cid, pid: o.pid, totalPaise: o.totalPaise, parts: o.parts, everyDays: o.everyDays,
+          startDay: dayFromOffset(o.startOffset),
+        }
+      case 'cancel_plan': return { type: 'plan_cancelled', cid: o.cid, pid: o.pid }
+      case 'set_tag': {
+        // the nickname rides on the consent event: the customer's other consent fields stay as they are
+        const c = state.customers.get(o.cid)
+        return { type: 'consent', cid: o.cid, remindersOptIn: c?.remindersOptIn ?? false, adult: c?.adult ?? false, phone: c?.phone, tag: o.tag.trim() || undefined }
+      }
     }
   }
 
@@ -258,6 +273,7 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
           // a replayed or re-sent batch must never save twice: entries and customers are keyed by id
           if (o.op === 'entry' && state.entries.has(o.eid)) continue
           if (o.op === 'add_customer' && state.customers.has(o.cid)) continue
+          if (o.op === 'cash' && state.cash.has(o.eid)) continue
           const ev = opToEvent(o)
           if (ev === 'delete_all') {
             await wipe()
@@ -273,7 +289,26 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
       if (ch.direction) ev.direction = ch.direction
       if (ch.cid) ev.cid = ch.cid
       if (ch.day) ev.day = ch.day
+      if (ch.due !== undefined) ev.due = ch.due
       return append([ev])
+    }),
+    addCash: (c) => enqueue(async () => {
+      const eid = globalThis.crypto.randomUUID()
+      await append([{ type: 'cash', eid, paise: c.paise, dir: c.dir, category: c.category, day: c.day ?? dayFromOffset(0), ...(c.note ? { note: c.note } : {}) }])
+      return eid
+    }),
+    setTag: (cid, tag) => enqueue(async () => {
+      const c = state.customers.get(cid)
+      if (c) await append([{ type: 'consent', cid, remindersOptIn: c.remindersOptIn, adult: c.adult, phone: c.phone, tag: tag.trim() || undefined }])
+    }),
+    setKind: (cid, kind) => enqueue(() => append([{ type: 'customer_kind', cid, kind }])),
+    setPlan: (cid, p) => enqueue(() => append([{
+      type: 'plan_set', cid, pid: globalThis.crypto.randomUUID(), totalPaise: p.totalPaise, parts: p.parts, everyDays: p.everyDays,
+      startDay: p.startDay ?? addDays(dayFromOffset(0), p.everyDays),
+    }])),
+    cancelPlan: (cid) => enqueue(async () => {
+      const plan = state.plans.get(cid)
+      if (plan) await append([{ type: 'plan_cancelled', cid, pid: plan.pid }])
     }),
     addCustomer: (name) => enqueue(async () => {
       const cid = globalThis.crypto.randomUUID()
@@ -317,6 +352,25 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
       const pick = (s: { creditPaise: number; paymentPaise: number; entries: number }) => ({
         creditPaise: s.creditPaise, paymentPaise: s.paymentPaise, entries: s.entries,
       })
+      const day0 = dayFromOffset(0, now)
+      const extra = (cid: string, kind: 'customer' | 'supplier') => {
+        const out: Partial<Snapshot['customers'][number]> = {}
+        if (kind === 'supplier') out.kind = 'supplier'
+        const oldest = oldestUnpaidDay(state, cid)
+        if (oldest) out.oldestDay = oldest
+        const due = dueDayOf(state, cid)
+        if (due) out.dueDay = due
+        const promise = promiseDayOf(state, cid, day0)
+        if (promise) out.promiseDay = promise
+        const ps = planStatus(state, cid, day0)
+        if (ps && !ps.done) {
+          out.plan = {
+            pid: ps.plan.pid, totalPaise: ps.plan.totalPaise, parts: ps.plan.parts, everyDays: ps.plan.everyDays, paidParts: ps.paidParts,
+            behind: ps.behind, ...(ps.next ? { nextDay: ps.next.day, nextPaise: ps.next.paise } : {}),
+          }
+        }
+        return out
+      }
       return {
         shopName: settings.shopName,
         customers: [...state.customers.values()].map((c) => ({
@@ -324,11 +378,16 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
           ...(displayName(state, c.cid) !== c.name ? { label: displayName(state, c.cid) } : {}),
           remindersOptIn: c.remindersOptIn, adult: c.adult,
           balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid), phone: c.phone,
+          ...(c.tag ? { tag: c.tag } : {}),
+          ...extra(c.cid, c.kind),
         })),
         last: last ? { eid: last.eid, cid: last.cid, paise: last.paise, direction: last.direction, day: last.day } : null,
         entries: [...state.order].reverse().map((id) => state.entries.get(id)!).filter((e) => e && !e.voided)
-          .map((e) => ({ eid: e.eid, cid: e.cid, paise: e.paise, direction: e.direction, day: e.day, promise: e.promise, ts: e.ts })),
-        today: pick(today),
+          .map((e) => ({
+            eid: e.eid, cid: e.cid, paise: e.paise, direction: e.direction, day: e.day, promise: e.promise, ts: e.ts,
+            ...(e.due ? { due: e.due } : {}), ...(e.note ? { note: e.note } : {}),
+          })),
+        today: { ...pick(today), cashIn: today.cashIn ?? 0, cashOut: today.cashOut ?? 0, newCustomers: today.newCustomers ?? 0 },
         month: pick(month),
       }
     },
