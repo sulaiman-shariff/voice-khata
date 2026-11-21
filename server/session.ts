@@ -43,7 +43,7 @@ export interface SessionDeps {
   /** Pre-synthesize fixed phrases so speak() replays them without a TTS round trip. */
   warm?: (texts: string[], locale: string, speed: 0.8 | 1 | 1.2) => void
   /** The understanding model: reads every transcript (and the audio) and answers with tool calls. */
-  agent?: (ctx: AgentContext, audio?: Buffer) => Promise<{ calls: ToolCall[]; ms: number }>
+  agent?: (ctx: AgentContext, audio?: Buffer, signal?: AbortSignal) => Promise<{ calls: ToolCall[]; ms: number }>
   send: (msg: ServerMsg) => void
   sendAudio: (pcm: Buffer) => void
   /** Structured logger for this session (server/log.ts); silent when absent. */
@@ -789,10 +789,16 @@ export class Session {
         const left = AUDIO_BUDGET_MS - Math.max(r.ms, this.now() - l0)
         if (left > 0) {
           let timer: ReturnType<typeof setTimeout> | undefined
+          const cut = new AbortController() // the budget ends the request itself, not just our wait for it
           try {
             const a = await Promise.race([
-              this.deps.agent(ctx, t.pcm),
-              new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error('audio budget')), left) }),
+              this.deps.agent(ctx, t.pcm, cut.signal),
+              new Promise<never>((_, no) => {
+                timer = setTimeout(() => {
+                  cut.abort(new Error('audio budget'))
+                  no(new Error('audio budget'))
+                }, left)
+              }),
             ])
             this.log.info('agent_audio', { text, ms: a.ms, calls: a.calls.map((c) => c.name) })
             calls = a.calls

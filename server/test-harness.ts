@@ -77,7 +77,7 @@ export interface HarnessOpts {
   lang?: Lang
   entries?: SnapEntry[]
   /** the model stand-in; defaults to fakeAgent. Throw to simulate a failure. */
-  agent?: (ctx: AgentContext, audio?: Buffer) => AgentResult | Promise<AgentResult>
+  agent?: (ctx: AgentContext, audio?: Buffer, signal?: AbortSignal) => AgentResult | Promise<AgentResult>
   speakMs?: number
   resume?: string
   resend?: string
@@ -89,7 +89,7 @@ export function harness(customers: SnapCustomer[] = [], opts: HarnessOpts = {}) 
   const out: ServerMsg[] = []
   const said: string[] = []
   const aborted: boolean[] = []
-  const agentCalls: { ctx: AgentContext; audio?: Buffer }[] = []
+  const agentCalls: { ctx: AgentContext; audio?: Buffer; signal?: AbortSignal }[] = []
   let commits = 0
   let cb: SttCallbacks = {}
   let clock = 0
@@ -106,9 +106,9 @@ export function harness(customers: SnapCustomer[] = [], opts: HarnessOpts = {}) 
       aborted.push(signal.aborted)
       return { firstAudioMs: 1, bytes: 3200 }
     },
-    agent: async (ctx, audio) => {
-      agentCalls.push({ ctx, audio })
-      return (opts.agent ?? fakeAgent)(ctx, audio)
+    agent: async (ctx, audio, signal) => {
+      agentCalls.push({ ctx, audio, signal })
+      return (opts.agent ?? fakeAgent)(ctx, audio, signal)
     },
     send: (m) => out.push(m),
     sendAudio: () => {},

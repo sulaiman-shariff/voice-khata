@@ -405,6 +405,7 @@ describe('audio for unclear moments', () => {
       await vi.advanceTimersByTimeAsync(2600)
       await p
       expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false, true])
+      expect(h.agentCalls[1].signal?.aborted).toBe(true) // the request itself is cancelled, not left running
       expect(h.ops()).toEqual([])
       expect(h.said.join(' ')).toContain(say('en').didNotCatch())
     } finally { vi.useRealTimers() }

@@ -37,9 +37,24 @@ let pendingToken: Promise<string> | null = null
 
 const b64url = (b: Buffer | string) => Buffer.from(b).toString('base64url')
 
-/** OAuth access token for the service account (JWT bearer grant), cached ~55 min. */
+/** refresh in the background once the cached token has less than this left, so no turn waits for it */
+const REFRESH_AHEAD_MS = 10 * 60_000
+
+/** Tests only: forget the cached token. */
+export function resetAccessTokenForTests() {
+  token = null
+}
+
+/** OAuth access token for the service account (JWT bearer grant), cached ~55 min and refreshed ahead of expiry. */
 export async function accessToken(): Promise<string> {
-  if (token && Date.now() < token.until) return token.value
+  if (token && Date.now() < token.until) {
+    if (Date.now() > token.until - REFRESH_AHEAD_MS && !pendingToken) void fetchToken().catch(() => {}) // the next turn gets a fresh one
+    return token.value
+  }
+  return fetchToken()
+}
+
+function fetchToken(): Promise<string> {
   pendingToken ??= (async () => {
     const k = serviceKey()
     const now = Math.floor(Date.now() / 1000)
@@ -173,13 +188,30 @@ const modelUrl = (loc: string, project: string, model: string) =>
 
 type AgentCalls = { calls: { name: string; args: Record<string, unknown> }[]; ms: number }
 
-/** One turn, many tools: returns every functionCall the model made, in order. `audio` is 16 kHz mono s16le PCM. */
+/** Resolve `p`, or reject as soon as `signal` aborts. */
+function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const off = () => reject(signal.reason)
+    signal.addEventListener('abort', off, { once: true })
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', off))
+  })
+}
+
+/**
+ * One turn, many tools: returns every functionCall the model made, in order. `audio` is 16 kHz mono
+ * s16le PCM; a turn with audio is sent to one endpoint only (racing a 20 s WAV three times costs
+ * three uploads for no gain). `signal` lets the caller cut the call short (the session's budget).
+ * The deadline covers everything, a token refresh included.
+ */
 export async function geminiAgentCall(
-  system: string, user: string, tools: GeminiTool[], audio?: Buffer, opts: { model?: string; timeoutMs?: number; hedgeMs?: number } = {},
+  system: string, user: string, tools: GeminiTool[], audio?: Buffer,
+  opts: { model?: string; timeoutMs?: number; hedgeMs?: number; signal?: AbortSignal } = {},
 ): Promise<AgentCalls> {
+  const deadline = opts.signal ? AbortSignal.any([AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS), opts.signal]) : AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS)
   const project = process.env.VERTEX_PROJECT ?? serviceKey().project_id
   const model = opts.model ?? GEMINI_MODEL
-  const auth = await accessToken()
+  const auth = await untilAborted(accessToken(), deadline)
   const parts: unknown[] = []
   if (audio?.length) parts.push({ inlineData: { mimeType: 'audio/wav', data: pcmToWav(audio).toString('base64') } })
   parts.push({ text: user })
@@ -191,7 +223,6 @@ export async function geminiAgentCall(
     generationConfig: { temperature: 0, maxOutputTokens: 800, thinkingConfig: { thinkingBudget: 0 } },
   })
   const t0 = performance.now()
-  const deadline = AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS)
   const done = new AbortController() // cancels the loser
   const signal = AbortSignal.any([deadline, done.signal])
 
@@ -209,7 +240,7 @@ export async function geminiAgentCall(
     return { calls, ms: performance.now() - t0 }
   }
 
-  const hedgeMs = opts.hedgeMs ?? HEDGE_MS()
+  const hedgeMs = audio?.length ? -1 : opts.hedgeMs ?? HEDGE_MS()
   const primary = process.env.VERTEX_LOCATION ?? LOCATION
   if (!(hedgeMs >= 0)) return attempt(primary)
   const legs = [primary, ...HEDGE_LOCATIONS()]

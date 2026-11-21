@@ -120,8 +120,8 @@ wss.on('connection', (ws, req) => {
     },
     speak: (text, locale, onAudio, signal, speed) => tts.speak(text, locale, onAudio, signal, speed),
     warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
-    agent: async (ctx, audio) => {
-      const r = await decide(ctx, GEMINI_TOOLS, audio)
+    agent: async (ctx, audio, signal) => {
+      const r = await decide(ctx, GEMINI_TOOLS, audio, { signal })
       L.info('agent_call', { ms: r.ms, calls: r.calls.length })
       return r
     },

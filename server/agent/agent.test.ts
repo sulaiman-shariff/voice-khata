@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { generateKeyPairSync } from 'node:crypto'
 import { decide, AGENT_SYSTEM, type AgentContext } from './agent.js'
-import { geminiAgentCall, toVertexSchema } from '../parse/gemini.js'
+import { geminiAgentCall, resetAccessTokenForTests, toVertexSchema } from '../parse/gemini.js'
 import { GEMINI_TOOLS } from './tools.js'
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } })
@@ -170,6 +170,38 @@ describe('agent', () => {
       } finally {
         delete process.env.AGENT_HEDGE_LOCATION
       }
+    })
+
+    it('audio (a 20 s WAV) goes to one leg only, never raced three times', async () => {
+      const seen = stub([30, 30, 30])
+      const r = await geminiAgentCall('s', 'u', tools, Buffer.alloc(3200), { hedgeMs: 0, timeoutMs: 3000 })
+      await new Promise((ok) => setTimeout(ok, 60))
+      expect(r.calls[0].name).toBe('r0')
+      expect(seen).toEqual([0])
+    })
+
+    it('a signal from the caller aborts the request (the session audio budget)', async () => {
+      stub([2000, 2000, 2000])
+      const ac = new AbortController()
+      setTimeout(() => ac.abort(new Error('audio budget')), 50)
+      const t0 = Date.now()
+      await expect(geminiAgentCall('s', 'u', tools, Buffer.alloc(3200), { signal: ac.signal, timeoutMs: 3000 })).rejects.toThrow()
+      expect(Date.now() - t0).toBeLessThan(500)
+    })
+
+    it('a slow token refresh counts against the turn deadline', async () => {
+      resetAccessTokenForTests()
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+        if (String(url).includes('oauth2')) {
+          await new Promise((ok) => setTimeout(ok, 400))
+          return new Response(JSON.stringify({ access_token: 't', expires_in: 3600 }), { status: 200 })
+        }
+        return ok('r0')
+      }))
+      const t0 = Date.now()
+      await expect(geminiAgentCall('s', 'u', tools, undefined, { hedgeMs: 0, timeoutMs: 150 })).rejects.toThrow()
+      expect(Date.now() - t0).toBeLessThan(350)
+      await new Promise((ok) => setTimeout(ok, 300)) // let the refresh finish for later tests
     })
 
     it('the deadline still holds', async () => {
