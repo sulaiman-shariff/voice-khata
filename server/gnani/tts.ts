@@ -23,12 +23,24 @@ export const voiceFor = (locale: string) => VOICE_BY_LOCALE[locale] ?? 'Shivani'
 export type TtsSpeed = 0.8 | 1 | 1.2
 export const TTS_RATE = 16000
 
+/**
+ * Fixed phrases (short ack, filler, "did not catch") synthesized once per instance and replayed
+ * from memory: no Timbre round trip (~150 ms) on the turns that use them. Shared by every session
+ * on a warm instance; only phrases passed to warm() are stored, so it stays a few hundred KB.
+ */
+const PHRASES = new Map<string, Buffer[]>()
+const MAX_PHRASES = 120
+const phraseKey = (text: string, lang: string, speed: number) => `${lang}|${voiceFor(lang)}|${speed}|${text}`
+export const cachedPhrase = (text: string, lang: string, speed: TtsSpeed = 1) => PHRASES.has(phraseKey(text, lang, speed))
+
 export interface SpeakResult {
   firstAudioMs: number | null
   totalMs: number
   bytes: number
   cancelled: boolean
   error?: string
+  /** served from the phrase cache */
+  cached?: boolean
 }
 
 interface Slot {
@@ -79,7 +91,35 @@ export class TtsPool {
    * Speak `text`; PCM s16le 16 kHz chunks go to `onAudio` as they arrive.
    * Aborting stops delivery immediately (barge-in); the socket drains in the background.
    */
+  /** Synthesize fixed phrases in the background so later speak() calls replay them from memory. */
+  async warm(texts: string[], lang: string, speed: TtsSpeed = 1): Promise<void> {
+    for (const text of texts) {
+      const key = phraseKey(text, lang, speed)
+      if (PHRASES.has(key) || this.closed) continue
+      const chunks: Buffer[] = []
+      const r = await this.synth(text, lang, (pcm) => chunks.push(pcm), undefined, speed)
+      if (!r.error && !r.cancelled && chunks.length) {
+        if (PHRASES.size >= MAX_PHRASES) PHRASES.delete(PHRASES.keys().next().value!)
+        PHRASES.set(key, chunks)
+      }
+    }
+  }
+
   async speak(text: string, lang: string, onAudio: (pcm: Buffer) => void, signal?: AbortSignal, speed: TtsSpeed = 1): Promise<SpeakResult> {
+    const hit = PHRASES.get(phraseKey(text, lang, speed))
+    if (hit) {
+      let bytes = 0
+      for (const pcm of hit) {
+        if (signal?.aborted) break
+        bytes += pcm.length
+        onAudio(pcm)
+      }
+      return { firstAudioMs: 0, totalMs: 0, bytes, cancelled: !!signal?.aborted, cached: true }
+    }
+    return this.synth(text, lang, onAudio, signal, speed)
+  }
+
+  private async synth(text: string, lang: string, onAudio: (pcm: Buffer) => void, signal?: AbortSignal, speed: TtsSpeed = 1): Promise<SpeakResult> {
     const t0 = performance.now()
     const slot = this.acquire()
     try {

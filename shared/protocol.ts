@@ -55,8 +55,9 @@ export type LedgerOp =
   | { op: 'delete_all' }
 
 export type ClientMsg =
-  | { type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2 }
+  | { type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2; readBack?: boolean }
   | { type: 'speed'; speed: 0.8 | 1 | 1.2 }
+  | { type: 'readback'; on: boolean }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'ptt_start' }
   | { type: 'ptt_end' }
@@ -88,10 +89,18 @@ export interface TurnMetrics {
   firstAudioAt: number | null
   earlyCommit: boolean
   snrDb: number | null
+  /** the "heard you" cue, ms after the end of speech */
+  heardAt?: number | null
+  replyChars?: number
+  /** length of the spoken reply */
+  replyAudioMs?: number
+  /** reply came from the fixed-phrase audio cache */
+  cached?: boolean
 }
 
 export type ServerMsg =
   | { type: 'ready'; region: string }
+  | { type: 'heard' } // the shopkeeper paused after speaking: a tick on the phone, before the reply
   | { type: 'partial'; text: string }
   | { type: 'final'; text: string }
   | { type: 'ops'; ops: LedgerOp[] }

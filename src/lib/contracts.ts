@@ -15,6 +15,8 @@ export interface Settings {
   showLatency: boolean
   /** replies at Timbre speed 1.2 instead of 1.0 (optional: older stored settings lack it) */
   fastSpeech?: boolean
+  /** read every saved entry back in full instead of a short "noted" */
+  readBackAll?: boolean
 }
 
 export interface KhataStore {
@@ -71,11 +73,13 @@ export interface VoiceEvents {
   error(message: string): void
   /** The server heard another language and switched the session to it. */
   lang?(l: Lang): void
+  /** The shopkeeper paused after speaking: give instant feedback before the reply. */
+  heard?(): void
 }
 
 export interface VoiceClient {
   /** Ask mic permission + open the socket. Must be called from a user gesture (audio unlock). */
-  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean }): Promise<void>
+  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean; readBackAll?: boolean }): Promise<void>
   stop(): void
   /** Push-to-talk (works in both modes). */
   pttDown(): void
@@ -89,6 +93,7 @@ export interface VoiceClient {
   sendSnapshot(): void
   setHandsFree(on: boolean): void
   setFastSpeech(on: boolean): void
+  setReadBackAll(on: boolean): void
   /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
   bargeIn(): void
 }

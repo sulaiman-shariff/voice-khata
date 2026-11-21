@@ -250,10 +250,14 @@ export async function readHard(
   return { reading: r.reading, ms: r.ms, model: LLM_MODEL, fallback }
 }
 
-/** Fire one tiny request at boot so the prompt cache and TLS connection are warm. */
+/**
+ * Fire one tiny request at boot so the prompt cache and TLS connections are warm. Goes through
+ * readHard, so Evon is tried too: a key without the LLM scope switches Evon off here instead of
+ * costing ~200 ms on the first real hard turn.
+ */
 export async function warmUp(): Promise<void> {
   try {
-    await readWithLlm('haan', { lang: 'hi-IN', customers: [] })
+    await readHard('haan', { lang: 'hi-IN', customers: [] })
   } catch {
     /* warm-up is best effort */
   }

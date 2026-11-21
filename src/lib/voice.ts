@@ -28,6 +28,7 @@ interface StartOpts {
   firstRun: boolean
   handsFree: boolean
   fastSpeech?: boolean
+  readBackAll?: boolean
 }
 
 export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
@@ -95,7 +96,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   function hello(sock: WebSocket) {
     if (!opts) return
-    sendTo(sock, { type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree, speed: opts.fastSpeech ? 1.2 : 1 })
+    sendTo(sock, { type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree, speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll })
     opts.firstRun = false // the disclosure plays once, not on every reconnect
   }
 
@@ -103,8 +104,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   async function buildGraph(rate: number | undefined): Promise<void> {
     const c = rate ? new AudioContext({ sampleRate: rate }) : new AudioContext()
     try {
-      await c.audioWorklet.addModule('/worklets/mic.js')
-      await c.audioWorklet.addModule('/worklets/player.js')
+      await Promise.all([c.audioWorklet.addModule('/worklets/mic.js'), c.audioWorklet.addModule('/worklets/player.js')])
       const mic = new AudioWorkletNode(c, 'mic', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1, channelCountMode: 'explicit' })
       const player = new AudioWorkletNode(c, 'player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] })
       const src = c.createMediaStreamSource(stream as MediaStream)
@@ -208,7 +208,12 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     }
     switch (m.type) {
       case 'ready':
-        if (status === 'connecting' || status === 'offline') setStatus('listening')
+        // the socket can be up before the mic is (it opens in parallel with the permission prompt)
+        if ((status === 'connecting' || status === 'offline') && micNode) setStatus('listening')
+        break
+      case 'heard':
+        ev.heard?.()
+        if (status === 'listening') setStatus('thinking')
         break
       case 'lang':
         if (opts) opts.lang = m.lang // reconnects keep the new language
@@ -418,6 +423,20 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     handsFree = o.handsFree
     running = true
     setStatus('connecting')
+    // connect in parallel with the mic permission prompt and audio setup: the server opens the
+    // Gnani streams meanwhile. On the very first run the AI disclosure is spoken right after
+    // hello, so that hello waits for the audio graph (else its audio would have nowhere to play).
+    const early = !o.firstRun
+    const sockP = openSocket().then((sock) => {
+      if (!running) {
+        sock.close()
+        return null
+      }
+      if (early) hello(sock)
+      adopt(sock)
+      return sock
+    })
+    sockP.catch(() => {})
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -430,13 +449,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       await resumeCtx()
       watchMic()
       document.addEventListener('visibilitychange', onVisibility)
-      const sock = await openSocket()
-      if (!running) {
-        sock.close()
-        return
-      }
-      hello(sock)
-      adopt(sock)
+      const sock = await sockP
+      if (!sock || !running) return
+      if (!early) hello(sock)
+      if (status === 'connecting') setStatus('listening')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       teardown()
@@ -569,6 +585,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
+    setReadBackAll(on: boolean) {
+      if (opts) opts.readBackAll = on
+      send({ type: 'readback', on })
+    },
     setFastSpeech(on: boolean) {
       if (opts) opts.fastSpeech = on
       send({ type: 'speed', speed: on ? 1.2 : 1 })

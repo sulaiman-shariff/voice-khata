@@ -1,4 +1,5 @@
 import { Check, Mic, Pencil, MicOff, Sparkles, WifiOff, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
 import { cn } from '@/lib/utils'
@@ -129,9 +130,15 @@ function Answer({ className, children, onClick }: { className?: string; children
 }
 
 /** Big mic: rings breathe with the input level; colour shows who is talking. */
-export function MicButton({ status, level, on, onPress, onRelease }: {
-  status: VoiceStatus; level: number; on: boolean; onPress: () => void; onRelease: () => void
+export function MicButton({ status, levelSource, on, onPress, onRelease }: {
+  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; onPress: () => void; onRelease: () => void
 }) {
+  // the ~30 Hz mic level lives here, so it re-renders only this button, not the whole screen
+  const [level, setLevel] = useState(0)
+  useEffect(() => {
+    levelSource.add(setLevel)
+    return () => { levelSource.delete(setLevel) }
+  }, [levelSource])
   const s = 1 + Math.min(level * 3, 0.6)
   const live = on && status !== 'offline'
   return (

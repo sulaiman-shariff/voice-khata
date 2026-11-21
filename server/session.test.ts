@@ -14,7 +14,8 @@ function snap(customers: SnapCustomer[] = []): Snapshot {
   }
 }
 
-function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Partial<LlmReading>; speakMs?: number; transcribe2?: (pcm: Buffer) => Promise<{ text: string; lang?: string }> } = {}) {
+function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Partial<LlmReading>; llmMs?: number; speakMs?: number; transcribe2?: (pcm: Buffer) => Promise<{ text: string; lang?: string }>; readBack?: boolean } = {}) {
+  const warmed: string[][] = []
   const out: ServerMsg[] = []
   const said: string[] = []
   let audio = 0
@@ -38,8 +39,10 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
     },
     llm: async (t) => {
       if (!opts.llm) throw new Error('no llm in this test')
+      if (opts.llmMs) await new Promise((r) => setTimeout(r, opts.llmMs))
       return opts.llm(t)
     },
+    warm: (texts) => warmed.push(texts),
     transcribe2: opts.transcribe2,
     secondReading: true,
     send: (m) => out.push(m),
@@ -47,7 +50,7 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
     now: () => clock,
     newId: () => `id${++ids}`,
   })
-  s.onClient({ type: 'hello', lang: 'hi', snapshot: snap(customers), firstRun: false, ptt: false })
+  s.onClient({ type: 'hello', lang: 'hi', snapshot: snap(customers), firstRun: false, ptt: false, readBack: opts.readBack })
   const turn = async (text: string, noisy = false) => {
     said.length = 0
     await s.handleText(text, { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: noisy ? 3 : 25, noisy, pcm: Buffer.alloc(32000) }, 'voice')
@@ -56,7 +59,7 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
   const ops = () => out.filter((m): m is Extract<ServerMsg, { type: 'ops' }> => m.type === 'ops').flatMap((m) => m.ops)
   const entries = () => ops().filter((o): o is Extract<LedgerOp, { op: 'entry' }> => o.op === 'entry')
   return {
-    s, out, said, ops, entries, turn, aborted,
+    s, out, said, ops, entries, turn, aborted, warmed,
     get commits() { return commits }, get audio() { return audio }, get cb() { return cb },
     tick: (ms: number) => (clock += ms),
   }
@@ -74,7 +77,7 @@ describe('session dialogue', () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.turn('Ramesh ka 340 udhaar')
     expect(h.entries()).toEqual([expect.objectContaining({ cid: 'r', paise: 34000, direction: 'credit', promise: false })])
-    expect(h.said[0]).toContain('340')
+    expect(h.said[0]).toBe('लिख दिया।') // confident save: short ack, name and amount are on screen
     expect(h.s.pending).toBeNull()
   })
 
@@ -496,5 +499,81 @@ describe('language rescue is not asked for plain turns', () => {
     await h.turn('रमेश, 400')
     expect(calls).toBe(0)
     expect(h.said.join(' ')).toMatch(/उधार|जमा/)
+  })
+})
+
+describe('feels instant', () => {
+  const tone = (amp: number) => {
+    const f = new Int16Array(512)
+    for (let i = 0; i < 512; i++) f[i] = Math.round(amp * Math.sin(i / 3))
+    return Buffer.from(f.buffer)
+  }
+  it('sends one "heard" cue when the speaker pauses after money words', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    for (let i = 0; i < 10; i++) h.s.onAudio(tone(30))
+    for (let i = 0; i < 20; i++) h.s.onAudio(tone(8000))
+    h.cb.onPartial!('रमेश का 340 रुपये')
+    expect(h.out.filter((m) => m.type === 'heard')).toHaveLength(0) // still speaking
+    for (let i = 0; i < 12; i++) h.s.onAudio(tone(30)) // ~380 ms pause
+    expect(h.out.filter((m) => m.type === 'heard')).toHaveLength(1)
+    for (let i = 0; i < 20; i++) h.s.onAudio(tone(30))
+    expect(h.out.filter((m) => m.type === 'heard')).toHaveLength(1) // once per utterance
+  })
+
+  it('no cue for chatter without money words', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    for (let i = 0; i < 10; i++) h.s.onAudio(tone(30))
+    for (let i = 0; i < 20; i++) h.s.onAudio(tone(8000))
+    h.cb.onPartial!('भैया आज बहुत गर्मी है')
+    for (let i = 0; i < 15; i++) h.s.onAudio(tone(30))
+    expect(h.out.some((m) => m.type === 'heard')).toBe(false)
+  })
+
+  it('"Read back every entry" keeps the full read-back', async () => {
+    const h = harness([cust('r', 'Ramesh')], { readBack: true })
+    await h.turn('Ramesh ka 340 udhaar')
+    expect(h.said[0]).toContain('340')
+  })
+
+  it('a new customer, a promise and another day keep the full read-back', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('Pinky ka 200 udhaar')
+    expect(h.said[0]).toMatch(/200/)
+    await h.turn('Ramesh kal 500 dega')
+    expect(h.said.join(' ')).toMatch(/500/)
+  })
+
+  it('"haan" to a noisy read-back is answered with the short ack', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('रमेश का 340 रुपये उधार', true)
+    expect(h.s.pending?.kind).toBe('confirm')
+    await h.turn('हाँ', true)
+    expect(h.entries()).toHaveLength(1)
+    expect(h.said[0]).toBe('लिख दिया।')
+  })
+
+  it('warms the fixed phrases for the session language on hello', () => {
+    const h = harness()
+    expect(h.warmed[0]).toEqual(['लिख दिया।', 'एक सेकंड।', expect.any(String)])
+  })
+
+  it('a slow model turn says the filler first, then the answer', async () => {
+    const h = harness([], {
+      llmMs: 600,
+      llm: () => ({ intent: 'entries', sure: false, unsure_reason: 'name is a relation', entries: [{ name: 'Pinky ki mummy', amount: 500, direction: 'payment', day_offset: 0, promise: false }] }),
+    })
+    await h.turn('wo jo Pinky ki mummy hai na, unka paanch sau')
+    expect(h.said[0]).toBe('एक सेकंड।')
+    expect(h.said.length).toBeGreaterThan(1)
+    expect(h.out.filter((m) => m.type === 'say').map((m) => (m as { text: string }).text).join(' ')).not.toContain('एक सेकंड')
+  })
+
+  it('a fast model turn says no filler', async () => {
+    const h = harness([], {
+      llm: () => ({ intent: 'entries', sure: false, unsure_reason: 'name is a relation', entries: [{ name: 'Pinky ki mummy', amount: 500, direction: 'payment', day_offset: 0, promise: false }] }),
+    })
+    await h.turn('wo jo Pinky ki mummy hai na, unka paanch sau')
+    expect(h.s.pending?.kind).toBe('confirm')
+    expect(h.said.join(' ')).not.toContain('एक सेकंड')
   })
 })

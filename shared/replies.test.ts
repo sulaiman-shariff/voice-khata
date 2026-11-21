@@ -64,3 +64,16 @@ describe('stripTags', () => {
     expect(stripTags('no tags here')).toBe('no tags here')
   })
 })
+
+describe('ack and filler', () => {
+  it('exist, are short and differ from each other in every language', async () => {
+    const { LANGS, say } = await import('./replies.js')
+    for (const l of LANGS) {
+      const R = say(l)
+      expect(R.ack().length).toBeGreaterThan(2)
+      expect(R.ack().length).toBeLessThan(20)
+      expect(R.filler().length).toBeLessThan(20)
+      expect(R.ack()).not.toBe(R.filler())
+    }
+  })
+})

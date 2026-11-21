@@ -26,6 +26,10 @@ const r = (rupees: number) => formatINR(rupees)
 
 export interface Replies {
   disclosure: () => string
+  /** short spoken confirmation for a confident save (name and amount are on screen) */
+  ack: () => string
+  /** said while a slow (LLM) turn is still being read */
+  filler: () => string
   saved: (name: string, amt: number, dir: Dir) => string
   savedPromise: (name: string, amt: number, dayOffset: number) => string
   newCustomer: (name: string) => string
@@ -56,6 +60,8 @@ export interface Replies {
 }
 
 const HI: Replies = {
+  ack: () => 'लिख दिया।',
+  filler: () => 'एक सेकंड।',
   disclosure: () => 'नमस्ते! मैं वॉइस खाता हूँ, एक AI सहायक। आपका हिसाब सिर्फ़ इसी फ़ोन पर रहता है। बोलिए, किसका कितना लिखूँ?',
   saved: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}।`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'आज' : o === 1 ? 'कल' : o === 2 ? 'परसों' : `${o} दिन में`} ${r(a)} रुपये देंगे, याद रखूँगी।`,
@@ -87,6 +93,8 @@ const HI: Replies = {
 }
 
 const EN: Replies = {
+  ack: () => 'Noted.',
+  filler: () => 'One second.',
   disclosure: () => 'Hello! I am Voice Khata, an AI assistant. Your ledger stays only on this phone. Tell me, whose amount should I write?',
   saved: (n, a, d) => `${n}, ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}.`,
   savedPromise: (n, a, o) => `${n} will pay ${r(a)} rupees ${o <= 0 ? 'today' : o === 1 ? 'tomorrow' : `in ${o} days`}. I will remember.`,
@@ -118,6 +126,8 @@ const EN: Replies = {
 }
 
 const KN: Replies = {
+  ack: () => 'ಬರೆದೆ.',
+  filler: () => 'ಒಂದು ಸೆಕೆಂಡ್.',
   disclosure: () => 'ನಮಸ್ಕಾರ! ನಾನು ವಾಯ್ಸ್ ಖಾತಾ, ಒಂದು AI ಸಹಾಯಕಿ. ನಿಮ್ಮ ಲೆಕ್ಕ ಈ ಫೋನಿನಲ್ಲೇ ಇರುತ್ತದೆ. ಹೇಳಿ, ಯಾರದು ಎಷ್ಟು ಬರೆಯಲಿ?',
   saved: (n, a, d) => `${n}, ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}.`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ಇವತ್ತು' : o === 1 ? 'ನಾಳೆ' : `${o} ದಿನದಲ್ಲಿ`} ${r(a)} ರೂಪಾಯಿ ಕೊಡುತ್ತಾರೆ, ನೆನಪಿಟ್ಟುಕೊಳ್ಳುತ್ತೇನೆ.`,
@@ -149,6 +159,8 @@ const KN: Replies = {
 }
 
 const TA: Replies = {
+  ack: () => 'எழுதிட்டேன்.',
+  filler: () => 'ஒரு நொடி.',
   disclosure: () => 'வணக்கம்! நான் வாய்ஸ் கட்டா, ஒரு AI உதவியாளர். உங்கள் கணக்கு இந்த போனில் மட்டுமே இருக்கும். சொல்லுங்கள், யாருக்கு எவ்வளவு எழுதட்டும்?',
   saved: (n, a, d) => `${n}, ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'}.`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'இன்று' : o === 1 ? 'நாளை' : `${o} நாளில்`} ${r(a)} ரூபாய் தருவார், நினைவில் வைக்கிறேன்.`,
@@ -180,6 +192,8 @@ const TA: Replies = {
 }
 
 const TE: Replies = {
+  ack: () => 'రాశాను.',
+  filler: () => 'ఒక్క క్షణం.',
   disclosure: () => 'నమస్కారం! నేను వాయిస్ ఖాతా, ఒక AI సహాయకురాలిని. మీ లెక్క ఈ ఫోన్‌లోనే ఉంటుంది. చెప్పండి, ఎవరిది ఎంత రాయాలి?',
   saved: (n, a, d) => `${n}, ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'}.`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ఈరోజు' : o === 1 ? 'రేపు' : `${o} రోజుల్లో`} ${r(a)} రూపాయలు ఇస్తారు, గుర్తుంచుకుంటాను.`,
@@ -211,6 +225,8 @@ const TE: Replies = {
 }
 
 const ML: Replies = {
+  ack: () => 'എഴുതി.',
+  filler: () => 'ഒരു നിമിഷം.',
   disclosure: () => 'നമസ്കാരം! ഞാൻ വോയ്സ് ഖാത, ഒരു AI സഹായി. നിങ്ങളുടെ കണക്ക് ഈ ഫോണിൽ മാത്രമേ ഉള്ളൂ. പറയൂ, ആരുടെ എത്ര എഴുതണം?',
   saved: (n, a, d) => `${n}, ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'}.`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ഇന്ന്' : o === 1 ? 'നാളെ' : `${o} ദിവസത്തിനുള്ളിൽ`} ${r(a)} രൂപ തരും, ഓർത്തുവെക്കാം.`,
@@ -242,6 +258,8 @@ const ML: Replies = {
 }
 
 const MR: Replies = {
+  ack: () => 'लिहिलं.',
+  filler: () => 'एक सेकंद.',
   disclosure: () => 'नमस्कार! मी व्हॉइस खाता, एक AI सहाय्यक. तुमचा हिशोब फक्त याच फोनवर राहतो. सांगा, कोणाचे किती लिहू?',
   saved: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}.`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'आज' : o === 1 ? 'उद्या' : `${o} दिवसांत`} ${r(a)} रुपये देतील, लक्षात ठेवते.`,
@@ -273,6 +291,8 @@ const MR: Replies = {
 }
 
 const BN: Replies = {
+  ack: () => 'লিখে নিলাম।',
+  filler: () => 'এক সেকেন্ড।',
   disclosure: () => 'নমস্কার! আমি ভয়েস খাতা, একজন AI সহায়ক। আপনার হিসাব শুধু এই ফোনেই থাকে। বলুন, কার কত লিখব?',
   saved: (n, a, d) => `${n}, ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'}।`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'আজ' : o === 1 ? 'কাল' : `${o} দিনের মধ্যে`} ${r(a)} টাকা দেবেন, মনে রাখব।`,
@@ -304,6 +324,8 @@ const BN: Replies = {
 }
 
 const GU: Replies = {
+  ack: () => 'લખી દીધું.',
+  filler: () => 'એક સેકન્ડ.',
   disclosure: () => 'નમસ્તે! હું વૉઇસ ખાતા છું, એક AI સહાયક. તમારો હિસાબ ફક્ત આ ફોનમાં જ રહે છે. બોલો, કોનું કેટલું લખું?',
   saved: (n, a, d) => `${n}, ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'}.`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'આજે' : o === 1 ? 'કાલે' : `${o} દિવસમાં`} ${r(a)} રૂપિયા આપશે, યાદ રાખીશ.`,
@@ -335,6 +357,8 @@ const GU: Replies = {
 }
 
 const PA: Replies = {
+  ack: () => 'ਲਿਖ ਲਿਆ।',
+  filler: () => 'ਇੱਕ ਸਕਿੰਟ।',
   disclosure: () => 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਵੌਇਸ ਖਾਤਾ ਹਾਂ, ਇੱਕ AI ਸਹਾਇਕ। ਤੁਹਾਡਾ ਹਿਸਾਬ ਸਿਰਫ਼ ਇਸੇ ਫ਼ੋਨ ਵਿੱਚ ਰਹਿੰਦਾ ਹੈ। ਦੱਸੋ, ਕਿਸਦਾ ਕਿੰਨਾ ਲਿਖਾਂ?',
   saved: (n, a, d) => `${n}, ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}।`,
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ਅੱਜ' : o === 1 ? 'ਕੱਲ੍ਹ' : `${o} ਦਿਨਾਂ ਵਿੱਚ`} ${r(a)} ਰੁਪਏ ਦੇਣਗੇ, ਯਾਦ ਰੱਖਾਂਗੀ।`,

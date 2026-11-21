@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { createVoiceClient, defaultVoiceUrl } from '@/lib/voice'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
-import { savedFeedback } from '@/ui/feedback'
+import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
 import { CustomerSheet, PrivacySheet, SettingsSheet, remindLink } from '@/ui/Sheets'
@@ -41,7 +41,9 @@ function Home({ store }: { store: KhataStore }) {
   const settings = store.settings
   const t = ui(settings.lang)
   const [status, setStatus] = useState<VoiceStatus>('idle')
-  const [level, setLevel] = useState(0)
+  const levelSource = useRef(new Set<(v: number) => void>()).current
+  /** ledger writes in order; feedback no longer waits for them */
+  const writes = useRef<Promise<unknown>>(Promise.resolve())
   const [heard, setHeard] = useState('')
   const [said, setSaid] = useState('')
   const [pending, setPending] = useState<PendingView | null>(null)
@@ -59,26 +61,36 @@ function Home({ store }: { store: KhataStore }) {
   const voice = useRef<VoiceClient | null>(null)
 
   const onOps = useCallback(async (ops: LedgerOp[]) => {
-    await store.applyOps(ops)
-    voice.current?.sendSnapshot()
+    // feedback first: the chime, highlight and toast must not wait for the encrypted IndexedDB write
     const e = ops.find((o): o is Extract<LedgerOp, { op: 'entry' }> => o.op === 'entry')
     if (e) {
       setFresh(e.eid)
-      const name = store.state.customers.get(e.cid)?.name ?? ''
+      const added = ops.find((o): o is Extract<LedgerOp, { op: 'add_customer' }> => o.op === 'add_customer' && o.cid === e.cid)
+      const name = added?.name ?? store.state.customers.get(e.cid)?.name ?? ''
       savedFeedback()
       toast(`${t.saved}: ${name} ${rs(e.paise)}`, {
-        action: { label: t.undo, onClick: () => void store.voidEntry(e.eid, 'tap undo').then(() => voice.current?.sendSnapshot()) },
+        action: { label: t.undo, onClick: () => void writes.current.then(() => store.voidEntry(e.eid, 'tap undo')).then(() => voice.current?.sendSnapshot()) },
         actionButtonStyle: UNDO_STYLE,
         duration: 8000,
       })
     }
+    const w = writes.current.then(() => store.applyOps(ops))
+    writes.current = w.catch(() => {})
+    try {
+      await w
+    } catch (err) {
+      toast.error(`${t.saved}: ✗`)
+      console.warn('[store]', err)
+    }
+    voice.current?.sendSnapshot()
   }, [store, t])
 
   const start = useCallback(async (lang: Lang) => {
     if (voice.current) return
     const v = createVoiceClient(VOICE_URL, {
       status: (st) => { setStatus(st); if (st === 'offline' || (st as string) === 'reconnecting') setPending(null) },
-      level: setLevel,
+      level: (v) => { for (const f of levelSource) f(v) },
+      heard: heardFeedback,
       partial: (x) => setHeard(x),
       final: (x) => setHeard(x),
       say: (x) => setSaid(x),
@@ -98,10 +110,11 @@ function Home({ store }: { store: KhataStore }) {
       error: (msg) => console.warn('[voice]', msg),
       lang: (l) => void store.updateSettings({ lang: l }),
     })
+    primeFeedback()
     voice.current = v
     setOn(true)
     try {
-      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech })
+      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll })
       if (!store.settings.firstRunDone) void store.updateSettings({ firstRunDone: true })
     } catch {
       voice.current = null
@@ -262,7 +275,7 @@ function Home({ store }: { store: KhataStore }) {
             <div className="flex items-center justify-center gap-5">
               <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-black/10 active:scale-95"><Keyboard className="size-6" /></button>
               <MicButton
-                status={status} level={level} on={on}
+                status={status} levelSource={levelSource} on={on}
                 onPress={() => {
                   if (!on) void start(settings.lang!)
                   else if (!settings.handsFree) voice.current?.pttDown()
@@ -284,7 +297,7 @@ function Home({ store }: { store: KhataStore }) {
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
-        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.lang) { stop() } }} />
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll); if (p.lang) { stop() } }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />
     </div>

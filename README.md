@@ -17,7 +17,7 @@ Voice Khata is a voice credit ledger for kirana shops, built for the Gnani Voice
 | Credit or payment | Decided from case markers ("ne" means payment, "ko" means credit) and, in Kannada, Tamil and Telugu, from the verb person. When direction cannot be read, the agent asks. |
 | Corrections and undo | "Nahi, 430", "galat, jama tha", "Ramesh nahi Suresh" amend the last entry. "Hata do" voids it. Nothing is erased; an amend or void is a new event in the log. |
 | Noise | A server-side energy tracker estimates the shop's noise floor and each utterance's SNR. When the SNR is below 11 dB, or cannot be estimated, the agent reads the entry back and waits for a yes or no before saving. In a quiet shop it saves, speaks a read-back and shows an undo toast. |
-| Latency and barge-in | Parsing runs on streaming partials. When the sentence is already complete, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
+| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A confident save is confirmed with a short cached "लिख दिया" (name and amount are on screen) instead of a 3 s read-back. The chime, highlight and toast no longer wait for the encrypted write. Slow model turns say "एक सेकंड" after 400 ms. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
 
@@ -61,19 +61,33 @@ sequenceDiagram
   P->>V: 16 kHz PCM frames
   V->>S: frames (x-partials: true)
   S-->>V: partial_transcript (about every 450 ms)
-  Note over V: fast-path parse on each partial,<br/>cached as a speculative result
-  S-->>V: speech_end
-  Note over V: sentence complete, about 280 ms after the pause
+  Note over V: our energy detector sees a 300 ms pause
+  V->>P: heard (tick + buzz on the phone)
+  Note over V: commit early if the last partial is a complete sentence
   V->>S: commit
   S-->>V: final_transcript
-  Note over V: reuse speculative parse if text matches,<br/>else reparse (Haiku only if needed)
-  V->>P: ledger ops and say text
+  Note over V: fast-path parse (0 ms; LLM only if needed,<br/>"एक सेकंड" if it is slower than 400 ms)
+  V->>P: ledger ops (chime, card, toast) and say text
   V->>T: text (pooled, pre-opened socket)
   T-->>V: PCM audio
-  V->>P: PCM audio (first reply audio p50 729 ms after speech end)
+  V->>P: PCM audio (fixed phrases straight from an in-memory cache)
 ```
 
-Measured on production (Vercel bom1), 7 Hindi conversation turns: speech end to first reply audio p50 729 ms, max 774 ms.
+Measured on production (Vercel bom1, 13 Nov), 7 Hindi conversation turns: speech end to first reply audio p50 729 ms, max 774 ms.
+
+**Making it feel instant (21 Nov, local A/B, same machine, 4 languages, clean and street noise).** `eval/latency_breakdown.ts` reads the server's per-turn timings.
+
+| | Before | After |
+|---|---|---|
+| First thing heard or felt after speaking | the reply audio | tick at p50 320 ms |
+| First reply audio sent (server, p50) | 988 ms | 835 ms |
+| First audio on the client, clean p50 / p95 | 960 / 1,334 ms | 796 / 1,126 ms |
+| First audio on the client, street p95 | 2,250 ms | 1,241 ms |
+| Spoken reply length (p50) | 3.0 s | 2.0 s |
+| Done talking (p50) | 4.0 s | 3.4 s |
+| Exact amounts | 60/60 clean, 56/60 street | 60/60 clean, 57/60 street |
+
+Where a clean turn's time goes: Prisma's final transcript arrives about 800 ms after the shopkeeper stops, parsing takes 0 ms, and Timbre starts in about 150 ms (0 ms for cached phrases). Timbre's time to first audio does not grow with text length (a 300-character paragraph starts as fast as "लिख दिया"), so replies are not split into pieces. The end of turn is left as it is: Prisma's partials lag about one word, and committing on `speech_end` was measured and did not help.
 
 ## Gnani services used
 
@@ -136,7 +150,7 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Speech end to first reply audio | p50 729 ms, max 774 ms (Vercel bom1) |
 | Early commit | fires about 280 ms after the pause when the sentence is complete |
 | Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
-| Unit tests | 507 passing |
+| Unit tests | 516 passing |
 
 ### STT noise benchmark (exact amount)
 

@@ -62,6 +62,7 @@ wss.on('connection', (ws, req) => {
         onClose: cb.onClose,
       }),
     speak: (text, locale, onAudio, signal, speed) => tts.speak(text, locale, onAudio, signal, speed),
+    warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch(() => {}),
     llm: async (text, ctx) => {
       const r = await readHard(text, ctx)
       if (process.env.VK_DEBUG) console.log('[llm-model]', r.model, Math.round(r.ms), r.fallback ?? '')
@@ -125,6 +126,8 @@ function validMsg(m: unknown): m is ClientMsg {
       return x.action === 'yes' || x.action === 'no' || x.action === 'undo'
     case 'speed':
       return x.speed === 0.8 || x.speed === 1 || x.speed === 1.2
+    case 'readback':
+      return typeof x.on === 'boolean'
     case 'ptt_start':
     case 'ptt_end':
     case 'playback_done':

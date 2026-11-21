@@ -33,7 +33,9 @@ export interface SttCallbacks {
 }
 export interface SessionDeps {
   openStt: (locale: string, keyterms: string[], cb: SttCallbacks) => SttLike
-  speak: (text: string, locale: string, onAudio: (pcm: Buffer) => void, signal: AbortSignal, speed?: 0.8 | 1 | 1.2) => Promise<{ firstAudioMs: number | null; bytes: number }>
+  speak: (text: string, locale: string, onAudio: (pcm: Buffer) => void, signal: AbortSignal, speed?: 0.8 | 1 | 1.2) => Promise<{ firstAudioMs: number | null; bytes: number; cached?: boolean }>
+  /** Pre-synthesize fixed phrases so speak() replays them without a TTS round trip. */
+  warm?: (texts: string[], locale: string, speed: 0.8 | 1 | 1.2) => void
   llm: (text: string, ctx: LlmContext) => Promise<Partial<LlmReading>>
   /**
    * Optional second, independent transcription of a noisy turn's audio (Prisma REST,
@@ -63,11 +65,13 @@ const TTS_TIMEOUT_MS = 10_000
 const POINTS_BACK = /wal[aei]\b|वाल[ाीे]|badl|बदल|change|galat|गलत|asal|असल|actually|instead|entry|एंट्री|\bkal\b|कल|yesterday|parso|परसों/i
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
 
-type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean; pcm?: Buffer; lang?: string }
+type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean; pcm?: Buffer; lang?: string; heardAt?: number | null }
 /** Audio kept for the second reading of a noisy turn (16 kHz s16le): the last 20 s at most. */
 const UTT_AUDIO_MAX = 20 * 16000 * 2
 /** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
 const STT_REFRESH_MS = 14 * 60_000
+/** A hard (LLM) turn that has not been read by now says a short filler. */
+export const FILLER_AFTER_MS = 400
 /** How long an unreadable turn waits for Prisma REST to hear it in another language. */
 const RESCUE_WAIT_MS = 1500
 /** How long a noisy turn waits for the second reading before going on without it. */
@@ -81,6 +85,8 @@ interface Draft {
   nameSure: boolean
   /** the shopkeeper already said yes to a read-back that named this line (a list question) */
   confirmed?: boolean
+  /** this line was read back on its own and the shopkeeper said yes */
+  readBack?: boolean
   paise: number
   alt: number | null // confusable alternative, rupees
   direction: Direction | null
@@ -106,6 +112,9 @@ type Pending =
 interface Reply {
   parts: string[]
   ops: LedgerOp[]
+  /** entries saved in this reply, and how many of them may be confirmed with a short ack */
+  saved?: number
+  ackable?: number
 }
 
 export class Session {
@@ -116,6 +125,13 @@ export class Session {
   }
   private ptt = false
   private speed: 0.8 | 1 | 1.2 = 1
+  /** read every saved entry back in full instead of a short ack (Settings) */
+  private readBackAll = false
+  /** when the "heard you" cue went out for the current utterance */
+  private heardAt: number | null = null
+  /** turnComplete() of the last partial, cached: maybeEarlyCommit runs every 32 ms frame */
+  private completeFor = ''
+  private completeVal = false
   private stt: SttLike | null = null
   private energy = newEnergyState()
   private frameCarry = Buffer.alloc(0)
@@ -143,7 +159,9 @@ export class Session {
   private sttRetries = 0
   private sttOpenedAt = 0
   private closed = false
-  private speaking: { ac: AbortController; text: string; ducked: boolean; until: number } | null = null
+  private speaking: { ac: AbortController; text: string; ducked: boolean; until: number; filler?: boolean } | null = null
+  /** the filler being spoken, so the reply waits for its audio instead of interleaving with it */
+  private fillerP: Promise<unknown> | null = null
   private chain: Promise<void> = Promise.resolve()
   private now: () => number
   private newId: () => string
@@ -162,7 +180,9 @@ export class Session {
         this.snap.recent ??= []
         this.ptt = msg.ptt
         this.speed = msg.speed === 0.8 || msg.speed === 1.2 ? msg.speed : 1
+        this.readBackAll = msg.readBack === true
         this.openStt()
+        this.warmPhrases()
         if (msg.firstRun)
           this.enqueue(async () => {
             await this.speak(say(this.lang).disclosure())
@@ -178,6 +198,7 @@ export class Session {
         this.bargeIn()
         break
       case 'ptt_end':
+        this.sendHeard()
         this.commit(false)
         break
       case 'tap':
@@ -196,12 +217,22 @@ export class Session {
         break
       case 'speed':
         this.speed = msg.speed
+        this.warmPhrases()
+        break
+      case 'readback':
+        this.readBackAll = msg.on
         break
       case 'playback_done':
         if (this.speaking?.ducked) this.deps.send({ type: 'unduck' })
         this.speaking = null
         break
     }
+  }
+
+  /** The phrases that are spoken often and never change, ready in memory for this language and speed. */
+  private warmPhrases() {
+    const R = say(this.lang)
+    this.deps.warm?.([R.ack(), R.filler(), R.didNotCatch()], LOCALE[this.lang], this.speed)
   }
 
   private keyterms(): string[] {
@@ -270,9 +301,26 @@ export class Session {
   }
 
   private maybeEarlyCommit() {
-    if (this.ptt || this.committed || !this.energy.inUtterance) return
+    if (this.ptt || !this.energy.inUtterance) return
     if (this.energy.silentMs < EARLY_COMMIT_PAUSE_MS) return
-    if (this.lastPartial && turnComplete(this.lastPartial)) this.commit(true)
+    if (this.lastPartial && (this.pending || mentionsMoney(this.lastPartial))) this.sendHeard()
+    if (this.committed || !this.lastPartial) return
+    if (this.completeFor !== this.lastPartial) {
+      this.completeFor = this.lastPartial
+      this.completeVal = turnComplete(this.lastPartial)
+    }
+    if (this.completeVal) this.commit(true)
+  }
+
+  /**
+   * "Heard you": a tick on the phone ~300 ms after the shopkeeper stops, long before the reply
+   * audio (end of turn itself is unchanged). Once per utterance, never while we are talking
+   * (our own read-back would echo into the mic).
+   */
+  private sendHeard() {
+    if (this.heardAt !== null || !this.lastPartial || this.isSpeaking()) return
+    this.heardAt = this.now()
+    this.deps.send({ type: 'heard' })
   }
 
   private commit(early: boolean) {
@@ -321,6 +369,8 @@ export class Session {
     const early = this.earlyCommit
     const finalAt = this.now()
     const pcm = this.takeUttAudio()
+    const heardAt = this.heardAt
+    this.heardAt = null
     resetUtterance(this.energy)
     this.committed = false
     this.commitAt = null
@@ -329,7 +379,7 @@ export class Session {
     if (!text.trim()) return
     this.sttRetries = 0
     if (this.isEcho(text)) return // our own reply heard back through the phone speaker
-    let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang }
+    let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang, heardAt }
     if (this.held) {
       // the rest of a list the recogniser split at a breath: one turn, as spoken
       clearTimeout(this.held.timer)
@@ -423,6 +473,7 @@ export class Session {
     this.lang = lang
     this.stt?.setLanguage?.(LOCALE[lang])
     this.deps.send({ type: 'lang', lang })
+    this.warmPhrases()
   }
 
   /**
@@ -499,12 +550,19 @@ export class Session {
     const rescue = wantRescue ? rest : null
 
     let unsureChange = false
+    let fillerSaid = false
     if (!this.pending && this.needsLlm(text, intent)) {
       const change = this.isChangeTalk(text, intent)
       const l0 = this.now()
+      // a model turn takes ~1-1.5 s: say "one second" if it is not back soon, so it never feels dead
+      const filler = setTimeout(() => {
+        fillerSaid = true
+        this.fillerP = this.speak(say(this.lang).filler(), { filler: true })
+      }, FILLER_AFTER_MS)
+      filler.unref?.()
       try {
         const ctx = this.llmContext()
-        const reading = await this.deps.llm(text, ctx)
+        const reading = await this.deps.llm(text, ctx).finally(() => clearTimeout(filler))
         if (process.env.VK_DEBUG) console.log('[llm]', JSON.stringify({ text, reading, recent: ctx.recent }))
         const v = validate(text, reading, ctx.contextAmounts, ctx.recent?.length ?? 0)
         // a model "no"/"unknown" never overrides a usable fast reading
@@ -530,6 +588,9 @@ export class Session {
       ? this.answerPending(text, intent, snrDb, noisy, path === 'llm' ? 'llm' : 'fast')
       : this.dispatch(intent, text, snrDb, noisy, path === 'llm' ? 'llm' : 'fast')
     if (!reply && unsureChange) reply = { parts: [say(this.lang).didNotCatch()], ops: [] }
+    // one confident save: the screen shows name and amount, so a short "noted" is enough
+    if (reply && !this.readBackAll && reply.saved === 1 && reply.ackable === 1 && reply.parts.length === 1)
+      reply.parts = [say(this.lang).ack()]
     if (this.pending && this.pending !== before) this.pendingAt = this.now()
     this.secondAmounts = null
     if (!reply) path = 'none'
@@ -543,7 +604,12 @@ export class Session {
     this.deps.send({ type: 'pending', pending: this.pendingView() })
 
     let firstAudioAt: number | null = null
-    if (reply?.parts.length) firstAudioAt = await this.speak(reply.parts.join(' '))
+    let spoken: { bytes: number; cached: boolean } | null = null
+    if (reply?.parts.length) {
+      const r = await this.speak(reply.parts.join(' '))
+      firstAudioAt = r.first
+      spoken = r
+    } else if (fillerSaid) this.deps.send({ type: 'audio_end' }) // the filler was all we had to say
 
     if (t) {
       const base = t.speechEnd
@@ -557,6 +623,10 @@ export class Session {
         firstAudioAt: firstAudioAt === null ? null : firstAudioAt - base,
         earlyCommit: t.early,
         snrDb,
+        heardAt: t.heardAt == null ? null : t.heardAt - base,
+        replyChars: reply?.parts.join(' ').length ?? 0,
+        replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0,
+        cached: spoken?.cached ?? false,
       }
       this.deps.send({ type: 'metrics', turn: m })
       if (process.env.VK_DEBUG) console.log('[metrics]', JSON.stringify({ ...m, text }))
@@ -917,6 +987,19 @@ export class Session {
       },
     })
     acc.parts.push(d.promise ? R.savedPromise(name, d.paise / 100, d.dayOffset) : R.saved(name, d.paise / 100, d.direction!))
+    acc.saved = (acc.saved ?? 0) + 1
+    if (this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
+  }
+
+  /**
+   * May this save be confirmed with a short ack instead of name + amount? Only a plain entry for
+   * today, for a known customer, that was either already read back and confirmed, or heard
+   * cleanly with full confidence. New customers, promises, other days and noisy or unsure lines
+   * keep the full read-back.
+   */
+  private ackable(d: Draft): boolean {
+    if (d.promise || d.dayOffset !== 0 || d.newName) return false
+    return !!d.readBack || (!d.noisy && d.nameSure && d.confidence === 'high')
   }
 
   private answerPending(text: string, intent: Intent, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Reply | null {
@@ -952,6 +1035,7 @@ export class Session {
     switch (p.kind) {
       case 'confirm':
         if (intent.type === 'yes') {
+          d.readBack = true
           this.save(d, acc)
           return this.processDrafts(p.queue, acc)
         }
@@ -1213,14 +1297,20 @@ export class Session {
 
   // ------------------------------------------------------------------ speech out
   /** Speak and stream audio; returns the time first audio was sent (or null). */
-  private async speak(spoken: string): Promise<number | null> {
-    this.bargeIn() // never talk over ourselves
+  private async speak(spoken: string, opts: { filler?: boolean } = {}): Promise<{ first: number | null; bytes: number; cached: boolean }> {
+    // never talk over ourselves; a filler is the one thing the real reply follows instead of cutting
+    if (!this.speaking?.filler) this.bargeIn()
     const ac = new AbortController()
     const start = this.now()
     let bytes = 0
+    let cached = false
     const text = stripTags(spoken) // what the screen shows and what can echo back
-    this.speaking = { ac, text, ducked: false, until: start + 60_000 }
-    this.deps.send({ type: 'say', text })
+    const prev = this.speaking?.filler ? this.speaking : null
+    this.speaking = { ac, text: prev ? `${prev.text} ${text}` : text, ducked: false, until: start + 60_000, filler: opts.filler }
+    if (prev) prev.ac.signal.addEventListener('abort', () => ac.abort()) // a barge-in on the filler cuts the reply too
+    if (!opts.filler) this.deps.send({ type: 'say', text })
+    if (prev && this.fillerP) await this.fillerP.catch(() => {})
+    this.fillerP = null
     let first: number | null = null
     // a stalled TTS socket must not block every later turn
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -1238,7 +1328,7 @@ export class Session {
           if (first === null) first = this.now()
           bytes += pcm.length
           this.deps.sendAudio(pcm)
-        }, ac.signal, this.speed),
+        }, ac.signal, this.speed).then((r) => { cached = !!r.cached }),
         timeout,
       ])
     } catch (e) {
@@ -1246,13 +1336,14 @@ export class Session {
     } finally {
       clearTimeout(timer)
     }
-    this.lastSaid = { text, until: (first ?? start) + (bytes / 32000) * 1000 + 1500 }
+    this.lastSaid = { text: this.speaking?.ac === ac ? this.speaking.text : text, until: (first ?? start) + (bytes / 32000) * 1000 + 1500 }
     if (!ac.signal.aborted) {
-      this.deps.send({ type: 'audio_end' })
+      // a filler's audio runs straight into the reply: one playback, one audio_end
+      if (!opts.filler) this.deps.send({ type: 'audio_end' })
       // the phone plays in real time: we are "speaking" until that audio has played out
       if (this.speaking?.ac === ac) this.speaking.until = (first ?? start) + (bytes / 32000) * 1000 + 300
     }
-    return first
+    return { first, bytes, cached }
   }
 
   close() {
