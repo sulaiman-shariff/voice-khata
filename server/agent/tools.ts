@@ -276,6 +276,10 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     return { parts: [R.showDues(o.length, o.reduce((s, c) => s + c.balancePaise, 0) / 100)], ops: [], show }
   }
 
+  // the audio re-ask is for unclear ledger speech: a guess from noise ("771." -> search) may only
+  // become a read-back entry or correction, never open a screen, search, or change a setting
+  if (meta.fromAudio && !['add_entries', 'change_entry', 'unclear', 'not_for_me', 'answer_question'].includes(call.name)) return notCaught()
+
   switch (call.name) {
     // ------------------------------------------------------------------ writes
     case 'add_entries': {
@@ -492,6 +496,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const hits = amounts.length ? entries.filter((e) => amounts.includes(e.paise) && (!found.length || found.some((c) => c.cid === e.cid))) : []
       const count = amounts.length ? hits.length : found.length
       const reply: Reply = { parts: [R.searchResult(q, count)], ops: [] }
+      if (!count) return reply // nothing found: say so, don't open an empty screen
       reply.show = found.length === 1 && !hits.length ? { type: 'show', view: 'customer', cid: found[0].cid } : { type: 'show', view: 'search', text: q, cids: found.map((x) => x.cid), eids: hits.map((e) => e.eid) }
       return reply
     }

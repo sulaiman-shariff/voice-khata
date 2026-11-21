@@ -432,8 +432,25 @@ describe('agent tools', () => {
       const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 100)])
       expect(run('show_today', {}, 'aaj ka hisaab').show).toEqual({ type: 'show', view: 'today' })
       expect(run('top_debtors', {}, 'sabse zyada kiska baaki').show).toEqual({ type: 'show', view: 'top_debtors', count: 3 })
-      expect(run('search', { text: 'xyz' }, 'xyz dhundho').show).toEqual({ type: 'show', view: 'search', text: 'xyz', cids: [], eids: [] })
+      expect(run('search', { text: 'Ramesh' }, 'Ramesh dhundho').show).toEqual({ type: 'show', view: 'customer', cid: 'c1' })
       expect(run('close_view', {}, 'band karo').show).toEqual({ type: 'show', view: 'close' })
+    })
+
+    it('a search that finds nothing says so without opening an empty screen', () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200)])
+      const r = run('search', { text: '771' }, '771')
+      expect(r.parts).toEqual([R.searchResult('771', 0)])
+      expect(r.show).toBeUndefined()
+    })
+
+    it('a reading from the audio never opens a screen, searches or changes a setting ("771." -> search)', () => {
+      const { core, meta } = setup([cust('c1', 'Ramesh', 200)])
+      for (const [name, args] of [['search', { text: '771' }], ['show_customer', { name: 'Ramesh' }], ['set_speed', { speed: 'faster' }]] as const) {
+        const r = runTool(core, { name, args } as ToolCall, { ...meta('771.'), fromAudio: true })
+        expect(r.show).toBeUndefined()
+        expect(r.setting).toBeUndefined()
+        expect(r.ops).toEqual([])
+      }
     })
 
     it('set_language produces a setting message and a reply in the new language', () => {
