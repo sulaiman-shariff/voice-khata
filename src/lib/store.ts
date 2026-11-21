@@ -79,7 +79,15 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('keys')) db.createObjectStore('keys')
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
     }
-    r.onsuccess = () => res(r.result)
+    r.onsuccess = () => {
+      const db = r.result
+      // another tab is deleting or upgrading the ledger (?reset=1): let go, and reload into the new one
+      db.onversionchange = () => {
+        db.close()
+        if (typeof location !== "undefined") location.reload()
+      }
+      res(db)
+    }
     r.onerror = () => rej(r.error)
   })
 }
