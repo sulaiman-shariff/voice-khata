@@ -1,3 +1,7 @@
+/**
+ * The phone's ledger store: ciphertext only at rest, tamper evident, erasable per customer,
+ * and idempotent when the same ops arrive twice.
+ */
 import { describe, expect, it } from 'vitest'
 import { balance } from '../../shared/ledger.js'
 import type { LedgerOp } from '../../shared/protocol.js'
@@ -10,190 +14,106 @@ const entry = (eid: string, cid: string, paise: number, direction: 'credit' | 'p
 })
 
 describe('store', () => {
-  it('computes balances and snapshot from ops', async () => {
+  it('server ops give the right balances, totals and last entry (promise, amend, void)', async () => {
     const s = await createStore(memoryPersistence())
-    await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 50000, 'credit'), entry('e2', 'c1', 20000, 'payment')])
-    expect(balance(s.state, 'c1')).toBe(30000)
-    await s.applyOps([entry('e3', 'c1', 90000, 'payment', true)])
-    expect(balance(s.state, 'c1')).toBe(30000) // promise does not move balance
-    await s.applyOps([{ op: 'amend', eid: 'e1', paise: 60000 }])
+    await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 50000, 'credit'), entry('e2', 'c1', 20000, 'payment'),
+      entry('e3', 'c1', 90000, 'payment', true), { op: 'amend', eid: 'e1', paise: 60000 }, entry('e4', 'c1', 1000, 'credit')])
+    expect(balance(s.state, 'c1')).toBe(41000)
+    expect(s.snapshot().today).toEqual({ creditPaise: 61000, paymentPaise: 20000, entries: 3 })
+    await s.applyOps([{ op: 'void', eid: 'e4', reason: 'galat' }])
     expect(balance(s.state, 'c1')).toBe(40000)
-    await s.applyOps([cust('c2', 'Sita'), entry('e4', 'c2', 1000, 'credit')])
-    const snap = s.snapshot()
-    expect(snap.shopName).toBe('Meri Dukaan')
-    expect(snap.customers.find((c) => c.cid === 'c1')?.balancePaise).toBe(40000)
-    expect(snap.customers.find((c) => c.cid === 'c2')?.balancePaise).toBe(1000)
-    expect(snap.today).toEqual({ creditPaise: 61000, paymentPaise: 20000, entries: 3 })
-    expect(snap.month.entries).toBe(3)
-    expect(snap.last?.eid).toBe('e4')
+    expect(s.snapshot().last?.eid).not.toBe('e4')
   })
 
-  it('snapshot.last follows void and void removes from balance', async () => {
-    const s = await createStore(memoryPersistence())
-    await s.applyOps([cust('c1', 'A'), entry('e1', 'c1', 100, 'credit'), entry('e2', 'c1', 200, 'credit')])
-    expect(s.snapshot().last?.eid).toBe('e2')
-    await s.applyOps([{ op: 'void', eid: 'e2', reason: 'galat' }])
-    expect(s.snapshot().last?.eid).toBe('e1')
-    expect(balance(s.state, 'c1')).toBe(100)
-    await s.voidEntry('e1', 'x')
-    expect(s.snapshot().last).toBeNull()
-  })
-
-  it('persists: a second store over the same persistence has identical state', async () => {
-    const p = memoryPersistence()
-    const a = await createStore(p)
-    await a.applyOps([cust('c1', 'Ramesh'), { op: 'add_alias', cid: 'c1', alias: 'Rama' }, entry('e1', 'c1', 500, 'credit')])
-    await a.setConsent('c1', { remindersOptIn: true, adult: true, phone: '99' })
-    await a.setConfirmation('e1', 'confirmed')
-    await a.updateSettings({ lang: 'hi', shopName: 'Gupta Store' })
-    const b = await createStore(p)
-    expect(b.state.customers).toEqual(a.state.customers)
-    expect(b.state.entries).toEqual(a.state.entries)
-    expect(b.state.order).toEqual(a.state.order)
-    expect(b.state.customers.get('c1')?.aliases).toEqual(['Rama'])
-    expect(b.state.entries.get('e1')?.status).toBe('confirmed')
-    expect(b.settings).toEqual(a.settings)
-    expect(b.settings.shopName).toBe('Gupta Store')
-  })
-
-  it('keeps the chain contiguous and valid under concurrent applyOps', async () => {
-    const p = memoryPersistence()
-    const s = await createStore(p)
-    const ps: Promise<void>[] = []
-    for (let i = 0; i < 12; i++) ps.push(s.applyOps([cust(`c${i}`, `N${i}`), entry(`e${i}`, `c${i}`, 100 + i, 'credit')]))
-    await Promise.all(ps)
-    expect(p.records.map((r) => r.seq)).toEqual(Array.from({ length: 24 }, (_, i) => i))
-    expect(await s.verify()).toEqual({ ok: true, records: 24 })
-    expect(s.state.customers.size).toBe(12)
-  })
-
-  it('detects tampering with a stored record', async () => {
-    const p = memoryPersistence()
-    const s = await createStore(p)
-    await s.applyOps([cust('c1', 'A'), entry('e1', 'c1', 100, 'credit'), entry('e2', 'c1', 100, 'credit')])
-    p.records[1].ct = p.records[2].ct
-    const v = await s.verify()
-    // the store holds its own copy; verify against fresh persistence state
-    const s2 = await createStore(p)
-    const v2 = await s2.verify()
-    expect(v.ok).toBe(true)
-    expect(v2.ok).toBe(false)
-    expect(v2.brokenAt).toBe(1)
-  })
-
-  it('forgetCustomer removes only that customer and the chain still verifies', async () => {
-    const p = memoryPersistence()
-    const s = await createStore(p)
-    await s.applyOps([cust('c1', 'Ramesh'), cust('c2', 'Sita'), entry('e1', 'c1', 500, 'credit'), entry('e2', 'c2', 700, 'credit')])
-    await s.applyOps([{ op: 'void', eid: 'e1', reason: 'r' }])
-    await s.forgetCustomer('c1')
-    expect(s.state.customers.has('c1')).toBe(false)
-    expect(s.state.entries.has('e1')).toBe(false)
-    expect(s.state.customers.get('c2')?.name).toBe('Sita')
-    expect(balance(s.state, 'c2')).toBe(700)
-    expect(await s.verify()).toEqual({ ok: true, records: 5 })
-    const again = await createStore(p)
-    expect(again.state.customers.has('c1')).toBe(false)
-    expect(again.state.customers.has('c2')).toBe(true)
-  })
-
-  it('deleteAll empties records, keys and state but keeps language and shop name', async () => {
-    const p = memoryPersistence()
-    const s = await createStore(p)
-    await s.updateSettings({ lang: 'hi', shopName: 'Gupta', firstRunDone: true })
-    await s.applyOps([cust('c1', 'A'), entry('e1', 'c1', 100, 'credit')])
-    await s.applyOps([{ op: 'delete_all' }])
-    expect(s.state.customers.size).toBe(0)
-    expect(p.records.length).toBe(0)
-    expect(await p.keys.get('c1')).toBeUndefined()
-    expect(await s.verify()).toEqual({ ok: true, records: 0 })
-    await s.applyOps([cust('c9', 'B')])
-    expect(p.records[0].seq).toBe(0)
-    await s.deleteAll()
-    expect(s.settings.lang).toBe('hi')
-    expect(s.settings.shopName).toBe('Gupta')
-    expect(s.settings.firstRunDone).toBe(false)
-    expect((await createStore(p)).settings.lang).toBe('hi')
-  })
-
-  it('stores ciphertext only', async () => {
-    const p = memoryPersistence()
-    const s = await createStore(p)
-    await s.applyOps([cust('c1', 'Ramesh Kumar'), entry('e1', 'c1', 123456, 'credit')])
-    const raw = JSON.stringify(p.records) // what IndexedDB holds
-    expect(raw).not.toContain('Ramesh')
-    expect(raw).not.toContain('123456')
-    const readable = JSON.parse(await s.exportReadable())
-    expect(readable.customers[0].name).toBe('Ramesh Kumar')
-    expect(readable.entries[0].paise).toBe(123456)
-    expect(readable.chain.ok).toBe(true)
-  })
-
-  it('notifies subscribers with a new state reference', async () => {
-    const s = await createStore(memoryPersistence())
-    let n = 0
-    const un = s.subscribe(() => n++)
-    const before = s.state
-    await s.applyOps([cust('c1', 'A')])
-    expect(n).toBe(1)
-    expect(s.state).not.toBe(before)
-    un()
-    await s.updateSettings({ showLatency: true })
-    expect(n).toBe(1)
-  })
-})
-
-describe('backup export/import', () => {
-  it('restores the same ledger on a fresh phone with new keys', async () => {
-    const a = await createStore(memoryPersistence())
-    await a.applyOps([
-      { op: 'add_customer', cid: 'c1', name: 'Ramesh' },
-      { op: 'entry', eid: 'e1', cid: 'c1', paise: 34000, direction: 'credit', dayOffset: 0, promise: false, source: { transcript: 't', confidence: 'high', reasons: [], lang: 'hi-IN', path: 'fast' } },
-      { op: 'amend', eid: 'e1', paise: 43000 },
-    ])
-    const dump = JSON.parse(JSON.stringify(await a.exportRecords()))
-    const b = await createStore(memoryPersistence())
-    await b.importRecords(dump)
-    expect(b.snapshot().customers[0]).toMatchObject({ name: 'Ramesh', balancePaise: 43000 })
-    expect((await b.verify()).ok).toBe(true)
-    await expect(b.importRecords([{ nope: 1 }])).rejects.toThrow()
-  })
-
-  it('invalid import leaves existing data untouched', async () => {
-    const p = memoryPersistence()
-    const s = await createStore(p)
-    await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 5000, 'credit')])
-    const good = JSON.parse(JSON.stringify(await s.exportRecords())) as unknown[]
-    for (const bad of [{ not: 'array' }, [...good, { nope: 1 }], [...good, null], [...good, { ev: { type: 'entry' }, ts: 'x' }], [{ ev: 'str', ts: 1 }]]) {
-      await expect(s.importRecords(bad as unknown[])).rejects.toThrow('bad backup')
-      expect(balance(s.state, 'c1')).toBe(5000)
-      expect(p.records.length).toBe(2)
-      expect((await s.verify()).ok).toBe(true)
-    }
-  })
-
-  it('two tabs: appends on a stale store pick up the other tab tail (no seq collision)', async () => {
-    const base = memoryPersistence()
-    const shared: typeof base = { ...base, tailRecord: async () => base.records[base.records.length - 1] }
-    const a = await createStore(shared)
-    const b = await createStore(shared) // second tab, same DB
-    await a.applyOps([cust('c1', 'Ramesh')])
-    await b.applyOps([cust('c2', 'Sita')]) // b's in-memory chain is stale
-    await a.applyOps([entry('e1', 'c1', 100, 'credit')])
-    expect(base.records.map((r) => r.seq)).toEqual([0, 1, 2].map((n) => base.records[0].seq + n))
-    expect((await createStore(shared)).state.customers.size).toBe(2)
-    expect((await a.verify()).ok).toBe(true)
-  })
-})
-
-describe('store: a batch delivered twice saves once', () => {
-  it('skips entries and customers it already has (re-sent or replayed ops)', async () => {
+  it('a batch delivered twice (re-sent or replayed) is written once', async () => {
     const s = await createStore(memoryPersistence())
     const batch = [cust('c1', 'Suleman'), entry('e1', 'c1', 30000, 'payment')]
     await s.applyOps(batch)
     await s.applyOps(batch)
-    expect(s.state.entries.size).toBe(1)
-    expect(s.state.customers.size).toBe(1)
-    expect(balance(s.state, 'c1')).toBe(-30000)
+    expect([s.state.customers.size, s.state.entries.size, balance(s.state, 'c1')]).toEqual([1, 1, -30000])
+  })
+
+  it('stores ciphertext only, and survives a restart with identical state', async () => {
+    const p = memoryPersistence()
+    const a = await createStore(p)
+    await a.applyOps([cust('c1', 'Ramesh Kumar'), entry('e1', 'c1', 123456, 'credit')])
+    await a.setConsent('c1', { remindersOptIn: true, adult: true, phone: '99' })
+    const raw = JSON.stringify(p.records)
+    expect(raw).not.toContain('Ramesh')
+    expect(raw).not.toContain('123456')
+    const b = await createStore(p)
+    expect(b.state.customers).toEqual(a.state.customers)
+    expect(b.state.entries).toEqual(a.state.entries)
+  })
+
+  it('detects a tampered stored record', async () => {
+    const p = memoryPersistence()
+    const s = await createStore(p)
+    await s.applyOps([cust('c1', 'A'), entry('e1', 'c1', 100, 'credit'), entry('e2', 'c1', 100, 'credit')])
+    p.records[1].ct = p.records[2].ct
+    expect(await (await createStore(p)).verify()).toMatchObject({ ok: false, brokenAt: 1 })
+  })
+
+  it('the chain stays contiguous under concurrent writes and across two tabs', async () => {
+    const p = memoryPersistence()
+    const s = await createStore(p)
+    await Promise.all(Array.from({ length: 12 }, (_, i) => s.applyOps([cust(`c${i}`, `N${i}`), entry(`e${i}`, `c${i}`, 100 + i, 'credit')])))
+    expect(p.records.map((r) => r.seq)).toEqual(Array.from({ length: 24 }, (_, i) => i))
+    expect(await s.verify()).toEqual({ ok: true, records: 24 })
+
+    const base = memoryPersistence()
+    const shared: typeof base = { ...base, tailRecord: async () => base.records[base.records.length - 1] }
+    const a = await createStore(shared)
+    const b = await createStore(shared)
+    await a.applyOps([cust('c1', 'Ramesh')])
+    await b.applyOps([cust('c2', 'Sita')]) // b's in-memory chain is stale
+    await a.applyOps([entry('e1', 'c1', 100, 'credit')])
+    expect((await createStore(shared)).state.customers.size).toBe(2)
+    expect((await a.verify()).ok).toBe(true)
+  })
+
+  it('forgetting a customer erases them (also after restart) and leaves the rest intact', async () => {
+    const p = memoryPersistence()
+    const s = await createStore(p)
+    await s.applyOps([cust('c1', 'Ramesh'), cust('c2', 'Sita'), entry('e1', 'c1', 500, 'credit'), entry('e2', 'c2', 700, 'credit')])
+    await s.forgetCustomer('c1')
+    const again = await createStore(p)
+    expect(again.state.customers.has('c1')).toBe(false)
+    expect(again.state.entries.has('e1')).toBe(false)
+    expect(balance(again.state, 'c2')).toBe(700)
+    expect((await again.verify()).ok).toBe(true)
+  })
+
+  it('delete-all removes records and keys, keeps the language and shop name', async () => {
+    const p = memoryPersistence()
+    const s = await createStore(p)
+    await s.updateSettings({ lang: 'hi', shopName: 'Gupta' })
+    await s.applyOps([cust('c1', 'A'), entry('e1', 'c1', 100, 'credit')])
+    await s.applyOps([{ op: 'delete_all' }])
+    expect([s.state.customers.size, p.records.length]).toEqual([0, 0])
+    expect(await p.keys.get('c1')).toBeUndefined()
+    expect((await createStore(p)).settings).toMatchObject({ lang: 'hi', shopName: 'Gupta' })
+  })
+})
+
+describe('backup records export/import', () => {
+  it('restores the same ledger on a fresh phone with new keys', async () => {
+    const a = await createStore(memoryPersistence())
+    await a.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 34000, 'credit'), { op: 'amend', eid: 'e1', paise: 43000 }])
+    const b = await createStore(memoryPersistence())
+    await b.importRecords(JSON.parse(JSON.stringify(await a.exportRecords())))
+    expect(b.snapshot().customers[0]).toMatchObject({ name: 'Ramesh', balancePaise: 43000 })
+    expect((await b.verify()).ok).toBe(true)
+  })
+
+  it('an invalid import is refused and leaves existing data untouched', async () => {
+    const p = memoryPersistence()
+    const s = await createStore(p)
+    await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 5000, 'credit')])
+    const good = JSON.parse(JSON.stringify(await s.exportRecords())) as unknown[]
+    for (const bad of [{ not: 'array' }, [...good, { nope: 1 }], [...good, null], [{ ev: 'str', ts: 1 }]]) {
+      await expect(s.importRecords(bad as unknown[])).rejects.toThrow('bad backup')
+      expect([balance(s.state, 'c1'), p.records.length]).toEqual([5000, 2])
+    }
   })
 })

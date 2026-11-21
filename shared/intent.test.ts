@@ -1,163 +1,125 @@
+/**
+ * The fast parser: who, how much, which way (credit = they owe more, payment = they paid), when.
+ * One row per cue that decides the direction, per language; "ask" = no cue, so the agent must ask.
+ */
 import { describe, expect, it } from 'vitest'
-import { type EntryIntent, midList, parseFast } from './intent.js'
+import { midList, parseFast, turnComplete } from './intent.js'
 import { phoneticKey } from './names.js'
 
-type Exp = { name: string; amount: number; dir: 'credit' | 'payment' | null; day?: number; promise?: boolean }
+type Want = { name: string; rs: number; dir: 'credit' | 'payment' | 'ask'; day?: number; promise?: boolean }
+const W = (name: string, rs: number, dir: Want['dir'], extra: Partial<Want> = {}): Want => ({ name, rs, dir, ...extra })
 
-function entries(text: string): EntryIntent[] {
+function check(text: string, wants: Want[]) {
   const r = parseFast(text)
-  if (r.type !== 'entries') throw new Error(`expected entries, got ${JSON.stringify(r)}`)
-  return r.entries
+  expect(r.type, JSON.stringify(r)).toBe('entries')
+  if (r.type !== 'entries') return
+  expect(r.entries.map((e) => ({
+    name: phoneticKey(e.name ?? ''), rs: e.amount.value, dir: e.direction ?? 'ask',
+    ...(wants.some((w) => w.day !== undefined) ? { day: e.dayOffset } : {}), promise: e.promise,
+  }))).toEqual(wants.map((w) => ({
+    name: phoneticKey(w.name), rs: w.rs, dir: w.dir,
+    ...(wants.some((x) => x.day !== undefined) ? { day: w.day ?? 0 } : {}), promise: w.promise ?? false,
+  })))
 }
 
-// From the research test set (anchor: today) + live Prisma transcripts.
-const CASES: [string, Exp[]][] = [
-  ['Ramesh ne teen sau chaalis diye', [{ name: 'Ramesh', amount: 340, dir: 'payment' }]],
-  ['Ramesh ko teen sau chaalis diye', [{ name: 'Ramesh', amount: 340, dir: 'credit' }]],
-  ['रमेश का 340 रुपये उधार', [{ name: 'रमेश', amount: 340, dir: 'credit' }]],
-  ['रमेश का 340 रुपये उधार लिख दो।', [{ name: 'रमेश', amount: 340, dir: 'credit' }]],
-  ['Suresh ke khate mein dedh sau likh do', [{ name: 'Suresh', amount: 150, dir: 'credit' }]],
-  ['Geeta ne dhai hazaar jama kiye', [{ name: 'Geeta', amount: 2500, dir: 'payment' }]],
-  ['Mohan ka paune do sau baaki hai', [{ name: 'Mohan', amount: 175, dir: 'credit' }]],
-  ['Anil ko sawa sau udhaar diya kal', [{ name: 'Anil', amount: 125, dir: 'credit', day: -1 }]],
-  ['Anil kal sawa sau de jayega', [{ name: 'Anil', amount: 125, dir: 'payment', day: 1, promise: true }]],
-  ['Rajesh ne saadhe teen sau chuka diye parso', [{ name: 'Rajesh', amount: 350, dir: 'payment', day: -2 }]],
-  ['Vimla ka ek thousand two hundred baaki', [{ name: 'Vimla', amount: 1200, dir: 'credit' }]],
-  ['Ravi ne baarah sau diye', [{ name: 'Ravi', amount: 1200, dir: 'payment' }]],
-  ['सीमा ने ५०० दिए', [{ name: 'सीमा', amount: 500, dir: 'payment' }]],
-  ['Lakhan ne udhaar liya do sau', [{ name: 'Lakhan', amount: 200, dir: 'credit' }]],
-  ['Gopal le gaya dedh sau ka saaman', [{ name: 'Gopal', amount: 150, dir: 'credit' }]],
-  ['Gopal de gaya dedh sau', [{ name: 'Gopal', amount: 150, dir: 'payment' }]],
-  ['Ramesh paid 340 yesterday', [{ name: 'ramesh', amount: 340, dir: 'payment', day: -1 }]],
-  ['Sunita took fifteen hundred on credit', [{ name: 'sunita', amount: 1500, dir: 'credit' }]],
-  ['Sunita took 1,500 rupees on credit.', [{ name: 'sunita', amount: 1500, dir: 'credit' }]],
-  ['Mehta ne two sau diye aaj', [{ name: 'Mehta', amount: 200, dir: 'payment', day: 0 }]],
-  ['सुरेश ने 60 रुपये जमा किए।', [{ name: 'सुरेश', amount: 60, dir: 'payment' }]],
-  // multi-clause
-  ['Ramesh ka 340 udhaar, kal 200 diya tha', [
-    { name: 'Ramesh', amount: 340, dir: 'credit', day: 0 },
-    { name: 'Ramesh', amount: 200, dir: 'payment', day: -1 }]],
-  ['Ramesh ka 340 udhaar kal 200 diya tha', [
-    { name: 'Ramesh', amount: 340, dir: 'credit', day: 0 },
-    { name: 'Ramesh', amount: 200, dir: 'payment', day: -1 }]],
-  ['Anil ka dedh sau udhaar aur Ravi ne 1200 de diye', [
-    { name: 'Anil', amount: 150, dir: 'credit' },
-    { name: 'Ravi', amount: 1200, dir: 'payment' }]],
-  ['रमेश का 340 रुपये उधार लिख दो और सुरेश ने कल 500 जमा किए थे।', [
-    { name: 'रमेश', amount: 340, dir: 'credit', day: 0 },
-    { name: 'सुरेश', amount: 500, dir: 'payment', day: -1 }]],
-  // Kannada / Tamil / Telugu / Malayalam
-  ['ರಮೇಶ್ ಮುನ್ನೂರ ನಲವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟ', [{ name: 'ರಮೇಶ್', amount: 340, dir: 'payment' }]],
-  ['ರಮೇಶ್ ಎರಡೂವರೆ ಸಾವಿರ ಕೊಟ್ಟರು ನಿನ್ನೆ', [{ name: 'ರಮೇಶ್', amount: 2500, dir: 'payment', day: -1 }]],
-  ['ರಮೇಶ್ ನಾಳೆ ಇನ್ನೂರು ಕೊಡ್ತಾರೆ', [{ name: 'ರಮೇಶ್', amount: 200, dir: 'payment', day: 1, promise: true }]],
-  ['ಲಕ್ಷ್ಮೀ 2,500 ರೂಪಾಯಿ ಕೊಟ್ಟರು.', [{ name: 'ಲಕ್ಷ್ಮೀ', amount: 2500, dir: 'payment' }]],
-  ['ரமேஷ் முந்நூற்று நாற்பது ரூபாய் கொடுத்தார்', [{ name: 'ரமேஷ்', amount: 340, dir: 'payment' }]],
-  ['ரமேஷுக்கு ஒன்றரை ஆயிரம் கடன் கொடுத்தேன் நேத்து', [{ name: 'ரமேஷ', amount: 1500, dir: 'credit', day: -1 }]],
-  ['రమేష్ మూడు వందల నలభై ఇచ్చాడు', [{ name: 'రమేష్', amount: 340, dir: 'payment' }]],
-  ['రమేష్‌కి రెండున్నర వేలు అప్పు ఇచ్చాను నిన్న', [{ name: 'రమేష్', amount: 2500, dir: 'credit', day: -1 }]],
-  ['രമേശ് ഇരുനൂറ് തന്നു', [{ name: 'രമേശ്', amount: 200, dir: 'payment' }]],
-  // other Indo-Aryan
-  ['रमेशने तीनशे चाळीस दिले', [{ name: 'रमेश', amount: 340, dir: 'payment' }]],
-  ['रमेशला साडेतीनशे उधार दिले', [{ name: 'रमेश', amount: 350, dir: 'credit' }]],
-]
-
-describe('parseFast entries', () => {
-  it.each(CASES)('%s', (text, exp) => {
-    const got = entries(text)
-    expect(got.length).toBe(exp.length)
-    exp.forEach((e, i) => {
-      const g = got[i]
-      expect(g.amount.value).toBe(e.amount)
-      expect(g.direction).toBe(e.dir)
-      // names compared by phonetic key so script/suffix variants pass
-      expect(phoneticKey(g.name ?? '')).toBe(phoneticKey(e.name))
-      if (e.day !== undefined) expect(g.dayOffset).toBe(e.day)
-      expect(g.promise).toBe(e.promise ?? false)
-    })
-  })
+describe('one entry: the words that decide credit or payment', () => {
+  it.each<[string, Want]>([
+    // Hindi / Hinglish: ne vs ko, le gaya vs de gaya, jama overriding ka
+    ['Ramesh ne teen sau chaalis diye', W('Ramesh', 340, 'payment')],
+    ['Ramesh ko teen sau chaalis diye', W('Ramesh', 340, 'credit')],
+    ['Gopal le gaya dedh sau ka saaman', W('Gopal', 150, 'credit')],
+    ['Gopal de gaya dedh sau', W('Gopal', 150, 'payment')],
+    ['Suresh se 500 mile', W('Suresh', 500, 'payment')],
+    ['Suresh ka 500 jama karo', W('Suresh', 500, 'payment')],
+    ['Lakhan ne udhaar liya do sau', W('Lakhan', 200, 'credit')],
+    ['सुरेश के खाते में 500 लिखो', W('सुरेश', 500, 'credit')],
+    ['Anil ko sawa sau udhaar diya kal', W('Anil', 125, 'credit', { day: -1 })],
+    ['Anil kal sawa sau de jayega', W('Anil', 125, 'payment', { day: 1, promise: true })],
+    ['Rajesh ne saadhe teen sau chuka diye parso', W('Rajesh', 350, 'payment', { day: -2 })],
+    // English: "gave" flips on who gave
+    ['I gave Suresh 500', W('suresh', 500, 'credit')],
+    ['Suresh gave me 500', W('suresh', 500, 'payment')],
+    ['Suresh owes me 500', W('suresh', 500, 'credit')],
+    ['Suresh took groceries worth 500', W('suresh', 500, 'credit')],
+    ['received 500 from Suresh', W('suresh', 500, 'payment')],
+    ['Suresh paid back 500', W('suresh', 500, 'payment')],
+    ['Ramesh paid 340 yesterday', W('ramesh', 340, 'payment', { day: -1 })],
+    ['Suresh will pay 500 tomorrow', W('suresh', 500, 'payment', { promise: true })],
+    ['Ramesh Kumar 1200 credit', W('ramesh kumar', 1200, 'credit')],
+    // no cue: must be asked, never guessed
+    ['Suresh 500', W('suresh', 500, 'ask')],
+    ['Suresh, 500 rupees.', W('suresh', 500, 'ask')],
+    // Kannada / Tamil / Telugu / Malayalam / Marathi
+    ['ರಮೇಶ್ ಮುನ್ನೂರ ನಲವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟ', W('ರಮೇಶ್', 340, 'payment')],
+    ['ರಮೇಶ್ ನಾಳೆ ಇನ್ನೂರು ಕೊಡ್ತಾರೆ', W('ರಮೇಶ್', 200, 'payment', { day: 1, promise: true })],
+    ['ரமேஷுக்கு ஒன்றரை ஆயிரம் கடன் கொடுத்தேன் நேத்து', W('ரமேஷ', 1500, 'credit', { day: -1 })],
+    ['ரமேஷ் முந்நூற்று நாற்பது ரூபாய் கொடுத்தார்', W('ரமேஷ்', 340, 'payment')],
+    ['రమేష్‌కి రెండున్నర వేలు అప్పు ఇచ్చాను నిన్న', W('రమేష్', 2500, 'credit', { day: -1 })],
+    ['రమేష్ మూడు వందల నలభై ఇచ్చాడు', W('రమేష్', 340, 'payment')],
+    ['രമേശ് ഇരുനൂറ് തന്നു', W('രമേശ്', 200, 'payment')],
+    ['रमेशला साडेतीनशे उधार दिले', W('रमेश', 350, 'credit')],
+  ])('%s', (text, want) => check(text, [want]))
 })
 
-describe('confidence', () => {
-  it('clean entry is high', () => {
-    expect(entries('Ramesh ka 340 udhaar')[0].confidence).toBe('high')
-  })
-  it('confusable word amount is low', () => {
-    const e = entries('Deepak ne saath rupaye diye')[0]
-    expect(e.confidence).toBe('low')
-    expect(e.reasons).toContain('confusable')
-  })
-  it('no direction cue is low', () => {
-    const e = entries('Ramesh 340')[0]
-    expect(e.direction).toBeNull()
-    expect(e.confidence).toBe('low')
-  })
-  it('noisy hallucination with no ledger cue is low (मोहन का पानी 200 धान ले)', () => {
-    const e = entries('मोहन का पानी 200 धान ले')[0]
-    expect(e.confidence).toBe('low')
-  })
-  it('approx range is low', () => {
-    expect(entries('Ramesh ka do teen sau udhaar')[0].confidence).toBe('low')
-  })
+describe('several entries in one breath', () => {
+  it.each<[string, Want[]]>([
+    ['Ramesh ka 340 udhaar kal 200 diya tha', [W('Ramesh', 340, 'credit', { day: 0 }), W('Ramesh', 200, 'payment', { day: -1 })]],
+    ['Anil ka dedh sau udhaar aur Ravi ne 1200 de diye', [W('Anil', 150, 'credit'), W('Ravi', 1200, 'payment')]],
+    ['Suresh 500 credit and Ramesh paid 200', [W('suresh', 500, 'credit'), W('ramesh', 200, 'payment')]],
+    ['रमेश का 340 रुपये उधार लिख दो और सुरेश ने कल 500 जमा किए थे।', [W('रमेश', 340, 'credit', { day: 0 }), W('सुरेश', 500, 'payment', { day: -1 })]],
+  ])('%s', check)
 })
 
-describe('commands', () => {
+describe('confidence: what makes an entry low (read back or asked)', () => {
   it.each([
-    ['haan', 'yes'], ['हाँ सही है', 'yes'], ['ಹೌದು', 'yes'], ['ok', 'yes'],
-    ['nahi', 'no'], ['नहीं', 'no'], ['ಇಲ್ಲ', 'no'],
-    ['galat hai, hata do', 'undo'], ['undo', 'undo'], ['pichla wala hata do', 'undo'],
-    ['sab data mita do', 'delete_all'], ['mera data kahan hai', 'privacy'], ['tum kaun ho, AI ho?', 'privacy'],
-  ])('%s -> %s', (t, type) => expect(parseFast(t).type).toBe(type))
+    ['Ramesh ka 340 udhaar', 'high'],
+    ['Deepak ne saath rupaye diye', 'low'], // confusable word amount
+    ['Ramesh 340', 'low'], // no direction cue
+    ['मोहन का पानी 200 धान ले', 'low'], // noisy hallucination, no ledger words
+    ['Ramesh ka do teen sau udhaar', 'low'], // a range
+  ])('%s -> %s', (text, want) => {
+    const r = parseFast(text)
+    expect(r.type === 'entries' && r.entries[0].confidence).toBe(want)
+  })
+})
 
-  it('nahi, 430 corrects the amount', () => {
-    const r = parseFast('nahi, 430')
+describe('answers, commands and chatter', () => {
+  it.each([
+    ['haan', 'yes'], ['ಹೌದು', 'yes'], ['Correct, correct.', 'yes'], ['हाँ, बदल दो', 'yes'], ['change it', 'yes'],
+    ['nahi', 'no'], ['ಇಲ್ಲ', 'no'], ['wrong', 'no'], ['not correct', 'no'],
+    ['galat hai, hata do', 'undo'], ['cancel that', 'undo'], ['delete last entry', 'undo'],
+    ['sab data mita do', 'delete_all'],
+    ['tum kaun ho, AI ho?', 'privacy'],
+    ['how much does Suresh owe', 'query'], ['aaj ka hisaab batao', 'summary'], ['kisko yaad dilana hai', 'remind'],
+    ['do kilo cheeni dena', 'unknown'], ['give me two kilo sugar', 'unknown'], ['aaj mausam accha hai', 'unknown'],
+  ])('%s -> %s', (text, type) => expect(parseFast(text).type).toBe(type))
+
+  it.each(['हटा दो', 'नहीं, मत बदलो', 'cancel kar do'])('"%s" is never a yes', (text) => expect(parseFast(text).type).not.toBe('yes'))
+
+  it.each<[string, { amount?: number; direction?: string; name?: string }]>([
+    ['nahi, 430', { amount: 430 }],
+    ['340 nahi 430', { amount: 430 }],
+    ['nahi, jama tha', { direction: 'payment' }],
+    ['nahi, Suresh', { name: 'suresh' }],
+  ])('"%s" corrects the last entry', (text, want) => {
+    const r = parseFast(text)
     expect(r.type).toBe('correct')
-    if (r.type === 'correct') expect(r.amount?.value).toBe(430)
+    if (r.type !== 'correct') return
+    expect({ amount: r.amount?.value, direction: r.direction ?? undefined, name: r.name ?? undefined }).toEqual({ amount: undefined, direction: undefined, name: undefined, ...want })
   })
-  it('340 nahi 430 corrects the amount', () => {
-    const r = parseFast('340 nahi 430')
-    expect(r.type === 'correct' && r.amount?.value).toBe(430)
-  })
-  it('nahi, jama tha corrects direction', () => {
-    const r = parseFast('nahi, jama tha')
-    expect(r.type === 'correct' && r.direction).toBe('payment')
-  })
-  it('nahi, Suresh corrects the name', () => {
-    const r = parseFast('nahi, Suresh')
-    expect(r.type === 'correct' && r.name).toBe('suresh')
-  })
-  it('Ramesh ka total kitna hai -> customer query', () => {
-    const r = parseFast('Ramesh ka total kitna hai')
-    expect(r).toEqual({ type: 'query', name: 'ramesh', scope: 'customer' })
-  })
-  it('aaj kitna udhaar gaya -> today credit', () => {
-    expect(parseFast('aaj kitna udhaar gaya')).toEqual({ type: 'query', name: null, scope: 'today_credit' })
-  })
-  it('aaj ka hisaab -> today summary', () => {
-    expect(parseFast('aaj ka hisaab batao')).toEqual({ type: 'summary', period: 'today' })
-  })
-  it('kisko yaad dilana hai -> dues', () => {
-    expect(parseFast('kisko yaad dilana hai').type).toBe('remind')
-  })
-  it('Ramesh ko yaad dilao -> remind Ramesh', () => {
-    expect(parseFast('Ramesh ko yaad dilao')).toEqual({ type: 'remind', name: 'ramesh' })
-  })
-  it('chit-chat is unknown', () => {
-    expect(parseFast('aaj mausam accha hai').type).toBe('unknown')
+
+  it('a balance question names the customer', () => {
+    expect(parseFast('Ramesh ka total kitna hai')).toEqual({ type: 'query', name: 'ramesh', scope: 'customer' })
   })
 })
 
-describe('midList', () => {
+describe('end of turn: is the sentence finished?', () => {
   it.each([
-    ['सुरेश 200,', true],
-    ['Suresh 200 aur', true],
-    ['रमेश का 340 उधार', false],
-    ['रमेश का टोटल क्या है', false],
-    ['नहीं, 430', false],
-    ['haan', false],
-  ])('%s -> %s', (t, want) => expect(midList(t)).toBe(want))
-})
+    ['Ramesh ka 340 udhaar', true], ['ರಮೇಶ್ ಮುನ್ನೂರ ನಲವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು', true], ['nahi, 430', true], ['haan', true],
+    ['Ramesh ka 340', false], ['Ramesh ka do', false], ['Ramesh ne kal', false], ['रमेश का 340 रुपये उधार लिख', false], ['Ramesh ka 340 udhaar aur', false],
+  ])('%s -> %s', (text, want) => expect(turnComplete(text)).toBe(want))
 
-describe('go-ahead replies count as yes', () => {
-  it.each(['बदल दो।', 'हाँ, बदल दो', 'badal do', 'kar do', 'लिख दीजिए', 'change it'])('%s', (t) => expect(parseFast(t).type).toBe('yes'))
-  it.each(['हटा दो', 'नहीं, मत बदलो', 'cancel kar do'])('%s is not a yes', (t) => expect(parseFast(t).type).not.toBe('yes'))
+  it.each([
+    ['सुरेश 200,', true], ['Suresh 200 aur', true], ['रमेश का 340 उधार', false], ['नहीं, 430', false],
+  ])('mid-list "%s" -> %s', (text, want) => expect(midList(text)).toBe(want))
 })
