@@ -10,6 +10,7 @@ import path from 'node:path'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
+import { MultiStt } from '../server/gnani/multi.js'
 import { TtsPool } from '../server/gnani/tts.js'
 import { transcribeRest } from '../server/gnani/rest.js'
 import { LLM_MODEL, readWithLlm, warmUp } from '../server/parse/llm.js'
@@ -98,16 +99,22 @@ wss.on('connection', (ws, req) => {
   const tts = new TtsPool(key, 2, L.child({ part: 'tts' }))
   const send = (m: ServerMsg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
   const session = new Session({
-    openStt: (locale, keyterms, cb) =>
-      new SttStream(key, locale, keyterms, {
+    // Listen in the session's language plus LISTEN_LANGS (default English, Hindi, Kannada) at once,
+    // so any of them works in any session; LISTEN_LANGS=off listens in the session's language only.
+    openStt: (locale, keyterms, cb) => {
+      const extra = (process.env.LISTEN_LANGS ?? 'en-IN,hi-IN,kn-IN').split(',').map((x) => x.trim()).filter((x) => x && x !== 'off')
+      const events = {
         onSpeechStart: cb.onSpeechStart,
         onSpeechEnd: cb.onSpeechEnd,
         onPartial: cb.onPartial,
-        onFinal: (t, l) => cb.onFinal?.(t, l),
+        onFinal: (t: string, l?: string) => cb.onFinal?.(t, l),
         onError: cb.onError,
         onClose: cb.onClose,
         onOpen: cb.onOpen,
-      }),
+      }
+      if (!extra.length) return new SttStream(key, locale, keyterms, events)
+      return new MultiStt([locale, ...extra], (l, ev) => new SttStream(key, l, keyterms, ev), { ...events, pick: cb.pick })
+    },
     speak: (text, locale, onAudio, signal, speed) => tts.speak(text, locale, onAudio, signal, speed),
     warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
     llm: async (text, ctx) => {

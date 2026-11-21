@@ -32,6 +32,8 @@ export interface SttCallbacks {
   onError?: (msg: string) => void
   onClose?: (code: number) => void
   onOpen?: () => void
+  /** Several languages heard the same utterance: the index of the transcript to use. */
+  pick?: (heard: { text: string; locale: string }[]) => number
 }
 export interface SessionDeps {
   openStt: (locale: string, keyterms: string[], cb: SttCallbacks) => SttLike
@@ -185,6 +187,8 @@ export class Session {
   private history: string[] = []
   /** the customer the conversation is about right now */
   private focusCid: string | null = null
+  /** the last utterance as heard in each language (MultiStt), for the turn record */
+  private lastHeard: { text: string; locale: string }[] | null = null
   /** where the turn being handled came from (taps and typed text arrive as 'tap') */
   private turnSrc: 'voice' | 'tap' | 'resend' = 'voice'
   /** when the open question was asked: stale questions expire */
@@ -336,6 +340,7 @@ export class Session {
         }
       },
       onFinal: (t, l) => this.onFinal(t, l),
+      pick: (heard) => this.pickHeard(heard),
       onError: (m) => {
         // a stream torn down with its session is not worth a warning
         if (this.closed) this.log.debug('stt_error_after_close', { message: m })
@@ -783,8 +788,10 @@ export class Session {
         : {}),
       parseMs, llmMs, replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0, cached: spoken?.cached ?? false,
     })
+    const heardAll = _src === 'voice' ? this.lastHeard : null
+    this.lastHeard = null
     this.deps.record?.({
-      turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, intent: intent.type, path,
+      turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, heardAll, intent: intent.type, path,
       reply: reply?.parts.join(' ') ?? null, pending: this.pending?.kind ?? null,
       ops: reply?.ops ?? [], snrDb: t?.snrDb ?? null, noisy: t?.noisy ?? null,
       finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null,
@@ -1514,6 +1521,39 @@ export class Session {
     }
     const first = drafts.find((d) => d.direction)
     return { parts: [first ? sayMore(this.lang).batchAsk(this.batchItems(drafts), first.direction!) : R.didNotCatch()], ops: [] }
+  }
+
+  /**
+   * The same words heard in several languages (MultiStt): use the one that reads best as ledger
+   * talk. A full entry beats a partial one, a known customer beats an unknown word, and ties go
+   * to the session's language (listed first). "Ramesh teen sukha" (English stream) loses to
+   * "रमेश का तीन सौ उधार" (Hindi stream).
+   */
+  pickHeard(heard: { text: string; locale: string }[]): number {
+    const scores = heard.map((h) => this.readScore(h.text))
+    let best = 0
+    for (let i = 1; i < scores.length; i++) if (scores[i] > scores[best]) best = i
+    this.lastHeard = heard
+    if (best !== 0) this.log.info('heard_in_other_language', { chose: heard[best].locale, heard, scores })
+    return best
+  }
+
+  /** How well a transcript reads as something said to the ledger (higher is better). */
+  private readScore(text: string): number {
+    const i = parseFast(text)
+    const known = (n: string | null) => !!n && (!!this.lookup(n) || !!this.knownWithin(n))
+    switch (i.type) {
+      case 'entries':
+        return 2 + (i.entries.every((e) => e.direction || e.promise) ? 1 : 0) + (i.entries.every((e) => known(e.name)) ? 1 : 0)
+      case 'unknown':
+        if (mentionsSettle(text) && this.candidates(text).length) return 2
+        return this.knownWithin(text) ? 1 : mentionsMoney(text) ? 0.5 : 0
+      case 'yes':
+      case 'no':
+        return this.pending ? 2 : 0.5
+      default:
+        return 2
+    }
   }
 
   /** One word that answers nothing and has no money in it: recogniser noise, or a word to someone else. */
