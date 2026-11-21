@@ -28,7 +28,7 @@ const wss = new WebSocketServer({ server, maxPayload: 1 << 20 })
 let warmed = false
 
 /** Browsers always send Origin: only our own pages may open a session (scripts without Origin are the eval harness). */
-const ALLOWED_ORIGIN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const ALLOWED_ORIGIN = /^https:\/\/(voice-khata|khatabhai)[a-z0-9-]*\.vercel\.app$|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const perIp = new Map<string, number>()
 /**
  * Abuse guard. A phone holds one session (two for a few seconds while it swaps sockets). The
