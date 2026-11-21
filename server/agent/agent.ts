@@ -61,8 +61,11 @@ function userTurn(ctx: AgentContext): string {
   ].join('\n')
 }
 
+/** The model that hears audio: the measured winner of eval/audio_latency.ts unless AGENT_AUDIO_MODEL says otherwise. */
+const AUDIO_MODEL = () => process.env.AGENT_AUDIO_MODEL || 'gemini-3.5-flash-lite'
+
 export async function decide(ctx: AgentContext, tools: GeminiTool[], audio?: Buffer): Promise<{ calls: ToolCall[]; ms: number }> {
-  const r = await geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio)
+  const r = await geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio, audio ? { model: AUDIO_MODEL() } : {})
   // a tool we do not have is never run
   return { calls: r.calls.filter((c): c is ToolCall => isToolName(c.name)), ms: r.ms }
 }

@@ -76,6 +76,9 @@ const UTT_AUDIO_MAX = 20 * 16000 * 2
 /** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
 const STT_REFRESH_MS = 14 * 60_000
 
+/** Total time the agent may take for one turn, the audio retry included. */
+const AUDIO_BUDGET_MS = 2500
+
 export class Session {
   lang: Lang = 'hi'
   readonly ledger: LedgerCore
@@ -745,11 +748,32 @@ export class Session {
       ({ reply: { parts: [meta.noisy ? R.noisyRepeat() : R.didNotCatch()], ops: [] }, notForMe: false, ms: undefined, extra: [] })
     const l0 = this.now()
     let calls: ToolCall[]
+    let fromAudio = false
     try {
       if (!this.deps.agent) throw new Error('no agent')
-      const r = await this.deps.agent(this.agentContext(heard), t?.pcm)
+      const ctx = this.agentContext(heard)
+      const r = await this.deps.agent(ctx, undefined) // the words first: the audio only when they are unclear
       calls = r.calls
       this.log.info('agent', { text, ms: r.ms, calls: calls.map((c) => c.name) })
+      // unclear words, a spoken turn: let the model hear the audio, if the budget still allows
+      if (calls.length && calls.every((c) => c.name === 'unclear') && t?.pcm?.length) {
+        const left = AUDIO_BUDGET_MS - Math.max(r.ms, this.now() - l0)
+        if (left > 0) {
+          let timer: ReturnType<typeof setTimeout> | undefined
+          try {
+            const a = await Promise.race([
+              this.deps.agent(ctx, t.pcm),
+              new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error('audio budget')), left) }),
+            ])
+            this.log.info('agent_audio', { text, ms: a.ms, calls: a.calls.map((c) => c.name) })
+            if (r.ms + a.ms <= AUDIO_BUDGET_MS) { calls = a.calls; fromAudio = true }
+          } catch (e) {
+            this.log.warn('agent_audio_failed', { text, error: e })
+          } finally {
+            clearTimeout(timer)
+          }
+        }
+      }
     } catch (e) {
       this.log.error('agent_failed', { text, ms: this.now() - l0, error: e })
       return fail()
@@ -760,7 +784,7 @@ export class Session {
     const merged: Reply = { parts: [], ops: [] }
     const extra: ServerMsg[] = []
     for (const call of calls) {
-      const r = runTool(this.ledger, call, { ...meta, transcript: text, heard: spoken })
+      const r = runTool(this.ledger, call, { ...meta, transcript: text, heard: spoken, fromAudio })
       merged.parts.push(...r.parts)
       for (const op of r.ops) this.ledger.applyLocal(op)
       merged.ops.push(...r.ops)

@@ -124,7 +124,8 @@ const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase())
 const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
 
 /** The sentence the tool was called for, and every language stream's reading of it (when there are several). */
-export type ToolMeta = TurnMeta & { transcript: string; heard?: string[] }
+/** `fromAudio`: the reading came from the model hearing the audio, not from the transcripts: every write is read back. */
+export type ToolMeta = TurnMeta & { transcript: string; heard?: string[]; fromAudio?: boolean }
 
 /** Args only our own "which one" continuations may set (`<slot>__cid`, `_new`): never taken from the model. */
 const internalKey = (k: string) => k.startsWith('_') || k.includes('__')
@@ -255,8 +256,11 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         entries: (Array.isArray(a.entries) ? a.entries : []) as LlmReading['entries'],
         sure: a.sure !== false,
       }
-      const intent = validate(text, raw, contextAmounts, recent.length)
+      // an audio reading may carry amounts no transcript has; it is read back (hard reason) before any write
+      const known = meta.fromAudio ? [...contextAmounts, ...(raw.entries ?? []).map((e) => e?.amount).filter((v): v is number => typeof v === 'number')] : contextAmounts
+      const intent = validate(text, raw, known, recent.length)
       if (intent.type !== 'entries') return notCaught()
+      if (meta.fromAudio) for (const e of intent.entries) { e.reasons = [...e.reasons, 'from-audio']; e.confidence = 'low' }
       return core.addEntries(intent, text, tm)
     }
     case 'change_entry': {
@@ -267,9 +271,9 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         modify: { ref, amount: num(a.new_amount), direction: a.new_direction === 'credit' || a.new_direction === 'payment' ? a.new_direction : null, name: null, remove: false },
       }
       // the new amount must have been heard, like any amount
-      const intent = validate(text, reading, contextAmounts, entries.length)
+      const intent = validate(text, reading, meta.fromAudio && num(a.new_amount) != null ? [...contextAmounts, num(a.new_amount)!] : contextAmounts, entries.length)
       if (intent.type !== 'modify') return notCaught()
-      return core.modifyEntry(intent)
+      return core.modifyEntry(intent, meta.fromAudio ? { ask: true } : undefined)
     }
     case 'remove_entry': {
       const ref = findRef()

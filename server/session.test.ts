@@ -354,6 +354,38 @@ describe('the model (LLM) never introduces money that was not said', () => {
   })
 })
 
+describe('audio for unclear moments', () => {
+  const unclear = () => callsOf({ name: 'unclear', args: {} })
+
+  it('unclear text is retried once with the audio and the audio reading is used (read back)', async () => {
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: (_c, audio) => (audio ? addEntry('Suresh', 300, 'credit') : unclear()) })
+    await h.turn('mumble mumble')
+    expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false, true])
+    expect(h.ops()).toEqual([]) // nothing written until the shopkeeper says yes
+    expect(h.asks).toBe('confirm')
+    await h.turn('haan')
+    expect(h.written()).toEqual([['s', 300, 'credit']])
+  })
+
+  it('audio retry over budget asks the shopkeeper', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      lang: 'en',
+      agent: (_c, audio) => (audio ? addEntry('Suresh', 300, 'credit') : { ms: 2600, calls: unclear().calls }),
+    })
+    await h.turn('mumble mumble')
+    expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false])
+    expect(h.ops()).toEqual([])
+    expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+  })
+
+  it('still unclear with the audio asks the shopkeeper', async () => {
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: unclear })
+    await h.turn('mumble mumble')
+    expect(h.agentCalls.length).toBe(2)
+    expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+  })
+})
+
 describe('lists', () => {
   const three = () => [cust('r', 'Ramesh'), cust('s', 'Suresh'), cust('g', 'Geeta')]
 
@@ -695,12 +727,12 @@ describe('understanding path: instant for a plain entry, the agent for everythin
     expect(h.said).toHaveLength(1)
   })
 
-  it('the agent receives every language stream, and the audio', async () => {
+  it('the agent receives every language stream (audio only on the unclear retry)', async () => {
     const heard = [{ locale: 'hi-IN', text: 'रमेश का हिसाब' }, { locale: 'en-IN', text: 'Ramesh ka hisaab' }]
     const h = harness(people(), { agent: () => callsOf({ name: 'show_customer', args: { name: 'Ramesh' } }) })
     await h.turn('रमेश का हिसाब', false, heard)
     expect(h.agentCalls[0].ctx.heard).toEqual(heard)
-    expect(h.agentCalls[0].audio?.length).toBeGreaterThan(0)
+    expect(h.agentCalls[0].audio).toBeUndefined()
   })
 
   it('not_for_me writes nothing, says nothing and marks not_entry', async () => {
