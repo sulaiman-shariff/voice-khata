@@ -288,6 +288,15 @@ _(to be filled in from the owner's testing)_
    - Open a customer who owes money and enter **the tester number** (the joined one).
    - Turn on Adult + Allow reminders.
    - Tap **Send reminder**. The WhatsApp message should arrive within seconds.
+**Found in testing (22 Nov): the new trial sender cannot send our text.**
+- **The error:** Twilio's newer **"Try out WhatsApp"** trial sender (`+1 737 221 2163`, `join twilio-trial`) only accepts Twilio's own sample template. A message with our text fails with **21654 "ContentSid Required"**.
+- **No way around it on trial:** making our own template needs the Content API, which answers *"not available on a Trial account"*.
+- **The ways forward:**
+  - **(a) The classic WhatsApp Sandbox, free.** In the Console look for **Messaging → Try it out → Send a WhatsApp message**, or **WhatsApp sandbox settings**. Number `+1 415 523 8886`, with your own two-word code like `join bright-river`. The sandbox accepts free-form text within 24 h of the join, so the app works unchanged. Set `TWILIO_WHATSAPP_FROM=whatsapp:+14155238886` and join from the phone.
+  - **(b) Upgrade Twilio** (add credit). Then use the sandbox, or create a template (`TWILIO_CONTENT_SID`, variables {{1}} name, {{2}} amount, {{3}} shop) and get it approved.
+  - **(c) For the demo:** the toast's **WhatsApp** button sends the exact reminder from the shop's own WhatsApp, to any number.
+- The app now explains 21654 in plain words.
+
 7. **Production, later:** register your own WhatsApp sender in Twilio, get a message **template** approved (variables {{1}} name, {{2}} amount, {{3}} shop), and set `TWILIO_WHATSAPP_FROM` and `TWILIO_CONTENT_SID`. Then any customer can be reminded at any time, with no join and no 24 h window. On Vercel, add the same env vars in the project settings.
 
 ### How it is built

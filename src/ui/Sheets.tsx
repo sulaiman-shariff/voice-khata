@@ -183,6 +183,7 @@ const TWILIO_HINT: Record<number, string> = {
   21610: 'This customer replied STOP, so Twilio will not message them.',
   63007: 'The Twilio WhatsApp sender in .env (TWILIO_WHATSAPP_FROM) is not right.',
   20003: 'Twilio rejected the Account SID / Auth Token in .env.',
+  21654: "This Twilio trial number only sends Twilio's own sample template, not your text. Use the WhatsApp Sandbox number (+1 415 523 8886) or upgrade Twilio — see update.md. Until then, tap WhatsApp to send it yourself.",
 }
 
 /** One toast per reminder attempt, in the shop's language; Twilio errors say why, and offer the shop's own WhatsApp. */
