@@ -2,27 +2,31 @@
 // Wake-word inference worker: onnxruntime-web WASM backend, single thread.
 // In:  { type:'init', modelUrl, threshold } | { type:'frame', buf: ArrayBuffer (Int16 PCM) } | { type:'reset' }
 // Out: { type:'ready' } | { type:'error', message } | { type:'wake', score }
+// The per-chunk inference (state feedback, warm-up, threshold, debounce) lives in stream.ts.
 import * as ort from 'onnxruntime-web/wasm'
 import { Chunker, MODEL_CONTRACT, toModelInput } from './features'
+import { WakeStream, type MakeTensor, type SessionLike } from './stream'
 
 ort.env.wasm.numThreads = 1
 ort.env.wasm.proxy = false
 
-let session: ort.InferenceSession | null = null
-let threshold: number = MODEL_CONTRACT.threshold
+let stream: WakeStream | null = null
 let busy = false
 const chunker = new Chunker()
 const queue: Int16Array[] = []
 
+const makeTensor: MakeTensor = (type, data, dims) =>
+  type === 'int64' ? new ort.Tensor('int64', data as BigInt64Array, dims) : new ort.Tensor('float32', data as Float32Array, dims)
+
 async function init(modelUrl: string, thr: number) {
   try {
-    threshold = thr
     const res = await fetch(modelUrl)
     const type = res.headers.get('content-type') ?? ''
     // Vite's dev/preview server answers a missing file with index.html (200).
     if (!res.ok || type.includes('text/html')) throw new Error(`model not available (${res.status})`)
     const bytes = new Uint8Array(await res.arrayBuffer())
-    session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] })
+    const session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] })
+    stream = await WakeStream.open(session as unknown as SessionLike, makeTensor, { threshold: thr })
     postMessage({ type: 'ready' })
   } catch (e) {
     postMessage({ type: 'error', message: e instanceof Error ? e.message : String(e) })
@@ -30,18 +34,15 @@ async function init(modelUrl: string, thr: number) {
 }
 
 async function drain() {
-  if (busy || !session) return
+  if (busy || !stream) return
   busy = true
   try {
     while (queue.length) {
       // If inference falls behind, keep only the newest chunks.
       if (queue.length > 8) queue.splice(0, queue.length - 8)
-      const { data, dims } = toModelInput(queue.shift()!)
-      const name = MODEL_CONTRACT.inputName ?? session.inputNames[0]
-      const out = await session.run({ [name]: new ort.Tensor('float32', data, dims) })
-      const outName = MODEL_CONTRACT.outputName ?? session.outputNames[0]
-      const score = Number((out[outName].data as Float32Array)[0])
-      if (score >= threshold) postMessage({ type: 'wake', score })
+      const { data } = toModelInput(queue.shift()!)
+      const { score, wake } = await stream.step(data)
+      if (wake) postMessage({ type: 'wake', score })
     }
   } catch (e) {
     postMessage({ type: 'error', message: e instanceof Error ? e.message : String(e) })
@@ -56,6 +57,7 @@ self.onmessage = (e: MessageEvent) => {
   else if (m.type === 'reset') {
     chunker.reset()
     queue.length = 0
+    stream?.reset()
   } else if (m.type === 'frame' && m.buf) {
     chunker.push(new Int16Array(m.buf), (c) => queue.push(c))
     void drain()

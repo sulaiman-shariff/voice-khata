@@ -1,17 +1,39 @@
-// Model-specific glue, isolated so the model task only edits this file.
-// PLACEHOLDER contract: raw 16 kHz audio in 80 ms (1280-sample) chunks, float32 in [-1, 1],
-// shape [1, chunkSamples], one score out. If the trained model needs mel/embedding features,
-// implement them in toModelInput() and update MODEL_CONTRACT.
+// Model-specific glue for public/wakeword/khatabhai.onnx (LiveKit WakeWord, streaming).
+// Contract (matches livekit-wakeword client/js/src/model.ts):
+//  - 16 kHz mono float32 in [-1, 1] (int16 / 32768), fed in 1280-sample (80 ms) chunks; the
+//    model does its own feature extraction.
+//  - Stateful: inputs `chunk` [1,1280] + state tensors; every output `<name>_out` is fed back as
+//    input `<name>` on the next call. Initial state is zeros (shapes from the model's input
+//    metadata), then 25 silent chunks of warm-up; the warmed-up state is what reset() restores.
+//  - Read `score` [1]; wake at >= 0.5, at most once per 2 s (and the state is reset after a wake).
 
 export const MODEL_CONTRACT = {
   sampleRate: 16000,
   /** Samples consumed per inference step (hop). */
   chunkSamples: 1280,
-  /** null = use the model's first input / first output. */
-  inputName: null as string | null,
-  outputName: null as string | null,
+  /** Audio input name; every other input is a state tensor. */
+  chunkInput: 'chunk',
+  /** Score output name; every other output is `<state>_out`. */
+  scoreOutput: 'score',
+  stateOutSuffix: '_out',
+  /** State inputs of the shipped model (informational: shapes are read from the model itself). */
+  stateInputs: {
+    audio: { type: 'float32', shape: [1, 352] },
+    sub0: { type: 'float32', shape: [1, 1, 40, 1] },
+    sub1: { type: 'float32', shape: [1, 64, 20, 1] },
+    sub2: { type: 'float32', shape: [1, 64, 10, 1] },
+    k: { type: 'float32', shape: [4, 1, 4, 32, 36] },
+    v: { type: 'float32', shape: [4, 1, 4, 32, 36] },
+    conv: { type: 'float32', shape: [4, 1, 144, 14] },
+    ctx: { type: 'float32', shape: [1, 15, 96] },
+    step: { type: 'int64', shape: [1] },
+  },
+  /** Silent chunks run once after loading (2 s); their end state is the reset state. */
+  warmupChunks: 25,
   /** Default detection threshold; callers may override. */
   threshold: 0.5,
+  /** At most one wake per this much audio. */
+  debounceMs: 2000,
 }
 
 export interface ModelInput {
