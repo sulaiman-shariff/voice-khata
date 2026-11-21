@@ -129,7 +129,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
 }
 
 export function SettingsSheet({ store, open, t, onClose, onChanged }: {
-  store: KhataStore; open: boolean; t: UiStrings; onClose: () => void; onChanged: (p: { lang?: Lang; handsFree?: boolean; fastSpeech?: boolean; readBackAll?: boolean }) => void
+  store: KhataStore; open: boolean; t: UiStrings; onClose: () => void; onChanged: (p: { lang?: Lang; handsFree?: boolean; speed?: 0.8 | 1 | 1.2 }) => void
 }) {
   const st = store.settings
   const [name, setName] = useState(st.shopName)
@@ -152,11 +152,8 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
           </label>
           <label className="flex items-center justify-between">
             <span>{t.fastSpeech}</span>
-            <Switch checked={!!st.fastSpeech} onCheckedChange={(v) => void store.updateSettings({ fastSpeech: v }).then(() => onChanged({ fastSpeech: v }))} />
-          </label>
-          <label className="flex items-center justify-between">
-            <span>{t.readBackAll}</span>
-            <Switch checked={!!st.readBackAll} onCheckedChange={(v) => void store.updateSettings({ readBackAll: v }).then(() => onChanged({ readBackAll: v }))} />
+            {/* faster (1.2) or normal; a slower speed is set by voice ("dheere bolo") and shows as off */}
+            <Switch checked={st.speed === 1.2} onCheckedChange={(v) => { const speed = v ? 1.2 : 1; void store.updateSettings({ speed }).then(() => onChanged({ speed })) }} />
           </label>
           <label className="flex items-center justify-between">
             <span>{t.debugLogs}</span>

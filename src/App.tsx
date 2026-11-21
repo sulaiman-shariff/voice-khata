@@ -161,8 +161,7 @@ function Home({ store }: { store: KhataStore }) {
       },
       // settings changed by voice: stored here, and the voice client told (the language is applied by `lang`, the mic stays on)
       setting: (m) => {
-        if (m.key === 'readBack') { const on = m.value === true; void store.updateSettings({ readBackAll: on }); voice.current?.setReadBackAll(on) }
-        else if (m.key === 'fastSpeech') { const on = m.value === true; void store.updateSettings({ fastSpeech: on }); voice.current?.setFastSpeech(on) }
+        if (m.key === 'speed' && (m.value === 0.8 || m.value === 1 || m.value === 1.2)) { const speed = m.value; void store.updateSettings({ speed }); voice.current?.setSpeed(speed) }
         else if (m.key === 'shopName' && typeof m.value === 'string') void store.updateSettings({ shopName: m.value })
       },
       ready: (m) => setReady({ kind: m.kind, cid: m.cid, text: m.text }),
@@ -175,7 +174,7 @@ function Home({ store }: { store: KhataStore }) {
     setOn(true)
     setMicReady(mic)
     try {
-      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll, mic })
+      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, speed: store.settings.speed, mic })
       if (mic) v.wake('tap') // tapping the mic to start also wakes it
       if (!store.settings.firstRunDone) void store.updateSettings({ firstRunDone: true })
     } catch {
@@ -408,7 +407,7 @@ function Home({ store }: { store: KhataStore }) {
         onCustomer={(c) => { setListView(null); setCid(c) }} onEntry={(eid) => { setListView(null); setEntry({ kind: 'edit', eid }) }} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
-        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll); if (p.lang) voice.current?.setLang(p.lang) }} />
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.speed !== undefined) voice.current?.setSpeed(p.speed); if (p.lang) voice.current?.setLang(p.lang) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />
     </div>

@@ -13,10 +13,8 @@ export interface Settings {
   firstRunDone: boolean // AI disclosure already spoken
   handsFree: boolean // true: open mic with server end-of-turn; false: push-to-talk only
   showLatency: boolean
-  /** replies at Timbre speed 1.2 instead of 1.0 (optional: older stored settings lack it) */
-  fastSpeech?: boolean
-  /** read every saved entry back in full instead of a short "noted" */
-  readBackAll?: boolean
+  /** how fast replies are spoken (Timbre speed); optional: older stored settings lack it (see createStore) */
+  speed?: 0.8 | 1 | 1.2
 }
 
 export interface KhataStore {
@@ -70,7 +68,7 @@ export interface VoiceEvents {
   ops(ops: LedgerOp[]): void | Promise<void>
   pending(p: PendingView | null): void
   show(m: Extract<ServerMsg, { type: 'show' }>): void
-  /** The agent changed a setting by voice (readBack, fastSpeech, shopName; the language goes through lang). */
+  /** The agent changed a setting by voice (speed, shopName; the language goes through lang). */
   setting?(m: SettingMsg): void
   /** One-tap card from a tool: a WhatsApp message to send, or the backup. */
   ready?(m: Extract<ServerMsg, { type: 'ready'; kind: unknown }>): void
@@ -96,7 +94,7 @@ export interface VoiceEvents {
 
 export interface VoiceClient {
   /** Ask mic permission + open the socket (`mic: false`: socket only, for typed text; the mic opens on the first wake). Must be called from a user gesture (audio unlock). */
-  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean; readBackAll?: boolean; mic?: boolean }): Promise<void>
+  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; speed?: 0.8 | 1 | 1.2; mic?: boolean }): Promise<void>
   stop(): void
   /** Push-to-talk (works in both modes). */
   pttDown(): void
@@ -111,8 +109,7 @@ export interface VoiceClient {
   /** Send a fresh snapshot after local (non-voice) ledger changes. */
   sendSnapshot(): void
   setHandsFree(on: boolean): void
-  setFastSpeech(on: boolean): void
-  setReadBackAll(on: boolean): void
+  setSpeed(speed: 0.8 | 1 | 1.2): void
   /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
   bargeIn(): void
   /** Wake the agent without the wake word: a tap, or the button held (then call holdEnd). Opens the mic if it is not open yet. */

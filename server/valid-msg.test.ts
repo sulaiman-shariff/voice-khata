@@ -12,7 +12,6 @@ const snapshot = {
 const EXAMPLES: { [K in ClientMsg['type']]: Extract<ClientMsg, { type: K }> } = {
   hello: { type: 'hello', lang: 'hi', snapshot, firstRun: false, ptt: false },
   speed: { type: 'speed', speed: 1 },
-  readback: { type: 'readback', on: true },
   snapshot: { type: 'snapshot', snapshot },
   ptt_start: { type: 'ptt_start' },
   ptt_end: { type: 'ptt_end' },

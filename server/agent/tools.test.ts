@@ -34,7 +34,7 @@ describe('agent tools', () => {
     expect(new Set(names).size).toBe(names.length)
     expect(names).toContain('add_entries')
     expect(names).toContain('unclear')
-    expect(names.length).toBe(30)
+    expect(names.length).toBe(29)
   })
 
   it('add_entries for a known customer with a spoken credit word writes at once and says the new balance', () => {
@@ -380,8 +380,17 @@ describe('agent tools', () => {
     const r = run('set_language', { lang: 'kn' }, 'Kannada mein bolo')
     expect(r.setting).toEqual({ type: 'setting', key: 'lang', value: 'kn' })
     expect(r.parts).toEqual([say('kn').languageSet('ಕನ್ನಡ')])
-    expect(run('set_read_back', { on: true }, 'padh ke sunao').setting).toEqual({ type: 'setting', key: 'readBack', value: true })
-    expect(run('set_speed', { fast: false }, 'dheere bolo').setting).toEqual({ type: 'setting', key: 'fastSpeech', value: false })
+    // slower, back to normal, faster
+    expect(run('set_speed', { speed: 'slower' }, 'dheere bolo').setting).toEqual({ type: 'setting', key: 'speed', value: 0.8 })
+    expect(run('set_speed', { speed: 'normal' }, 'normal speed mein bolo').setting).toEqual({ type: 'setting', key: 'speed', value: 1 })
+    expect(run('set_speed', { speed: 'faster' }, 'tez bolo').setting).toEqual({ type: 'setting', key: 'speed', value: 1.2 })
+    expect(run('set_speed', { speed: 'faster' }, 'tez bolo').parts).toEqual([R.speedSet('faster')])
+    expect(run('set_speed', { fast: true }, 'tez bolo').setting).toBeUndefined() // not a speed: not caught
+  })
+
+  it('there is no read-back setting: every save is spoken in full with the balance', () => {
+    expect(TOOL_SCHEMAS.map((t) => t.name)).not.toContain('set_read_back')
+    expect(TOOL_SCHEMAS.find((t) => t.name === 'set_speed')?.parameters).toMatchObject({ properties: { speed: { enum: ['slower', 'normal', 'faster'] } }, required: ['speed'] })
   })
 
   it('a question left open past the time limit is gone, for the tools too', () => {

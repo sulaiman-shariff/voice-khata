@@ -31,8 +31,6 @@ export function validMsg(m: unknown): m is ClientMsg {
       return x.action === 'yes' || x.action === 'no' || x.action === 'undo'
     case 'speed':
       return x.speed === 0.8 || x.speed === 1 || x.speed === 1.2
-    case 'readback':
-      return typeof x.on === 'boolean'
     case 'ack':
       return Number.isInteger(x.seq)
     case 'ping':

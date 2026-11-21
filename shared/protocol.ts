@@ -62,14 +62,13 @@ export type LedgerOp =
 
 export type ClientMsg =
   | {
-    type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2; readBack?: boolean
+    type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2
     /** the previous session's state (open question, conversation), from its last turn_done */
     resume?: string
     /** a turn whose result never arrived because the connection dropped: handle it again */
     resend?: string
   }
   | { type: 'speed'; speed: 0.8 | 1 | 1.2 }
-  | { type: 'readback'; on: boolean }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'ptt_start' }
   | { type: 'ptt_end' }
@@ -108,7 +107,7 @@ export interface PendingView {
 }
 
 /** A setting the agent changed by voice; the phone applies and stores it. */
-export interface SettingMsg { type: 'setting'; key: 'lang' | 'readBack' | 'fastSpeech' | 'shopName'; value: unknown }
+export interface SettingMsg { type: 'setting'; key: 'lang' | 'speed' | 'shopName'; value: unknown }
 
 export interface TurnMetrics {
   /** ms timestamps relative to the end of speech (energy-detected), negative = before */

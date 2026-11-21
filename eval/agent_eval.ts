@@ -13,7 +13,7 @@ import type { SnapCustomer } from '../shared/protocol.js'
 import { CASES } from './llm_cases.js'
 import { pct } from './llm_cases.js'
 
-type Exp = { tools: string[]; amounts?: number[]; dirs?: (string | null)[]; low?: boolean }
+type Exp = { tools: string[]; amounts?: number[]; dirs?: (string | null)[]; low?: boolean; args?: Record<string, unknown> }
 const E = (tools: string[], o: Partial<Exp> = {}): Exp => ({ tools, ...o })
 
 const CTX: AgentContext = {
@@ -51,9 +51,9 @@ const CONTROL: [string, Exp][] = [
   ['how much does Deepak owe', E(['query_balance', 'show_customer'])],
   ['language Hindi karo', E(['set_language'])],
   ['speak in Kannada', E(['set_language'])],
-  ['dheere bolo', E(['set_speed'])],
-  ['speak faster', E(['set_speed'])],
-  ['entry padh kar mat sunao', E(['set_read_back'])],
+  ['dheere bolo', E(['set_speed'], { args: { speed: 'slower' } })],
+  ['speak faster', E(['set_speed'], { args: { speed: 'faster' } })],
+  ['normal speed mein bolo', E(['set_speed'], { args: { speed: 'normal' } })],
   ['dukaan ka naam Sharma Kirana rakho', E(['set_shop_name'])],
   ['privacy dikhao, ye AI hai kya', E(['open_privacy'])],
   ['backup banao', E(['backup'])],
@@ -91,6 +91,7 @@ function score(calls: ToolCall[], exp: Exp, text: string): { ok: boolean; silent
   const lines = calls.filter((c) => c.name === 'add_entries').flatMap((c) => (Array.isArray(c.args.entries) ? (c.args.entries as Record<string, unknown>[]) : []))
   const written = runCalls(calls, text)
   let ok = !!first && exp.tools.includes(first.name)
+  if (ok && exp.args) ok = Object.entries(exp.args).every(([k, v]) => first.args[k] === v)
   if (ok && first.name === 'add_entries') {
     if (exp.low) ok = written === 0 // a doubtful sentence must not be written without a question
     else {

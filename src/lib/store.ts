@@ -24,7 +24,7 @@ export interface Persistence {
 }
 
 export const defaultSettings = (): Settings => ({
-  lang: null, shopName: 'Meri Dukaan', firstRunDone: false, handsFree: true, showLatency: false, fastSpeech: false, readBackAll: false,
+  lang: null, shopName: 'Meri Dukaan', firstRunDone: false, handsFree: true, showLatency: false, speed: 1,
 })
 
 // ------------------------------------------------------------------ memory persistence (tests)
@@ -141,7 +141,10 @@ export function idbPersistence(): Persistence {
 // ------------------------------------------------------------------ the store
 export async function createStore(p: Persistence): Promise<KhataStore> {
   let records = await p.loadRecords()
-  let settings: Settings = { ...defaultSettings(), ...(await p.loadSettings()) }
+  const stored = await p.loadSettings()
+  let settings: Settings = { ...defaultSettings(), ...stored }
+  // settings stored before `speed`: the old "faster replies" switch
+  if (stored && stored.speed === undefined && (stored as { fastSpeech?: boolean }).fastSpeech === true) settings.speed = 1.2
   const listeners = new Set<() => void>()
   let queue: Promise<unknown> = Promise.resolve()
 

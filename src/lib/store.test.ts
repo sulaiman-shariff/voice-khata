@@ -14,6 +14,16 @@ const entry = (eid: string, cid: string, paise: number, direction: 'credit' | 'p
 })
 
 describe('store', () => {
+  it('settings saved by an older build: "faster replies" becomes speed 1.2, the read-back switch is gone', async () => {
+    const p = memoryPersistence()
+    await p.saveSettings({ lang: 'hi', shopName: 'S', firstRunDone: true, handsFree: true, showLatency: false, fastSpeech: true, readBackAll: true } as never)
+    const s = await createStore(p)
+    expect(s.settings.speed).toBe(1.2)
+    const fresh = await createStore(memoryPersistence())
+    expect(fresh.settings.speed).toBe(1)
+    expect('readBackAll' in fresh.settings).toBe(false)
+  })
+
   it('rename, set_phone and merge ops from the agent are applied', async () => {
     const s = await createStore(memoryPersistence())
     await s.applyOps([cust('c1', 'Ramesh'), cust('c2', 'Rmesh'), entry('e1', 'c1', 10000, 'credit'), entry('e2', 'c2', 5000, 'credit'),

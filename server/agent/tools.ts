@@ -37,7 +37,7 @@ export const TOOL_NAMES = [
   'add_entries', 'change_entry', 'remove_entry', 'undo_last', 'move_entry', 'settle',
   'show_customer', 'show_dues', 'show_history', 'show_today', 'search', 'top_debtors', 'close_view',
   'add_customer', 'rename_customer', 'merge_customers', 'set_phone', 'send_reminder', 'send_statement',
-  'set_language', 'set_read_back', 'set_speed', 'set_shop_name', 'open_privacy', 'backup', 'erase_all',
+  'set_language', 'set_speed', 'set_shop_name', 'open_privacy', 'backup', 'erase_all',
   'answer_question', 'query_balance', 'not_for_me', 'unclear',
 ] as const
 export type ToolName = (typeof TOOL_NAMES)[number]
@@ -95,8 +95,10 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
   { name: 'send_reminder', description: 'Prepare a polite WhatsApp reminder of the balance (only for customers who agreed).', parameters: obj({ name: STR }, ['name']) },
   { name: 'send_statement', description: 'Prepare a WhatsApp statement of a customer\'s entries.', parameters: obj({ name: STR }, ['name']) },
   { name: 'set_language', description: 'Change the language the app speaks.', parameters: obj({ lang: { type: 'string', enum: [...LANGS] } }, ['lang']) },
-  { name: 'set_read_back', description: 'Turn reading each entry back before saving on or off.', parameters: obj({ on: { type: 'boolean' } }, ['on']) },
-  { name: 'set_speed', description: 'Speak faster or slower.', parameters: obj({ fast: { type: 'boolean' } }, ['fast']) },
+  {
+    name: 'set_speed', description: 'How fast the app speaks: slower ("dheere bolo"), normal again, or faster ("tez bolo").',
+    parameters: obj({ speed: { type: 'string', enum: ['slower', 'normal', 'faster'] } }, ['speed']),
+  },
   { name: 'set_shop_name', description: 'Set the shop\'s name.', parameters: obj({ name: STR }, ['name']) },
   { name: 'open_privacy', description: 'Where the data goes, is this an AI, how it works.', parameters: obj({}) },
   { name: 'backup', description: 'Make a backup file of the ledger.', parameters: obj({}) },
@@ -181,6 +183,9 @@ function optionHeard(core: LedgerCore, idx: number, value: string, heard: string
       return false
   }
 }
+
+/** Timbre speed for each set_speed choice */
+const SPEED = { slower: 0.8, normal: 1, faster: 1.2 } as const
 
 /** only an entry written in this session within this long is undone without a question */
 const UNDO_INSTANT_MS = 60_000
@@ -504,13 +509,10 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       // said in the new language: the phone switches with this reply
       return { parts: [say(l).languageSet(LANG_NAME[l])], ops: [], setting: { type: 'setting', key: 'lang', value: l } }
     }
-    case 'set_read_back': {
-      const on = a.on === true
-      return { parts: [R.readBackSet(on)], ops: [], setting: { type: 'setting', key: 'readBack', value: on } }
-    }
     case 'set_speed': {
-      const fast = a.fast === true
-      return { parts: [R.speedSet(fast)], ops: [], setting: { type: 'setting', key: 'fastSpeech', value: fast } }
+      const speed = a.speed === 'slower' || a.speed === 'normal' || a.speed === 'faster' ? a.speed : null
+      if (!speed) return notCaught()
+      return { parts: [R.speedSet(speed)], ops: [], setting: { type: 'setting', key: 'speed', value: SPEED[speed] } }
     }
     case 'set_shop_name': {
       const name = str(a.name)

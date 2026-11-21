@@ -44,7 +44,7 @@ describe('agent tool replies', () => {
   const KEYS = [
     'savedWithBalance', 'showCustomer', 'showDues', 'showHistory', 'showToday', 'searchResult', 'topDebtors', 'closed',
     'customerAdded', 'renamed', 'mergeAsk', 'merged', 'phoneSet', 'reminderReady', 'statementReady', 'noConsent', 'alreadyWritten',
-    'languageSet', 'readBackSet', 'speedSet', 'shopNameSet', 'privacyOpen', 'backupReady', 'eraseAsk', 'eraseType',
+    'languageSet', 'speedSet', 'shopNameSet', 'privacyOpen', 'backupReady', 'eraseAsk', 'eraseType',
     'awakeHello', 'sleeping',
   ]
 
@@ -73,8 +73,8 @@ describe('agent tool replies', () => {
       S.showDues(3, 12500), S.showHistory('Ramesh', 4), S.showToday(10, 20), S.searchResult('milk', 2), S.searchResult('milk', 0),
       S.topDebtors(['Ramesh', 'Suresh']), S.topDebtors([]), S.closed(), S.customerAdded('Ramesh'), S.renamed('Ramesh', 'Rakesh'),
       S.mergeAsk('Ramesh', 'Rakesh'), S.merged('Ramesh', 'Rakesh'), S.phoneSet('Ramesh'), S.reminderReady('Ramesh'),
-      S.statementReady('Ramesh'), S.noConsent('Ramesh'), S.alreadyWritten('Ramesh', 300), S.languageSet('Tamil'), S.readBackSet(true), S.readBackSet(false),
-      S.speedSet(true), S.speedSet(false), S.shopNameSet('Sharma Store'), S.privacyOpen(), S.backupReady(), S.eraseAsk(),
+      S.statementReady('Ramesh'), S.noConsent('Ramesh'), S.alreadyWritten('Ramesh', 300), S.languageSet('Tamil'),
+      S.speedSet('slower'), S.speedSet('normal'), S.speedSet('faster'), S.shopNameSet('Sharma Store'), S.privacyOpen(), S.backupReady(), S.eraseAsk(),
       S.eraseType('DELETE'), S.awakeHello(), S.sleeping(),
     ]
     for (const t of out) {
@@ -84,7 +84,7 @@ describe('agent tool replies', () => {
     }
     expect(S.topDebtors(['Ramesh', 'Suresh'])).toMatch(/Ramesh.*Suresh/)
     expect(S.renamed('Ramesh', 'Rakesh')).toMatch(/Ramesh.*Rakesh|Rakesh.*Ramesh/)
-    expect(S.readBackSet(true)).not.toBe(S.readBackSet(false))
-    expect(S.speedSet(true)).not.toBe(S.speedSet(false))
+    expect(new Set([S.speedSet('slower'), S.speedSet('normal'), S.speedSet('faster')]).size).toBe(3)
+    expect('readBackSet' in S).toBe(false)
   })
 })

@@ -31,8 +31,7 @@ interface StartOpts {
   snapshot: () => Snapshot
   firstRun: boolean
   handsFree: boolean
-  fastSpeech?: boolean
-  readBackAll?: boolean
+  speed?: 0.8 | 1 | 1.2
   /** false: socket only (typed text); the mic opens on the first wake */
   mic?: boolean
 }
@@ -234,7 +233,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
     resend = null
     sendTo(sock, {
       type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree,
-      speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll, resume, ...(again ? { resend: again } : {}),
+      speed: opts.speed ?? 1, resume, ...(again ? { resend: again } : {}),
     })
     opts.firstRun = false // the disclosure plays once, not on every reconnect
     if (again) {
@@ -983,15 +982,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
-    setReadBackAll(on: boolean) {
-      log.info('setting', { readBackAll: on })
-      if (opts) opts.readBackAll = on
-      send({ type: 'readback', on })
-    },
-    setFastSpeech(on: boolean) {
-      log.info('setting', { fastSpeech: on })
-      if (opts) opts.fastSpeech = on
-      send({ type: 'speed', speed: on ? 1.2 : 1 })
+    setSpeed(speed: 0.8 | 1 | 1.2) {
+      log.info('setting', { speed })
+      if (opts) opts.speed = speed
+      send({ type: 'speed', speed })
     },
     bargeIn() {
       if (!running) return

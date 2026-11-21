@@ -84,8 +84,6 @@ export class Session {
   readonly ledger: LedgerCore
   private ptt = false
   private speed: 0.8 | 1 | 1.2 = 1
-  /** read every saved entry back in full instead of a short ack (Settings) */
-  private readBackAll = false
   /** when the "heard you" cue went out for the current utterance */
   private heardAt: number | null = null
   /** turnComplete() of the last partial, cached: maybeEarlyCommit runs every 32 ms frame */
@@ -221,7 +219,7 @@ export class Session {
     switch (msg.type) {
       case 'hello':
         this.log.info('hello', {
-          lang: msg.lang, ptt: msg.ptt, speed: msg.speed ?? 1, readBack: !!msg.readBack, firstRun: msg.firstRun,
+          lang: msg.lang, ptt: msg.ptt, speed: msg.speed ?? 1, firstRun: msg.firstRun,
           customers: msg.snapshot.customers.length, todayEntries: msg.snapshot.today.entries,
         })
         this.lang = msg.lang
@@ -229,7 +227,6 @@ export class Session {
         this.snap.entries ??= []
         this.ptt = msg.ptt
         this.speed = msg.speed === 0.8 || msg.speed === 1.2 ? msg.speed : 1
-        this.readBackAll = msg.readBack === true
         if (msg.resume) this.ledger.importState(msg.resume)
         // a new socket starts asleep, unless the resumed state had a question waiting for its answer
         this.attnQuiet = true
@@ -314,10 +311,6 @@ export class Session {
         break
       case 'ack':
         this.unacked.delete(msg.seq)
-        break
-      case 'readback':
-        this.log.info('setting', { readBack: msg.on })
-        this.readBackAll = msg.on
         break
       case 'playback_done':
         this.log.debug('playback_done')
@@ -845,9 +838,8 @@ export class Session {
 
   private applySetting(m: SettingMsg) {
     if (m.key === 'lang' && typeof m.value === 'string') this.switchLang(m.value as Lang)
-    else if (m.key === 'readBack') this.readBackAll = m.value === true
-    else if (m.key === 'fastSpeech') {
-      this.speed = m.value === true ? 1.2 : 1
+    else if (m.key === 'speed' && (m.value === 0.8 || m.value === 1 || m.value === 1.2)) {
+      this.speed = m.value
       this.warmPhrases()
     }
   }
