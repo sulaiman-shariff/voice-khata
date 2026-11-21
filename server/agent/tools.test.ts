@@ -261,6 +261,49 @@ describe('agent tools', () => {
     expect(s.core.pending?.kind).toBe('amount')
   })
 
+  it('answer_question: an option from the model counts only when the words heard pick it (confusable amounts)', () => {
+    const mk = () => {
+      const t = setup([cust('c1', 'Ramesh', 300)])
+      t.core.processDrafts([{
+        heardName: 'Ramesh', cid: 'c1', newName: null, nameSure: true, spoken: true, paise: 30000, alt: 800, direction: 'credit', dayOffset: 0,
+        promise: false, confidence: 'low', reasons: ['confusable'], path: 'llm', transcript: 'Ramesh teen sau udhaar', snrDb: null, noisy: false,
+      }])
+      expect(t.core.pendingView()).toMatchObject({ kind: 'confusable', options: ['300', '800'] })
+      return t
+    }
+    let s = mk()
+    let r = s.run('answer_question', { kind: 'option', value: '800' }, 'haan wahi wala')
+    expect(r.ops).toEqual([])
+    expect(r.parts).toEqual([R.didNotCatch()])
+    expect(s.core.pending?.kind).toBe('confusable')
+    s = mk()
+    r = s.run('answer_question', { kind: 'option', value: '800' }, 'aath sau')
+    expect(r.ops).toEqual([expect.objectContaining({ op: 'entry', paise: 80000 })])
+  })
+
+  it('answer_question: an option from the model counts only when the words heard pick it (which customer)', () => {
+    // the turn loop's "which one" (two customers fit a heard name)
+    let s = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200)])
+    s.run('add_entries', { entries: [{ name: 'Suresh', amount: 100, direction: 'credit' }] }, 'Suresh ko 100 udhaar')
+    expect(s.core.pending?.kind).toBe('which')
+    let r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹1,200' }, 'haan bhai')
+    expect(r.ops).toEqual([])
+    expect(s.core.pending?.kind).toBe('which')
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹1,200' }, 'doosra wala')
+    expect(r.ops).toEqual([expect.objectContaining({ op: 'entry', cid: 'c2', paise: 10000 })])
+    // a tool's "which one"
+    s = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200)])
+    s.run('show_customer', { name: 'Suresh' }, 'Suresh ka khata dikhao')
+    expect(s.core.pending?.kind).toBe('choose')
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹300' }, 'hmm')
+    expect(r.show).toBeUndefined()
+    expect(s.core.pending?.kind).toBe('choose')
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹1,200' }, '300 wala') // heard picks the other one
+    expect(r.show).toBeUndefined()
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹300' }, '300 wala')
+    expect(r.show).toEqual({ type: 'show', view: 'customer', cid: 'c1' })
+  })
+
   it('answer_question: an existing name from the model must also have been heard', () => {
     const mk = () => {
       const t = setup([cust('c1', 'Ramesh', 300)])

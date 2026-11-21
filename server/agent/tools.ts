@@ -16,8 +16,9 @@
  *  - Two customers who fit a name: a 'choose' question lists all of them; the answer finishes the
  *    same tool call.
  *  - answer_question never takes yes / no / an amount from the model: only from what was heard.
- *    An option from the model counts only when it is exactly one on screen; a customer's name only
- *    when that name was also heard (a sure match in some stream).
+ *    An option from the model counts only when it is exactly one on screen AND the words heard pick
+ *    it (the amount was said, or the name / "doosra" / "300 wala" points at that option); a
+ *    customer's name only when that name was also heard (a sure match in some stream).
  *  - Internal args (`<slot>__cid`, `_new`) are stripped from the model's calls; only our own
  *    'choose' continuations may set them.
  *  - Answers for show and query tools are computed from core.snap (balances; history via
@@ -25,7 +26,7 @@
  */
 import { parseFast } from '../../shared/intent.js'
 import { NAME_SURE, matchName } from '../../shared/names.js'
-import { formatINR } from '../../shared/numbers.js'
+import { formatINR, parseAmounts } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
 import { LANGS, LANG_NAME, type Lang, eraseWord, guardReply, say, sayMore } from '../../shared/replies.js'
 import { type ChooseOption, LedgerCore, type Reply, type TurnMeta, WRITTEN_KEEP_MS } from '../ledger/core.js'
@@ -159,6 +160,26 @@ function runTrusted(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
  */
 export function attachTools(core: LedgerCore) {
   core.choose = (tool, args, transcript, meta) => (isToolName(tool) ? runTrusted(core, { name: tool, args }, { ...meta, transcript }) : null)
+}
+
+/** Does something heard pick on-screen option `idx` (`value`) of the open question? */
+function optionHeard(core: LedgerCore, idx: number, value: string, heard: string[]): boolean {
+  const p = core.pending
+  if (!p) return false
+  switch (p.kind) {
+    case 'confusable': {
+      const amt = Number(value)
+      return Number.isFinite(amt) && heard.some((t) => parseAmounts(t).some((a) => a.value === amt))
+    }
+    case 'choose':
+      return heard.some((t) => LedgerCore.chooseIndex(p.options, t) === idx)
+    case 'which': {
+      const opts: ChooseOption[] = p.options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, args: {} }))
+      return heard.some((t) => LedgerCore.chooseIndex(opts, t) === idx)
+    }
+    default:
+      return false
+  }
 }
 
 /** only an entry written in this session within this long is undone without a question */
@@ -517,9 +538,13 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         if (!sure) return notCaught()
         return core.answerPending(value!, { type: 'unknown' }, tm) ?? notCaught()
       }
-      // an option from the model only when it is exactly one on screen
-      if (kind === 'option' && value && view?.options?.includes(value))
-        return core.answerPending(value, { type: 'unknown' }, tm) ?? notCaught()
+      // an option from the model only when it is exactly one on screen and what was heard picks it:
+      // on a confusable card the model must not choose the amount, on a which card not the customer
+      const idx = kind === 'option' && value ? view?.options?.indexOf(value) ?? -1 : -1
+      if (idx >= 0) {
+        if (!optionHeard(core, idx, value!, heard)) return notCaught()
+        return core.answerPending(value!, { type: 'unknown' }, tm) ?? notCaught()
+      }
       // everything else (yes, no, amounts, directions) only from what was heard
       const read = heard.map((t) => ({ t, i: parseFast(t) })).find((x) => x.i.type !== 'unknown')
       if (!read && (kind === 'yes' || kind === 'no')) return notCaught() // the question stays open
