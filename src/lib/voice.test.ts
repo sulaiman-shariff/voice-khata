@@ -27,7 +27,7 @@ async function started() {
   const attention: string[] = []
   const v = createVoiceClient('ws://x', {
     status: () => {}, level: () => {}, partial: () => {}, final: () => {}, say: () => {}, ops: () => {},
-    pending: () => {}, show: () => {}, remind: () => {}, metrics: () => {}, error: () => {},
+    pending: () => {}, show: () => {}, metrics: () => {}, error: () => {},
     attention: (s) => attention.push(s),
   })
   await v.start({ lang: 'hi', snapshot, firstRun: false, handsFree: true, mic: false })

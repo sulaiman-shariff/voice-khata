@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseFast } from '../../shared/intent.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { say, sayMore } from '../../shared/replies.js'
+import { LANG_NAME, say, sayMore } from '../../shared/replies.js'
 import { LedgerCore, PENDING_TTL_MS, type TurnMeta } from '../ledger/core.js'
 import { nullLogger } from '../log.js'
 import { TOOL_SCHEMAS, type ToolCall, runTool } from './tools.js'
@@ -16,10 +16,10 @@ const ent = (eid: string, cid: string, rupees: number, direction: 'credit' | 'pa
   eid, cid, paise: rupees * 100, direction, day: today,
 })
 
-function setup(customers: SnapCustomer[], entries: SnapEntry[] = []) {
+function setup(customers: SnapCustomer[], entries: SnapEntry[] = [], lang: 'en' | 'hi' = 'en') {
   let n = 0
   let now = 1_000_000
-  const core = new LedgerCore({ lang: () => 'en', now: () => now, newId: () => `id${++n}`, log: nullLogger })
+  const core = new LedgerCore({ lang: () => lang, now: () => now, newId: () => `id${++n}`, log: nullLogger })
   core.snap.customers = customers
   core.snap.entries = entries
   core.snap.last = entries[0] ?? null
@@ -107,29 +107,43 @@ describe('agent tools', () => {
     expect(core.snap.customers.map((c) => [c.name, c.balancePaise])).toEqual([['Ramesh', 25000]])
   })
 
-  it('erase_all needs a spoken yes and then a tap', () => {
+  it('erase_all: only the typed word erases, never a spoken or tapped yes', () => {
     const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
     const r = run('erase_all', {}, 'sab data mita do')
     expect(r.ops).toEqual([])
-    expect(core.pending?.kind).toBe('delete')
-    expect(core.pendingView()?.requireTap).toBe(true)
+    expect(r.parts).toEqual([R.eraseType('DELETE')])
+    expect(core.pendingView()).toEqual({ kind: 'delete', requireType: 'DELETE' })
     core.turnSrc = 'voice'
     const v = core.answerPending('haan', parseFast('haan'), meta('haan'))!
     expect(v.ops).toEqual([])
-    expect(v.parts).toEqual([R.eraseTap()])
     expect(core.pending?.kind).toBe('delete')
-    core.turnSrc = 'tap'
-    const t = core.answerPending('yes', { type: 'yes' }, meta('yes'))!
-    expect(t.ops).toEqual([{ op: 'delete_all' }])
-  })
-
-  it('erase_all: a tap alone, before the spoken yes, erases nothing', () => {
-    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
-    run('erase_all', {}, 'sab data mita do')
     core.turnSrc = 'tap'
     const t = core.answerPending('yes', { type: 'yes' }, meta('yes'))!
     expect(t.ops).toEqual([])
     expect(core.pending?.kind).toBe('delete')
+    const w = core.answerPending('delete ', parseFast('delete'), meta('delete'))!
+    expect(w.ops).toEqual([{ op: 'delete_all' }])
+  })
+
+  it('erase_all: the word spoken (not typed) does not erase', () => {
+    const { core, run, meta } = setup([])
+    run('erase_all', {}, 'x')
+    core.turnSrc = 'voice'
+    expect(core.answerPending('DELETE', parseFast('DELETE'), meta('DELETE'))!.ops).toEqual([])
+  })
+
+  it('erase_all: a wrong typed word does not erase', () => {
+    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
+    run('erase_all', {}, 'sab data mita do')
+    core.turnSrc = 'tap'
+    expect(core.answerPending('DELET', parseFast('DELET'), meta('DELET'))!.ops).toEqual([])
+    expect(core.pending).toBeNull()
+  })
+
+  it('erase_all speaks the localized word', () => {
+    const { run, core } = setup([], [], 'hi')
+    run('erase_all', {}, 'x')
+    expect(core.pendingView()?.requireType).toBe('मिटाओ')
   })
 
   it('send_reminder to a customer without consent is refused with a spoken reason', () => {
@@ -345,5 +359,49 @@ describe('agent tools', () => {
     const r = run('answer_question', { kind: 'yes' }, 'haan ji')
     expect(r.ops[0]).toMatchObject({ op: 'entry', cid: 'c1', paise: 20000 })
     expect(core.pending).toBeNull()
+  })
+
+  describe('the screen follows the tool', () => {
+    const yesterday = new Date(Date.now() + 5.5 * 3600_000 - 86_400_000).toISOString().slice(0, 10)
+
+    it("show_history for \"kal\" produces history with yesterday's date range", () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200)])
+      const r = run('show_history', { day_offset: -1 }, 'kal ka hisaab')
+      expect(r.show).toEqual({ type: 'show', view: 'history', from: yesterday, to: yesterday })
+    })
+
+    it('show_history with a name and a day carries the customer, so screen and voice agree', () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 100)])
+      const r = run('show_history', { name: 'Ramesh', day_offset: -1 }, 'Ramesh ka kal ka hisaab')
+      expect(r.show).toEqual({ type: 'show', view: 'history', from: yesterday, to: yesterday, cid: 'c1' })
+    })
+
+    it('show_today, top_debtors, search and close_view each name their view', () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 100)])
+      expect(run('show_today', {}, 'aaj ka hisaab').show).toEqual({ type: 'show', view: 'today' })
+      expect(run('top_debtors', {}, 'sabse zyada kiska baaki').show).toEqual({ type: 'show', view: 'top_debtors', count: 3 })
+      expect(run('search', { text: 'xyz' }, 'xyz dhundho').show).toEqual({ type: 'show', view: 'search', text: 'xyz', cids: [], eids: [] })
+      expect(run('close_view', {}, 'band karo').show).toEqual({ type: 'show', view: 'close' })
+    })
+
+    it('set_language produces a setting message and a reply in the new language', () => {
+      const { run } = setup([])
+      const r = run('set_language', { lang: 'kn' }, 'Kannada mein bolo')
+      expect(r.setting).toEqual({ type: 'setting', key: 'lang', value: 'kn' })
+      expect(r.parts).toEqual([say('kn').languageSet(LANG_NAME.kn)])
+    })
+
+    it('send_statement produces a ready{whatsapp} with the statement text', () => {
+      const { run } = setup([cust('c1', 'Suresh', 300, { remindersOptIn: true, adult: true })], [ent('e1', 'c1', 300)])
+      const r = run('send_statement', { name: 'Suresh' }, 'Suresh ko statement bhejo')
+      expect(r.ready).toMatchObject({ kind: 'whatsapp', cid: 'c1' })
+      expect(r.ready?.text).toContain('300')
+    })
+
+    it('the amount question offers the usual amounts of the customer as buttons', () => {
+      const { core, run } = setup([cust('c1', 'Ramesh', 500, { typicalPaise: 20000 })], [ent('e1', 'c1', 300)])
+      core.pending = { kind: 'amount', draft: { cid: 'c1', heardName: 'Ramesh', paise: 0 } as never, queue: [] }
+      expect(core.pendingView()?.amounts).toEqual([300, 200])
+    })
   })
 })

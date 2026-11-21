@@ -107,8 +107,8 @@ export interface Replies {
   backupReady: () => string
   /** first step of erasing all data: ask for a spoken yes */
   eraseAsk: () => string
-  /** second step of erasing all data: ask for the on-screen button tap */
-  eraseTap: () => string
+  /** erasing all data by voice: the word to type on the screen (a spoken yes never erases) */
+  eraseType: (word: string) => string
   /** the agent woke up on the wake word */
   awakeHello: () => string
   /** the agent went back to sleep */
@@ -171,7 +171,7 @@ const HI: Replies = {
   privacyOpen: () => 'प्राइवेसी की जानकारी स्क्रीन पर खोल दी है।',
   backupReady: () => 'बैकअप तैयार है, सेव करने के लिए बटन दबाइए।',
   eraseAsk: () => 'सारा डेटा मिटाना है? पक्का हो तो हाँ बोलिए।',
-  eraseTap: () => 'ठीक है, मिटाने के लिए स्क्रीन का बटन दबाइए।',
+  eraseType: (w) => `सब मिटाने के लिए स्क्रीन पर ${w} लिखिए।`,
   awakeHello: () => 'हाँ, बोलिए।',
   sleeping: () => 'ठीक है, ज़रूरत हो तो बुला लीजिए।',
 }
@@ -232,7 +232,7 @@ const EN: Replies = {
   privacyOpen: () => 'I have opened the privacy details on screen.',
   backupReady: () => 'Your backup is ready, press the button to save it.',
   eraseAsk: () => 'Erase all data? If you are sure, say yes.',
-  eraseTap: () => 'Okay, press the button on screen to erase it.',
+  eraseType: (w) => `Type ${w} on the screen to erase everything.`,
   awakeHello: () => 'Yes, tell me.',
   sleeping: () => 'Okay, call me when you need me.',
 }
@@ -293,7 +293,7 @@ const KN: Replies = {
   privacyOpen: () => 'ಗೌಪ್ಯತೆ ಮಾಹಿತಿಯನ್ನು ಪರದೆಯ ಮೇಲೆ ತೆರೆದಿದ್ದೇನೆ.',
   backupReady: () => 'ಬ್ಯಾಕಪ್ ಸಿದ್ಧ, ಉಳಿಸಲು ಬಟನ್ ಒತ್ತಿ.',
   eraseAsk: () => 'ಎಲ್ಲಾ ಡೇಟಾ ಅಳಿಸಬೇಕಾ? ಖಚಿತವಿದ್ದರೆ ಹೌದು ಎಂದು ಹೇಳಿ.',
-  eraseTap: () => 'ಸರಿ, ಅಳಿಸಲು ಪರದೆಯ ಮೇಲಿನ ಬಟನ್ ಒತ್ತಿ.',
+  eraseType: (w) => `ಎಲ್ಲವನ್ನೂ ಅಳಿಸಲು ಪರದೆಯಲ್ಲಿ ${w} ಎಂದು ಟೈಪ್ ಮಾಡಿ.`,
   awakeHello: () => 'ಹೌದು, ಹೇಳಿ.',
   sleeping: () => 'ಸರಿ, ಬೇಕಾದಾಗ ಕರೆಯಿರಿ.',
 }
@@ -354,7 +354,7 @@ const TA: Replies = {
   privacyOpen: () => 'தனியுரிமை தகவலைத் திரையில் திறந்துள்ளேன்.',
   backupReady: () => 'காப்புப்பிரதி தயார், சேமிக்க பொத்தானை அழுத்துங்கள்.',
   eraseAsk: () => 'எல்லா தரவையும் அழிக்கவா? உறுதியென்றால் ஆமாம் என்று சொல்லுங்கள்.',
-  eraseTap: () => 'சரி, அழிக்க திரையில் உள்ள பொத்தானை அழுத்துங்கள்.',
+  eraseType: (w) => `எல்லாவற்றையும் அழிக்க திரையில் ${w} என்று தட்டச்சு செய்யுங்கள்.`,
   awakeHello: () => 'ஆமாம், சொல்லுங்கள்.',
   sleeping: () => 'சரி, தேவைப்பட்டால் கூப்பிடுங்கள்.',
 }
@@ -415,7 +415,7 @@ const TE: Replies = {
   privacyOpen: () => 'ప్రైవసీ వివరాలను తెరపై తెరిచాను.',
   backupReady: () => 'బ్యాకప్ సిద్ధం, సేవ్ చేయడానికి బటన్ నొక్కండి.',
   eraseAsk: () => 'మొత్తం డేటా తొలగించాలా? ఖచ్చితమైతే అవును అని చెప్పండి.',
-  eraseTap: () => 'సరే, తొలగించడానికి తెరపై బటన్ నొక్కండి.',
+  eraseType: (w) => `అన్నీ తొలగించడానికి తెరపై ${w} అని టైప్ చేయండి.`,
   awakeHello: () => 'అవును, చెప్పండి.',
   sleeping: () => 'సరే, అవసరమైతే పిలవండి.',
 }
@@ -476,7 +476,7 @@ const ML: Replies = {
   privacyOpen: () => 'സ്വകാര്യതാ വിവരങ്ങൾ സ്ക്രീനിൽ തുറന്നിട്ടുണ്ട്.',
   backupReady: () => 'ബാക്കപ്പ് തയ്യാർ, സേവ് ചെയ്യാൻ ബട്ടൺ അമർത്തൂ.',
   eraseAsk: () => 'എല്ലാ ഡാറ്റയും മായ്ക്കണോ? ഉറപ്പാണെങ്കിൽ അതെ എന്ന് പറയൂ.',
-  eraseTap: () => 'ശരി, മായ്ക്കാൻ സ്ക്രീനിലെ ബട്ടൺ അമർത്തൂ.',
+  eraseType: (w) => `എല്ലാം മായ്ക്കാൻ സ്ക്രീനിൽ ${w} എന്ന് ടൈപ്പ് ചെയ്യൂ.`,
   awakeHello: () => 'അതെ, പറയൂ.',
   sleeping: () => 'ശരി, വേണമെങ്കിൽ വിളിക്കൂ.',
 }
@@ -537,7 +537,7 @@ const MR: Replies = {
   privacyOpen: () => 'गोपनीयतेची माहिती स्क्रीनवर उघडली आहे.',
   backupReady: () => 'बॅकअप तयार आहे, सेव्ह करण्यासाठी बटण दाबा.',
   eraseAsk: () => 'सगळा डेटा पुसायचा आहे का? नक्की असेल तर हो म्हणा.',
-  eraseTap: () => 'ठीक आहे, पुसण्यासाठी स्क्रीनवरचे बटण दाबा.',
+  eraseType: (w) => `सगळे पुसण्यासाठी स्क्रीनवर ${w} टाइप करा.`,
   awakeHello: () => 'हो, बोला.',
   sleeping: () => 'ठीक आहे, लागल्यास हाक मारा.',
 }
@@ -598,7 +598,7 @@ const BN: Replies = {
   privacyOpen: () => 'গোপনীয়তার তথ্য স্ক্রিনে খুলে দিয়েছি।',
   backupReady: () => 'ব্যাকআপ তৈরি, সেভ করতে বোতাম টিপুন।',
   eraseAsk: () => 'সব ডেটা মুছে দেব? নিশ্চিত হলে হ্যাঁ বলুন।',
-  eraseTap: () => 'ঠিক আছে, মোছার জন্য স্ক্রিনের বোতাম টিপুন।',
+  eraseType: (w) => `সব মুছতে স্ক্রিনে ${w} টাইপ করুন।`,
   awakeHello: () => 'হ্যাঁ, বলুন।',
   sleeping: () => 'ঠিক আছে, দরকার হলে ডাকবেন।',
 }
@@ -659,7 +659,7 @@ const GU: Replies = {
   privacyOpen: () => 'ગોપનીયતાની માહિતી સ્ક્રીન પર ખોલી છે.',
   backupReady: () => 'બેકઅપ તૈયાર છે, સેવ કરવા બટન દબાવો.',
   eraseAsk: () => 'બધો ડેટા ભૂંસી નાખું? પાકું હોય તો હા બોલો.',
-  eraseTap: () => 'બરાબર, ભૂંસવા માટે સ્ક્રીન પરનું બટન દબાવો.',
+  eraseType: (w) => `બધું ભૂંસવા સ્ક્રીન પર ${w} ટાઇપ કરો.`,
   awakeHello: () => 'હા, બોલો.',
   sleeping: () => 'બરાબર, જરૂર પડે તો બોલાવજો.',
 }
@@ -720,12 +720,17 @@ const PA: Replies = {
   privacyOpen: () => 'ਪਰਦੇਦਾਰੀ ਦੀ ਜਾਣਕਾਰੀ ਸਕਰੀਨ ਉੱਤੇ ਖੋਲ੍ਹ ਦਿੱਤੀ ਹੈ।',
   backupReady: () => 'ਬੈਕਅੱਪ ਤਿਆਰ ਹੈ, ਸੇਵ ਕਰਨ ਲਈ ਬਟਨ ਦਬਾਓ।',
   eraseAsk: () => 'ਸਾਰਾ ਡਾਟਾ ਮਿਟਾਉਣਾ ਹੈ? ਪੱਕਾ ਹੋਵੇ ਤਾਂ ਹਾਂ ਬੋਲੋ।',
-  eraseTap: () => 'ਠੀਕ ਹੈ, ਮਿਟਾਉਣ ਲਈ ਸਕਰੀਨ ਦਾ ਬਟਨ ਦਬਾਓ।',
+  eraseType: (w) => `ਸਭ ਕੁਝ ਮਿਟਾਉਣ ਲਈ ਸਕਰੀਨ ਤੇ ${w} ਟਾਈਪ ਕਰੋ।`,
   awakeHello: () => 'ਹਾਂ, ਬੋਲੋ।',
   sleeping: () => 'ਠੀਕ ਹੈ, ਲੋੜ ਪਵੇ ਤਾਂ ਸੱਦ ਲਿਓ।',
 }
 
 export const REPLIES: Record<Lang, Replies> = { hi: HI, en: EN, kn: KN, ta: TA, te: TE, ml: ML, mr: MR, bn: BN, gu: GU, pa: PA }
+/** The word typed to erase everything by voice; Latin is matched without case. */
+export const ERASE_WORD: Record<Lang, string> = {
+  hi: 'मिटाओ', en: 'DELETE', kn: 'ಅಳಿಸು', ta: 'அழி', te: 'తొలగించు', ml: 'DELETE', mr: 'DELETE', bn: 'DELETE', gu: 'DELETE', pa: 'DELETE',
+}
+export const eraseWord = (lang: Lang) => ERASE_WORD[lang] ?? 'DELETE'
 export const say = (lang: Lang): Replies => REPLIES[lang]
 
 /**

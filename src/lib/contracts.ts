@@ -3,7 +3,7 @@
  * Implementations: src/lib/store.ts, src/lib/voice.ts, src/lib/backup.ts.
  */
 import type { Customer, Entry, LedgerState } from '../../shared/ledger.js'
-import type { LedgerOp, PendingView, ServerMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
+import type { LedgerOp, PendingView, ServerMsg, SettingMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
 
 // ------------------------------------------------------------------ store (src/lib/store.ts)
@@ -70,7 +70,10 @@ export interface VoiceEvents {
   ops(ops: LedgerOp[]): void | Promise<void>
   pending(p: PendingView | null): void
   show(m: Extract<ServerMsg, { type: 'show' }>): void
-  remind(cid: string, text: string): void
+  /** The agent changed a setting by voice (readBack, fastSpeech, shopName; the language goes through lang). */
+  setting?(m: SettingMsg): void
+  /** One-tap card from a tool: a WhatsApp message to send, or the backup. */
+  ready?(m: Extract<ServerMsg, { type: 'ready'; kind: unknown }>): void
   metrics(m: TurnMetrics & { clientFirstAudioMs: number | null }): void
   error(message: string): void
   /** The server heard another language and switched the session to it. */
@@ -103,6 +106,8 @@ export interface VoiceClient {
   answer(text: string): void
   /** Typed or pasted instruction, handled exactly like speech (bulk lists welcome). */
   sendText(text: string): void
+  /** "Save anyway": the line was dimmed as not-an-entry; handle it as addressed to the app. */
+  force(text: string): void
   /** Send a fresh snapshot after local (non-voice) ledger changes. */
   sendSnapshot(): void
   setHandsFree(on: boolean): void
