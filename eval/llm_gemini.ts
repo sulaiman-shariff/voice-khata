@@ -4,7 +4,7 @@
  * Usage: npx tsx --env-file=.env eval/llm_gemini.ts [model]   (default gemini-3.5-flash-lite)
  * Uses the Gemini Developer API (global endpoint); GEMINI_API_KEY from .env.
  */
-import { LLM_MODEL, type LlmReading, SYSTEM, TOOL, readWithLlm, userMessage } from '../server/parse/llm.js'
+import { CLAUDE_MODEL as LLM_MODEL, type LlmReading, SYSTEM, TOOL, readWithLlm, userMessage } from '../server/parse/llm.js'
 import { CASES, CTX, pct, score } from './llm_cases.js'
 
 const MODEL = process.argv[2] ?? 'gemini-3.5-flash-lite'

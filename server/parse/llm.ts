@@ -11,7 +11,7 @@ import type { EntryIntent, Intent } from '../../shared/intent.js'
 import { type AmountSpan, parseAmounts } from '../../shared/numbers.js'
 import { log } from '../log.js'
 
-export const LLM_MODEL = 'claude-haiku-5-5'
+export const CLAUDE_MODEL = 'claude-haiku-5-5'
 
 export const SYSTEM = `You are the understanding module of KhataBhai, a voice credit ledger used by small Indian shopkeepers (kirana stores).
 A shopkeeper speaks mid-sale, in any Indian language mixed with English. Speech-to-text has already turned their speech into text, which may contain recognition errors.
@@ -154,6 +154,98 @@ function describeCandidates(spans: AmountSpan[]): string {
 let client: Anthropic | null = null
 const getClient = () => (client ??= new Anthropic({ maxRetries: 1, timeout: 6000 }))
 
+// ---------------------------------------------------------------- Gemini (multi-key) --------
+// Keys: GEMINI_API_KEY, GEMINI_API_KEY_2 .. _9, and/or GEMINI_API_KEYS="k1,k2,...". Free-tier
+// keys hit per-minute limits, so a rate-limited or failing key is benched and the next one tried.
+export function geminiKeys(env: NodeJS.ProcessEnv = process.env): string[] {
+  const keys = [
+    env.GEMINI_API_KEY,
+    ...Array.from({ length: 8 }, (_, i) => env[`GEMINI_API_KEY_${i + 2}`]),
+    ...(env.GEMINI_API_KEYS ?? '').split(','),
+  ].map((k) => k?.trim()).filter((k): k is string => !!k)
+  return [...new Set(keys)]
+}
+
+/** `LLM_PROVIDER=gemini|anthropic` forces one; otherwise Anthropic if its key is set, else Gemini. */
+export const LLM_PROVIDER: 'gemini' | 'anthropic' =
+  process.env.LLM_PROVIDER === 'gemini' || process.env.LLM_PROVIDER === 'anthropic'
+    ? process.env.LLM_PROVIDER
+    : process.env.ANTHROPIC_API_KEY?.trim() ? 'anthropic' : geminiKeys().length ? 'gemini' : 'anthropic'
+
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite'
+/** The model actually used for the slow path. */
+export const LLM_MODEL = LLM_PROVIDER === 'gemini' ? GEMINI_MODEL : CLAUDE_MODEL
+const GEMINI_TIMEOUT_MS = 6000
+const benchedUntil = new Map<string, number>() // key -> epoch ms
+let nextKey = 0
+// Gemini 3 takes thinkingLevel, 2.5 a thinkingBudget; dropped for good if the model rejects it
+let thinking: Record<string, unknown> | undefined = /gemini-2\./.test(GEMINI_MODEL) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' }
+
+class GeminiError extends Error {
+  constructor(message: string, readonly status: number, readonly retryAfterMs?: number) {
+    super(message)
+  }
+}
+
+async function geminiOnce(key: string, user: string, signal?: AbortSignal): Promise<Partial<LlmReading>> {
+  const body = {
+    systemInstruction: { parts: [{ text: SYSTEM }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+    tools: [{ functionDeclarations: [{ name: TOOL.name, description: TOOL.description, parametersJsonSchema: TOOL.input_schema }] }],
+    toolConfig: { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [TOOL.name] } },
+    generationConfig: { temperature: 0, maxOutputTokens: 600, ...(thinking ? { thinkingConfig: thinking } : {}) },
+  }
+  const timeout = AbortSignal.timeout(GEMINI_TIMEOUT_MS)
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  const j = (await res.json().catch(() => ({}))) as {
+    error?: { message?: string; details?: { '@type'?: string; retryDelay?: string }[] }
+    candidates?: { finishReason?: string; content?: { parts?: { functionCall?: { name?: string; args?: Partial<LlmReading> } }[] } }[]
+  }
+  if (!res.ok) {
+    const msg = j.error?.message?.slice(0, 200) ?? res.statusText
+    if (res.status === 400 && thinking && /think/i.test(msg)) {
+      thinking = undefined // this model does not take a thinking config: retry plain
+      return geminiOnce(key, user, signal)
+    }
+    const delay = j.error?.details?.find((d) => d.retryDelay)?.retryDelay
+    throw new GeminiError(`gemini ${res.status}: ${msg}`, res.status, delay ? Number.parseFloat(delay) * 1000 : undefined)
+  }
+  const call = j.candidates?.[0]?.content?.parts?.find((p) => p.functionCall?.name === TOOL.name)?.functionCall
+  if (!call?.args) throw new GeminiError(`gemini: no tool call (finish ${j.candidates?.[0]?.finishReason})`, 0)
+  return call.args
+}
+
+async function readWithGemini(user: string, signal?: AbortSignal): Promise<Partial<LlmReading>> {
+  const keys = geminiKeys()
+  if (!keys.length) throw new Error('no GEMINI_API_KEY set')
+  const now = Date.now()
+  // rotate the starting key so load spreads across keys; benched keys go last
+  const order = keys.map((_, i) => keys[(nextKey + i) % keys.length])
+  nextKey = (nextKey + 1) % keys.length
+  order.sort((a, b) => Number((benchedUntil.get(a) ?? 0) > now) - Number((benchedUntil.get(b) ?? 0) > now))
+  let last: unknown
+  for (const key of order) {
+    if (signal?.aborted) break
+    try {
+      return await geminiOnce(key, user, signal)
+    } catch (e) {
+      last = e
+      const status = e instanceof GeminiError ? e.status : -1
+      if (status === 400) throw e // bad request: another key will not fix it
+      // 429 quota, 401/403 bad key, 5xx, timeout, network: bench this key and try the next
+      const bench = status === 429 ? (e as GeminiError).retryAfterMs ?? 30_000 : status === 401 || status === 403 ? 10 * 60_000 : 5_000
+      benchedUntil.set(key, Date.now() + bench)
+      log.warn('gemini_key_failed', { key: `…${key.slice(-4)}`, status, benchMs: bench, error: String(e).slice(0, 160) })
+    }
+  }
+  throw last ?? new Error('gemini: aborted')
+}
+
 export function userMessage(transcript: string, ctx: LlmContext): string {
   const spans = parseAmounts(transcript)
   return [
@@ -171,9 +263,13 @@ export async function readWithLlm(
   transcript: string, ctx: LlmContext, signal?: AbortSignal,
 ): Promise<{ reading: Partial<LlmReading>; ms: number; cachedTokens: number }> {
   const t0 = performance.now()
+  if (LLM_PROVIDER === 'gemini') {
+    const reading = await readWithGemini(userMessage(transcript, ctx), signal)
+    return { reading, ms: performance.now() - t0, cachedTokens: 0 }
+  }
   const res = await getClient().messages.create(
     {
-      model: LLM_MODEL,
+      model: CLAUDE_MODEL,
       max_tokens: 600,
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
       tools: [TOOL],
