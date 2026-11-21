@@ -38,6 +38,8 @@ interface StartOpts {
 }
 
 const PREROLL_MS = 2000
+/** A reply that never drains must not leave the detector paused (the app deaf) for ever. */
+const SPEAKING_WATCHDOG_MS = 30_000
 
 /**
  * The real detector, only when the trained model file is reachable (a dev server answers a missing
@@ -97,6 +99,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
   // bad-network handling (src/lib/link.ts)
   const turns = new TurnTracker()
   const speech = new SpeechBuffer()
+  /** the last ~2 s while asleep behind a detector; never replayed after a reconnect */
+  const preroll = new SpeechBuffer(PREROLL_MS + 500)
+  let speakingTimer: ReturnType<typeof setTimeout> | null = null
   const net = new NetMonitor()
   let netShown: 'good' | 'slow' | 'offline' | null = null
   /** the server's latest session state, handed back in the next hello */
@@ -159,13 +164,18 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
   /** The phone heard the wake word: tell the server, give it the last 2 s, then live frames follow. */
   function onDetectorWake() {
     if (!running || awake || !detector) return
+    // Socket closed or swapping: the wake could not reach the server (and the pre-roll would be lost),
+    // so stay asleep and keep listening; the shopkeeper says it again once the link is back.
+    if (!ws || ws.readyState !== WebSocket.OPEN || swapping) {
+      log.warn('wake_dropped', { reason: 'no_socket' })
+      return
+    }
     log.info('wake', { source: 'phone' })
     send({ type: 'wake', source: 'phone' })
     setAwake(true)
     const now = performance.now()
-    if (ws && ws.readyState === WebSocket.OPEN && !swapping) {
-      for (const f of speech.replayWindow(now - PREROLL_MS, now, 0)) ws.send(f)
-    }
+    for (const f of preroll.replayWindow(now - PREROLL_MS, now, 0)) ws.send(f)
+    preroll.clear()
   }
 
   const idleStatus = (): VoiceStatus => (awake ? 'listening' : 'asleep')
@@ -180,6 +190,17 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
         thinkTimer = null
         if (status === 'thinking') setStatus(idleStatus())
       }, THINK_TIMEOUT_MS)
+    }
+    if (speakingTimer) clearTimeout(speakingTimer)
+    speakingTimer = null
+    if (s === 'speaking') {
+      speakingTimer = setTimeout(() => {
+        speakingTimer = null
+        if (status === 'speaking') {
+          log.warn('speaking_watchdog')
+          setStatus(idleStatus())
+        }
+      }, SPEAKING_WATCHDOG_MS)
     }
     if (status === s) return
     status = s
@@ -265,11 +286,15 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
       ev.level(level)
     }
     if (micDead || !(handsFree || pttHeld)) return
-    speech.push(buf, level, now) // kept a few seconds so speech during a drop can be replayed
     if (gated() && !pttHeld) {
-      detector?.feed(buf) // asleep: the detector listens, nothing goes to the server
+      // Asleep behind a detector: nothing may reach the server, so this audio stays out of the
+      // reconnect-replay buffer and only the short pre-roll ring keeps it. While the app speaks the
+      // detector is paused and feed() drops the frame by its own paused check.
+      preroll.push(buf, level, now)
+      detector?.feed(buf)
       return
     }
+    speech.push(buf, level, now) // kept a few seconds so speech during a drop can be replayed
     if (!ws || ws.readyState !== WebSocket.OPEN || swapping) return // not sent now; replayed after reconnect
     ws.send(buf)
   }
@@ -856,6 +881,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
     if (tick) clearInterval(tick)
     tick = null
     speech.clear()
+    preroll.clear()
+    if (speakingTimer) clearTimeout(speakingTimer)
+    speakingTimer = null
     resend = null
     droppedSince = null
     probeDeadline = null

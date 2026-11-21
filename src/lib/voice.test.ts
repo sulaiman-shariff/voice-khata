@@ -156,7 +156,7 @@ describe('voice client on-phone wake gate', () => {
       pending: () => {}, show: () => {}, metrics: () => {}, error: () => {},
     }, { createDetector: async () => det })
     await v.start({ lang: 'hi', snapshot, firstRun: false, handsFree: true })
-    await new Promise((r) => setTimeout(r, 0)) // the detector loads after start
+    for (let i = 0; i < 20; i++) await Promise.resolve() // the detector loads after start (works under fake timers)
     const ws = FakeWebSocket.instances[0]
     ws.send = (d: string | ArrayBuffer) => { if (typeof d === 'string') ws.sent.push(d); else frames.push(d) }
     const mic = () => mics[0].port.onmessage!
@@ -248,6 +248,49 @@ describe('voice client on-phone wake gate', () => {
     expect(det.fed).toBe(0)
     ws.onmessage?.({ data: JSON.stringify({ type: 'stop_audio' }) })
     expect(det.paused).toBe(false)
+    v.stop()
+  })
+
+  it('a drop and reconnect while gated replays no asleep audio', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+    try {
+      const det = new FakeDetector()
+      const { v, ws, mic, frame } = await gated(det)
+      for (let i = 0; i < 20; i++) { vi.advanceTimersByTime(32); mic()(frame()) }
+      ;(ws.onclose as unknown as (e: { code: number; reason: string }) => void)({ code: 1006, reason: '' })
+      await vi.advanceTimersByTimeAsync(10_000)
+      const ws2 = FakeWebSocket.instances[1]
+      expect(ws2).toBeDefined()
+      expect(ws2.msgs().some((m) => m.type === 'replay_start')).toBe(false)
+      v.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a stuck speaking state clears so the detector resumes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] })
+    try {
+      const det = new FakeDetector()
+      const { v, ws } = await gated(det)
+      ws.onmessage?.({ data: JSON.stringify({ type: 'say', text: 'ok' }) })
+      expect(det.paused).toBe(true)
+      vi.advanceTimersByTime(31_000)
+      expect(det.paused).toBe(false)
+      v.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a wake while the socket is closed is not claimed', async () => {
+    const det = new FakeDetector()
+    const { v, ws, frames, mic, frame } = await gated(det)
+    mic()(frame())
+    ws.readyState = 3
+    det.wakeCb!()
+    expect(ws.msgs().some((m) => m.type === 'wake')).toBe(false)
+    expect(frames).toHaveLength(0)
     v.stop()
   })
 })
