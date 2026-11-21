@@ -1010,6 +1010,53 @@ describe('attention: the window and the sleep word', () => {
     expect(states(h.out).at(-1)).toBe('awake')
   })
 
+  it('continuous talk to customers does not keep it awake: asleep 15 s after the last real reply', async () => {
+    vi.useFakeTimers()
+    const h = harness([cust('r', 'Ramesh', 300)], {
+      agent: (ctx) => callsOf(ctx.heard[0].text.includes('Ramesh') ? { name: 'show_customer', args: { name: 'Ramesh' } } : { name: 'not_for_me', args: {} }),
+    })
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    await vi.advanceTimersByTimeAsync(1_000)
+    h.cb.onSpeechStart?.()
+    h.cb.onFinal!('Ramesh ka hisaab batao')
+    await vi.advanceTimersByTimeAsync(0)
+    await h.s.idle()
+    expect(h.said.length).toBe(1) // the real reply, at ~1 s
+    // chatter every 2 s, each utterance 0.5 s long, all of it not for the app
+    for (let t = 3_000; t <= 21_000; t += 2_000) {
+      await vi.advanceTimersByTimeAsync(t === 3_000 ? 2_000 : 1_500)
+      if (t === 17_000) expect(states(h.out).at(-1)).toBe('asleep') // 16 s: 15 s after the reply
+      if (t === 15_000) expect(states(h.out).at(-1)).toBe('awake')
+      h.cb.onSpeechStart?.()
+      h.cb.onPartial?.('bhaiya do kilo')
+      await vi.advanceTimersByTimeAsync(500)
+      h.cb.onFinal!('bhaiya do kilo cheeni dena')
+      await vi.advanceTimersByTimeAsync(0)
+      await h.s.idle()
+    }
+    expect(states(h.out)).toEqual(['asleep', 'awake', 'asleep'])
+  })
+
+  it('an utterance in progress when the window runs out is still handled', async () => {
+    vi.useFakeTimers()
+    const h = harness([cust('r', 'Ramesh', 300)], { agent: () => callsOf({ name: 'show_customer', args: { name: 'Ramesh' } }) })
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    await vi.advanceTimersByTimeAsync(14_000)
+    h.cb.onSpeechStart?.()
+    await vi.advanceTimersByTimeAsync(1_500)
+    h.cb.onPartial?.('Ramesh ka')
+    await vi.advanceTimersByTimeAsync(2_500)
+    h.cb.onPartial?.('Ramesh ka hisaab')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(states(h.out).at(-1)).toBe('awake')
+    h.cb.onFinal!('Ramesh ka hisaab batao')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(h.said.length).toBe(1)
+    expect(states(h.out).at(-1)).toBe('awake') // it replied: a fresh window
+    await vi.advanceTimersByTimeAsync(15_100)
+    expect(states(h.out).at(-1)).toBe('asleep')
+  })
+
   it('push-to-talk keeps it awake until ptt_end', async () => {
     vi.useFakeTimers()
     const h = harness()

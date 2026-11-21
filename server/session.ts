@@ -236,7 +236,7 @@ export class Session {
         if (msg.resend && msg.resend.trim() && msg.resend.length <= 2000) {
           const text = msg.resend.trim()
           this.log.info('resend', { text })
-          this.enqueue(() => this.handleText(text, null, 'resend'))
+          this.enqueue(async () => { await this.handleText(text, null, 'resend') })
         }
         if (msg.firstRun)
           this.enqueue(async () => {
@@ -345,7 +345,7 @@ export class Session {
     const stream: SttLike = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
       onOpen: () => this.log.info('stt_ready', { reason, ms: this.now() - t0 }),
       onSpeechStart: () => {
-        this.attention.touch() // speaking keeps the window open
+        this.attention.heard() // an utterance in progress is heard out (it does not restart the window)
         if (this.isSpeaking() && this.speaking && !this.speaking.ducked) {
           this.speaking.ducked = true
           this.deps.send({ type: 'duck' })
@@ -452,7 +452,7 @@ export class Session {
   }
 
   private onPartial(text: string) {
-    this.attention.touch()
+    this.attention.heard()
     this.lastPartial = text
     this.log.debug('partial', { text })
     this.deps.send({ type: 'partial', text })
@@ -498,6 +498,7 @@ export class Session {
     this.commitAt = null
     this.earlyCommit = false
     this.lastPartial = ''
+    this.attention.speechDone() // the utterance is over; a turn it starts holds the window until it is handled
     if (!text.trim()) {
       this.log.debug('final_empty', { committed: commitAt !== null })
       return
@@ -553,10 +554,16 @@ export class Session {
   private dispatchFinal(text: string, t: TurnTiming) {
     this.deps.send({ type: 'final', text })
     if (this.speaking?.ducked) this.bargeIn()
-    this.attention.touch()
+    this.attention.turnStart() // the window cannot run out while this turn is handled
     this.enqueue(async () => {
-      await this.handleText(text, t, 'voice')
-      this.attention.touch() // the window runs from the end of our reply
+      let engaged = false
+      try {
+        engaged = await this.handleText(text, t, 'voice')
+      } finally {
+        // a reply or a question restarts the window from the end of our reply; talk to someone
+        // else (not_for_me) and silent turns do not extend it
+        this.attention.turnEnd(engaged)
+      }
     })
   }
 
@@ -579,7 +586,8 @@ export class Session {
 
   // ------------------------------------------------------------------ the turn
   /**
-   * One turn. Always treated as addressed (attention is decided before this). Three ways in:
+   * One turn. Always treated as addressed (attention is decided before this). Returns whether the
+   * app engaged (replied, wrote, or asked). Three ways in:
    *  - the open question, when the fast parse can answer it;
    *  - the instant path, for a plain entry about a known customer (no model, no wait);
    *  - the agent: it reads every transcript and the audio and answers with tool calls, each of
@@ -590,7 +598,7 @@ export class Session {
     t: TurnTiming | null,
     /** 'force': "Save anyway", handled as addressed to the app (the model may not answer not_for_me), its words still speech */
     _src: 'voice' | 'tap' | 'resend' | 'force',
-  ): Promise<void> {
+  ): Promise<boolean> {
     const forced = _src === 'force'
     const t0 = this.now()
     this.ledger.turnSrc = _src
@@ -708,6 +716,8 @@ export class Session {
     // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
     if (_src === 'voice' && (notForMe || (!reply && !this.pending))) this.deps.send({ type: 'not_entry', text })
     this.deps.send({ type: 'turn_done', resume: this.ledger.exportState() })
+    // engaged: the app answered (a reply, ops, or a question left open)
+    return !notForMe && (!!reply?.parts.length || !!reply?.ops.length || !!this.pending)
   }
 
 
