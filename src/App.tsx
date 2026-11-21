@@ -180,7 +180,7 @@ function Home({ store }: { store: KhataStore }) {
         <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-lg font-black text-primary-foreground">₹</div>
         <div className="min-w-0 flex-1">
           <div className="truncate font-bold leading-tight">{settings.shopName}</div>
-          <div className="text-xs text-muted-foreground">Voice Khata · AI</div>
+          <div className="text-xs text-muted-foreground">KhataBhai · AI</div>
         </div>
         <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-9 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{LANG_NAME[settings.lang]}</button>
         <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-10 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
@@ -331,7 +331,7 @@ function Onboarding({ onPick }: { onPick: (l: Lang) => void }) {
   return (
     <div className="mx-auto flex h-full max-w-md flex-col px-5 pt-10 pb-6">
       <div className="grid size-14 place-items-center rounded-2xl bg-primary text-3xl font-black text-primary-foreground">₹</div>
-      <h1 className="mt-4 text-3xl font-extrabold leading-tight">Voice Khata</h1>
+      <h1 className="mt-4 text-3xl font-extrabold leading-tight">KhataBhai</h1>
       <div className="mt-1 h-7 overflow-hidden text-lg text-primary">
         <div key={i} className="stamp">“{sample[i]}”</div>
       </div>

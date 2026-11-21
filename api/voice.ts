@@ -1,5 +1,5 @@
 /**
- * Voice Khata session endpoint (Vercel Function, Node, region bom1, WebSocket).
+ * KhataBhai session endpoint (Vercel Function, Node, region bom1, WebSocket).
  * Phone <-> this function <-> Gnani Prisma (STT, realtime + REST second reading) / Timbre (TTS),
  * with Claude Haiku for hard turns. All dialogue logic lives in
  * server/session.ts.

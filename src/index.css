@@ -133,7 +133,7 @@
     }
 }
 
-/* Voice Khata: bahi-khata red cloth + cream paper (light only: shop counters are bright) */
+/* KhataBhai: bahi-khata red cloth + cream paper (light only: shop counters are bright) */
 :root {
   --background: oklch(0.985 0.012 85);
   --card: oklch(1 0 0);

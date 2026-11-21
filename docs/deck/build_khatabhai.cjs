@@ -33,7 +33,7 @@ const THEME = {
 }
 const HEX = { ink: '1F1A17', red: '8F2A1F', credit: 'C4421F', green: '2F7D4F', mute: '6B6058', line: 'E4D9C9', cream: 'FAF6EF', white: 'FFFFFF', blue: '3B4F8A', redTint: 'F6E7E2' }
 const INDIC = 'Nirmala UI'
-const FOOT = 'KhataBhai  ·  Team Purrfect  ·  Gnani Voice Hackathon PS2'
+const FOOT = 'KhataBhai, Team Purrfect, Gnani Voice Hackathon'
 
 async function icon(Comp, color = '#FFFFFF', size = 256) {
   const svg = ReactDOMServer.renderToStaticMarkup(React.createElement(Comp, { color, size }))
@@ -99,41 +99,48 @@ async function main() {
     slide.addImage({ path: SHOT(file), x: x + 0.08, y: y + 0.08, w: w - 0.16, h, rounding: false, objectName: `${name} screen` })
   }
   const text = (slide, t, o) => slide.addText(t, { isTextBox: true, margin: 0, color: C.text1, fontSize: 14, valign: 'top', ...o })
+  /** Split a string into runs so only the Indic words get the Indic font. */
+  const INDIC_RE = /([ऀ-෿][ऀ-෿\s]*[ऀ-෿]|[ऀ-෿])/
+  const runs = (str, opts) => str.split(INDIC_RE).filter(Boolean).map((t) => ({ text: t, options: INDIC_RE.test(t) ? { ...opts, fontFace: INDIC } : { ...opts } }))
 
   // ------------------------------------------------------------------ 1. title + team
   pres.addSection({ title: 'KhataBhai' })
   {
     const s = pres.addSlide({ masterName: 'KB Title', sectionTitle: 'KhataBhai' })
-    text(s, 'GNANI VOICE HACKATHON  ·  PROBLEM STATEMENT 2', { x: 0.5, y: 0.45, w: 6.6, h: 0.3, fontSize: 12, bold: true, color: C.accent1, charSpacing: 2, objectName: 'kicker' })
+    text(s, 'Gnani Voice Hackathon, Problem Statement 2', { x: 0.5, y: 0.45, w: 6.6, h: 0.3, fontSize: 13, bold: true, color: C.accent1, objectName: 'kicker' })
     text(s, 'KhataBhai', { x: 0.5, y: 0.8, w: 6.6, h: 1.05, fontSize: 60, bold: true, color: C.accent1, fontFace: THEME.headFontFace, objectName: 'product name' })
-    text(s, 'Just talk. The khata writes itself.', { x: 0.5, y: 1.85, w: 6.6, h: 0.45, fontSize: 22, italic: true, fontFace: THEME.headFontFace, objectName: 'tagline' })
-    text(s, 'A voice credit ledger for kirana shops, in 10 Indian languages.', { x: 0.5, y: 2.35, w: 6.6, h: 0.3, fontSize: 14, color: C.text2, objectName: 'one-liner' })
-    text(s, 'Team Purrfect  ·  team-8588FC8C5100  ·  Atria Institute of Technology', { x: 0.5, y: 2.85, w: 6.6, h: 0.28, fontSize: 12, bold: true, color: C.text2, objectName: 'team line' })
+    text(s, 'Just talk. The khata writes itself.', { x: 0.5, y: 1.9, w: 6.6, h: 0.45, fontSize: 22, italic: true, fontFace: THEME.headFontFace, objectName: 'tagline' })
+    text(s, 'A voice credit ledger for kirana shops, in 10 Indian languages.', { x: 0.5, y: 2.45, w: 6.6, h: 0.3, fontSize: 14, color: C.text2, objectName: 'one-liner' })
+    text(s, 'Team Purrfect (team-8588FC8C5100), Atria Institute of Technology', { x: 0.5, y: 3.35, w: 6.6, h: 0.28, fontSize: 12, bold: true, color: C.text2, objectName: 'team line' })
     const team = [
-      ['Sulaiman Abdulla Shariff', 'Team Lead · LLM, deployment, integration'],
-      ['Mahamad Zaid', 'Speech-to-text + text-to-speech'],
+      ['Sulaiman Abdulla Shariff', 'Team lead. LLM, deployment and integration'],
+      ['Mahamad Zaid', 'Speech to text and text to speech'],
       ['Hajira Noorain', 'Native app'],
-      ['K Mahi', 'Frontend + design'],
+      ['K Mahi', 'Frontend and design'],
     ]
+    // four equal cards spanning exactly the text column (0.5 in -> 7.1 in), no icons
+    const colW = 6.6
+    const gap = 0.16
+    const cw = (colW - 3 * gap) / 4
     team.forEach(([n, r], i) => {
-      const x = 0.5 + i * 1.66
-      card(s, x, 3.3, 1.54, 1.55, `team card ${i + 1}`)
-      dot(s, ic.user, x + 0.14, 3.44, 0.36, i === 0 ? C.accent1 : C.accent2, `team ${i + 1}`)
-      text(s, n, { x: x + 0.14, y: 3.88, w: 1.28, h: 0.45, fontSize: 12, bold: true, objectName: `team ${i + 1} name` })
-      text(s, r, { x: x + 0.14, y: 4.33, w: 1.28, h: 0.45, fontSize: 10, color: C.text2, objectName: `team ${i + 1} role` })
+      const x = 0.5 + i * (cw + gap)
+      // bottoms line up with the phone frame's bottom edge (0.45 + 4.5 + 0.16 = 5.11 in)
+      card(s, x, 3.91, cw, 1.2, `team card ${i + 1}`)
+      text(s, n, { x: x + 0.16, y: 4.06, w: cw - 0.32, h: 0.46, fontSize: 12, bold: true, color: i === 0 ? C.accent1 : C.text1, valign: 'top', objectName: `team ${i + 1} name` })
+      text(s, r, { x: x + 0.16, y: 4.54, w: cw - 0.32, h: 0.48, fontSize: 10, color: C.text2, valign: 'top', objectName: `team ${i + 1} role` })
     })
-    phone(s, 'saved.png', 7.55, 0.45, 4.5, 'title phone')
+    phone(s, 'kb-home.png', 7.55, 0.45, 4.5, 'title phone')
   }
 
   // ------------------------------------------------------------------ 2. one look
   pres.addSection({ title: 'How it works' })
   {
     const s = pres.addSlide({ masterName: 'KB Content', sectionTitle: 'How it works' })
-    s.addText('KhataBhai in one look', { placeholder: 'title' })
-    text(s, 'Kirana owners give credit all day, mid-sale, with busy hands, and the record lives in memory. KhataBhai writes it down from speech.', { x: 0.5, y: 1.0, w: 6.4, h: 0.55, fontSize: 14, color: C.text2, objectName: 'problem line' })
+    s.addText('What it does', { placeholder: 'title' })
+    text(s, 'Shop owners give credit all day while serving customers, and most of it is kept in memory. With KhataBhai they just say it, and it is written down.', { x: 0.5, y: 1.0, w: 6.4, h: 0.55, fontSize: 14, color: C.text2, objectName: 'problem line' })
     const bubbles = [
-      ['रमेश का 340 उधार', 'लिख दिया।  ✓ Ramesh  ₹340 credit', true],
-      ['Suresh ne 200 jama kiye', 'लिख दिया।  ✓ Suresh  ₹200 paid', false],
+      ['रमेश का 340 उधार', 'लिख दिया।   Ramesh, ₹340 on credit', true],
+      ['Suresh ne 200 jama kiye', 'लिख दिया।   Suresh, ₹200 paid', false],
       ['ರಮೇಶ್ total?', 'ರಮೇಶ್ ಅವರ ಒಟ್ಟು ಬಾಕಿ 340 ರೂಪಾಯಿ.', true],
     ]
     bubbles.forEach(([u, a, indicA], i) => {
@@ -143,159 +150,189 @@ async function main() {
       s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 3.25, y, w: 3.65, h: 0.5, rectRadius: 0.2, fill: { color: C.accent1 }, line: { type: 'none' }, objectName: `reply ${i + 1} bubble` })
       text(s, a, { x: 3.37, y, w: 3.45, h: 0.5, fontSize: 13, color: C.background1, valign: 'middle', fontFace: indicA ? INDIC : INDIC, objectName: `reply ${i + 1}` })
     })
-    const chips = [['10', 'Indian languages, mixed with English'], ['~0.8 s', 'from speaking to the reply'], ['0', 'ledgers stored in the cloud']]
+    const chips = [['10', 'Indian languages, mixed with English'], ['Under a second', 'from speaking to hearing the reply']]
+    const chipW = (6.4 - 0.16) / 2
     chips.forEach(([b, l], i) => {
-      const x = 0.5 + i * 2.17
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 4.2, w: 2.05, h: 0.85, rectRadius: 0.12, fill: { color: C.accent1 }, line: { type: 'none' }, objectName: `fact ${i + 1}` })
-      text(s, b, { x: x + 0.15, y: 4.27, w: 1.8, h: 0.42, fontSize: 24, bold: true, color: C.background1, fontFace: THEME.headFontFace, objectName: `fact ${i + 1} number` })
-      text(s, l, { x: x + 0.15, y: 4.66, w: 1.8, h: 0.32, fontSize: 10, color: C.background1, objectName: `fact ${i + 1} label` })
+      const x = 0.5 + i * (chipW + 0.16)
+      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 4.2, w: chipW, h: 0.85, rectRadius: 0.12, fill: { color: C.accent1 }, line: { type: 'none' }, objectName: `fact ${i + 1}` })
+      text(s, b, { x: x + 0.2, y: 4.27, w: chipW - 0.4, h: 0.42, fontSize: 24, bold: true, color: C.background1, fontFace: THEME.headFontFace, objectName: `fact ${i + 1} number` })
+      text(s, l, { x: x + 0.2, y: 4.66, w: chipW - 0.4, h: 0.32, fontSize: 11, color: C.background1, objectName: `fact ${i + 1} label` })
     })
-    phone(s, 'question.png', 7.6, 0.95, 4.1, 'one look phone')
+    phone(s, 'kb-question.png', 7.6, 0.95, 4.1, 'one look phone')
   }
 
   // ------------------------------------------------------------------ 3. how it works
   {
     const s = pres.addSlide({ masterName: 'KB Content', sectionTitle: 'How it works' })
     s.addText('How it works', { placeholder: 'title' })
-    const box = (x, y, w, h, head, body, name, strong = false) => {
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.1, fill: { color: strong ? HEX.redTint : C.background1 }, line: { color: strong ? HEX.red : HEX.line, width: strong ? 1.5 : 1 }, objectName: name })
-      text(s, [{ text: head, options: { bold: true, fontSize: 13, color: C.accent1, breakLine: true } }, { text: body, options: { fontSize: 10.5, color: C.text2 } }], { x: x + 0.12, y: y + 0.08, w: w - 0.24, h: h - 0.12, objectName: `${name} text` })
+    const TOP = 1.1
+    const H = 2.0
+    // the phone: a dark tile
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.5, y: TOP, w: 2.0, h: H, rectRadius: 0.14, fill: { color: HEX.ink }, line: { type: 'none' }, objectName: 'phone tile' })
+    text(s, [
+      { text: 'Your phone', options: { bold: true, fontSize: 15, color: HEX.white, fontFace: THEME.headFontFace, breakLine: true } },
+      { text: ' ', options: { fontSize: 6, breakLine: true } },
+      { text: 'You speak, tap or type', options: { fontSize: 11, color: HEX.line, breakLine: true } },
+      { text: 'The reply is spoken back', options: { fontSize: 11, color: HEX.line, breakLine: true } },
+      { text: 'The ledger stays here, encrypted', options: { fontSize: 11, color: HEX.line } },
+    ], { x: 0.68, y: TOP + 0.18, w: 1.66, h: H - 0.3, objectName: 'phone text' })
+    // phone <-> server: one arrow each way, labelled
+    const oneWay = (x1, x2, y, label, name, labelAbove) => {
+      s.addShape(pres.shapes.LINE, { x: Math.min(x1, x2), y, w: Math.abs(x2 - x1), h: 0, flipH: x2 < x1, line: { color: HEX.red, width: 2, endArrowType: 'triangle' }, objectName: name })
+      text(s, label, { x: Math.min(x1, x2) - 0.05, y: labelAbove ? y - 0.3 : y + 0.06, w: Math.abs(x2 - x1) + 0.1, h: 0.24, fontSize: 9.5, color: C.text2, align: 'center', objectName: `${name} label` })
     }
-    box(0.5, 1.05, 2.1, 1.9, 'Phone (PWA)', 'Mic in, reply out (AudioWorklets). Ledger encrypted in IndexedDB. Works by voice, tap or typing.', 'phone box')
-    box(3.15, 1.05, 2.5, 1.9, 'Voice function · Mumbai', 'Vercel bom1. End-of-turn, parsing in 0 ms, dialogue, read-backs, reconnect and resume.', 'server box')
-    box(6.2, 1.0, 3.3, 0.62, 'Gnani Prisma v3 · speech-to-text', 'realtime partials · REST re-read', 'prisma box', true)
-    box(6.2, 1.7, 3.3, 0.62, 'Gnani Timbre v3 · text-to-speech', 'voice per language · cached phrases', 'timbre box', true)
-    box(6.2, 2.4, 3.3, 0.55, 'Claude Haiku · hard turns only', '', 'llm box')
-    const arrow = (x, y, w, name) => s.addShape(pres.shapes.LINE, { x, y, w, h: 0, line: { color: HEX.red, width: 2, beginArrowType: 'triangle', endArrowType: 'triangle' }, objectName: name })
-    arrow(2.65, 2.0, 0.45, 'phone to server')
-    arrow(5.7, 1.31, 0.45, 'server to prisma')
-    arrow(5.7, 2.01, 0.45, 'server to timbre')
-    arrow(5.7, 2.67, 0.45, 'server to llm')
-    text(s, 'WebSocket · 16 kHz audio up, replies + ledger changes down', { x: 0.5, y: 3.02, w: 5.2, h: 0.25, fontSize: 10, italic: true, color: C.text2, objectName: 'socket note' })
-    // turn timeline
-    const steps = [['Speak', 'any of 10 languages', ic.mic], ['Tick', '~0.3 s after you stop', ic.check], ['Transcript', 'Prisma, ~0.8 s', ic.wave], ['Understood', 'parsed in 0 ms', ic.brain], ['Saved + said', '“लिख दिया।”', ic.speak]]
-    steps.forEach(([h, d, img], i) => {
-      const x = 0.5 + i * 1.83
-      dot(s, img, x, 3.55, 0.46, i === 4 ? C.accent3 : C.accent1, `step ${i + 1}`)
-      text(s, h, { x: x + 0.56, y: 3.53, w: 1.2, h: 0.25, fontSize: 12, bold: true, objectName: `step ${i + 1} name` })
-      text(s, d, { x: x + 0.56, y: 3.78, w: 1.25, h: 0.45, fontSize: 10, color: C.text2, fontFace: /[^\x00-\x7F“”]/.test(d) ? INDIC : undefined, objectName: `step ${i + 1} detail` })
-      if (i < steps.length - 1) s.addShape(pres.shapes.LINE, { x: x + 1.55, y: 3.78, w: 0.22, h: 0, line: { color: HEX.line, width: 1.5, endArrowType: 'triangle' }, objectName: `step ${i + 1} arrow` })
+    oneWay(2.55, 3.3, TOP + 0.75, 'your voice', 'voice up', true)
+    oneWay(3.3, 2.55, TOP + 1.25, 'reply + entry', 'reply down', false)
+    // the server: the brand-red tile in the middle
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 3.35, y: TOP, w: 2.5, h: H, rectRadius: 0.14, fill: { color: HEX.red }, line: { type: 'none' }, objectName: 'server tile' })
+    text(s, [
+      { text: 'KhataBhai server', options: { bold: true, fontSize: 15, color: HEX.white, fontFace: THEME.headFontFace, breakLine: true } },
+      { text: 'runs in Mumbai', options: { fontSize: 10, color: HEX.redTint, breakLine: true } },
+      { text: ' ', options: { fontSize: 6, breakLine: true } },
+      { text: 'Knows when you have finished', options: { fontSize: 11, color: HEX.white, breakLine: true } },
+      { text: 'Finds the name and amount', options: { fontSize: 11, color: HEX.white, breakLine: true } },
+      { text: 'Asks when it is not sure', options: { fontSize: 11, color: HEX.white } },
+    ], { x: 3.53, y: TOP + 0.18, w: 2.16, h: H - 0.3, objectName: 'server text' })
+    // three services, equal tiles filling the same height as the server tile
+    const svcH = (H - 2 * 0.12) / 3
+    const svc = [
+      ['Gnani Prisma', 'turns speech into text', true],
+      ['Gnani Timbre', 'speaks the reply', true],
+      ['Claude Haiku', 'only for unusual sentences', false],
+    ]
+    svc.forEach(([h, d, gnani], i) => {
+      const y = TOP + i * (svcH + 0.12)
+      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 6.6, y, w: 2.9, h: svcH, rectRadius: 0.1, fill: { color: gnani ? HEX.redTint : HEX.white }, line: { color: gnani ? HEX.red : HEX.line, width: 1 }, objectName: `service ${i + 1}` })
+      text(s, [
+        { text: h, options: { bold: true, fontSize: 12.5, color: HEX.red, breakLine: true } },
+        { text: d, options: { fontSize: 10.5, color: HEX.mute } },
+      ], { x: 6.76, y, w: 2.6, h: svcH, valign: 'middle', objectName: `service ${i + 1} text` })
+      s.addShape(pres.shapes.LINE, { x: 5.9, y: y + svcH / 2, w: 0.65, h: 0, line: { color: HEX.red, width: 1.5, beginArrowType: 'triangle', endArrowType: 'triangle' }, objectName: `service ${i + 1} link` })
     })
-    text(s, 'Unsure, noisy or a large amount? It reads the entry back and asks first; it never saves a guess.', { x: 0.5, y: 4.55, w: 9, h: 0.3, fontSize: 12, bold: true, color: C.accent1, objectName: 'safety line' })
+
+    // one turn: a single track with five steps and their times
+    text(s, 'One turn', { x: 0.5, y: 3.36, w: 2, h: 0.26, fontSize: 13, bold: true, color: HEX.red, fontFace: THEME.headFontFace, objectName: 'turn kicker' })
+    const steps = [
+      ['0 s', 'You speak', 'in any of 10 languages'],
+      ['0.3 s', 'A soft tick', 'so you know it heard you'],
+      ['0.8 s', 'Words understood', 'text from Gnani Prisma'],
+      ['0.85 s', 'Saved and confirmed', '“लिख दिया।”'],
+    ]
+    const x0 = 1.4
+    const step = 2.4
+    const trackY = 4.12
+    s.addShape(pres.shapes.LINE, { x: x0, y: trackY, w: step * (steps.length - 1), h: 0, line: { color: HEX.line, width: 3 }, objectName: 'turn track' })
+    steps.forEach(([t, h, d], i) => {
+      const cx = x0 + i * step
+      const last = i === steps.length - 1
+      text(s, t, { x: cx - 0.8, y: 3.66, w: 1.6, h: 0.24, fontSize: 11, bold: true, color: last ? HEX.green : HEX.red, align: 'center', objectName: `step ${i + 1} time` })
+      s.addShape(pres.shapes.OVAL, { x: cx - 0.13, y: trackY - 0.13, w: 0.26, h: 0.26, fill: { color: last ? HEX.green : HEX.red }, line: { color: HEX.cream, width: 2 }, objectName: `step ${i + 1} node` })
+      text(s, h, { x: cx - 0.9, y: 4.32, w: 1.8, h: 0.26, fontSize: 12, bold: true, align: 'center', objectName: `step ${i + 1} name` })
+      text(s, d, { x: cx - 0.9, y: 4.58, w: 1.8, h: 0.26, fontSize: 10, color: C.text2, align: 'center', fontFace: /[^\x00-\x7F“”]/.test(d) ? INDIC : undefined, objectName: `step ${i + 1} detail` })
+    })
   }
 
-  // ------------------------------------------------------------------ 4. understanding + Gnani
+  /** A plain card: heading and one or two sentences. No icons. */
+  const plainCard = (slide, x, y, w, h, head, body, name, fill = HEX.white) => {
+    slide.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.1, fill: { color: fill }, line: { color: HEX.line, width: 1 }, objectName: name })
+    text(slide, [
+      { text: head, options: { bold: true, fontSize: 13.5, color: HEX.red, breakLine: true } },
+      ...runs(body, { fontSize: 11.5, color: HEX.ink }),
+    ], { x: x + 0.2, y: y + 0.16, w: w - 0.4, h: h - 0.26, paraSpaceAfter: 4, objectName: `${name} text` })
+  }
+  /** A small heading above a group of cards. */
+  const groupHead = (slide, t, x, y, w, name) =>
+    text(slide, t, { x, y, w, h: 0.3, fontSize: 15, bold: true, color: HEX.ink, fontFace: THEME.headFontFace, objectName: name })
+
+  // ------------------------------------------------------------------ 4. understanding
   {
     const s = pres.addSlide({ masterName: 'KB Content', sectionTitle: 'How it works' })
-    s.addText('Understanding Indian ledger talk', { placeholder: 'title' })
-    card(s, 0.5, 1.05, 4.4, 3.95, 'parser card')
-    text(s, 'Our parser', { x: 0.7, y: 1.17, w: 4, h: 0.3, fontSize: 15, bold: true, color: C.accent1, fontFace: THEME.headFontFace, objectName: 'parser head' })
-    const rows = [
-      [ic.rupee, 'Amounts in 10 languages', 'teens, sawa · dedh · ಮುನ್ನೂರ, lakh; asks “60 ya 7?” on look-alikes'],
-      [ic.arrows, 'Credit or payment from grammar', 'ne / ko, verb person, Dravidian case endings'],
-      [ic.user, 'Names, guarded', '“ಸುರೇಶ್ ಹೆಸರಿಂದ” → Suresh, never a new account by mistake'],
-      [ic.robot, 'LLM only when needed', 'Claude Haiku; it can never invent an amount it did not hear'],
+    s.addText('Understanding how shopkeepers talk', { placeholder: 'title' })
+    groupHead(s, 'What KhataBhai works out', 0.5, 1.0, 4.4, 'own head')
+    const own = [
+      ['The amount', 'Number words in all 10 languages, like “sawa sau” or “ಮುನ್ನೂರ”. If 60 and 7 sound alike, it asks which one.'],
+      ['Credit or paid', 'From how the sentence is said: “Ramesh ko” means credit, “Ramesh ne diye” means he paid.'],
+      ['The customer', '“ಸುರೇಶ್ ಹೆಸರಿಂದ” (in Suresh’s name) goes to Suresh instead of opening a new account.'],
     ]
-    rows.forEach(([img, h, d], i) => {
-      const y = 1.6 + i * 0.84
-      dot(s, img, 0.7, y, 0.42, C.accent1, `parser ${i + 1}`)
-      text(s, h, { x: 1.25, y: y - 0.02, w: 3.5, h: 0.28, fontSize: 13, bold: true, objectName: `parser ${i + 1} head` })
-      text(s, d, { x: 1.25, y: y + 0.26, w: 3.5, h: 0.45, fontSize: 10.5, color: C.text2, fontFace: INDIC, objectName: `parser ${i + 1} detail` })
-    })
-    card(s, 5.1, 1.05, 4.4, 3.95, 'gnani card', HEX.redTint)
-    text(s, 'Built deep on Gnani', { x: 5.3, y: 1.17, w: 4, h: 0.3, fontSize: 15, bold: true, color: C.accent1, fontFace: THEME.headFontFace, objectName: 'gnani head' })
-    const g = [
-      [ic.wave, 'Prisma v3 speech-to-text', 'live partials · customer names as keyterms · early commit · REST re-read when you switch language · replay after a drop'],
-      [ic.speak, 'Timbre v3 text-to-speech', 'recommended voice per language · <pauses> in lists · cached short replies · faster speech option'],
-      [ic.question, 'Probed, not assumed', 'every behaviour checked live against the API, from language lists to replay speed'],
+    own.forEach(([h, b], i) => plainCard(s, 0.5, 1.4 + i * 1.18, 4.4, 1.06, h, b, `own ${i + 1}`))
+    groupHead(s, 'What we use from Gnani', 5.1, 1.0, 4.4, 'gnani head')
+    const gn = [
+      ['Gnani Prisma, speech to text', 'Live text while you speak, customer names as hints, and a second listen when you switch language.'],
+      ['Gnani Timbre, text to speech', 'A suitable voice for each language. Short replies are kept ready so they play at once.'],
+      ['Claude Haiku, only when needed', 'For unusual sentences. It can only pick an amount that was actually said.'],
     ]
-    g.forEach(([img, h, d], i) => {
-      const y = 1.6 + i * 1.1
-      dot(s, img, 5.3, y, 0.42, C.accent1, `gnani ${i + 1}`)
-      text(s, h, { x: 5.85, y: y - 0.02, w: 3.5, h: 0.28, fontSize: 13, bold: true, objectName: `gnani ${i + 1} head` })
-      text(s, d, { x: 5.85, y: y + 0.26, w: 3.5, h: 0.7, fontSize: 10.5, color: C.text2, objectName: `gnani ${i + 1} detail` })
-    })
+    gn.forEach(([h, b], i) => plainCard(s, 5.1, 1.4 + i * 1.18, 4.4, 1.06, h, b, `gnani ${i + 1}`, i < 2 ? HEX.redTint : HEX.white))
   }
 
   // ------------------------------------------------------------------ 5. results
   pres.addSection({ title: 'Results' })
   {
     const s = pres.addSlide({ masterName: 'KB Content', sectionTitle: 'Results' })
-    s.addText('Fast and exact', { placeholder: 'title' })
-    const stats = [['843 ms', 'first reply audio (p50) on Vercel Mumbai'], ['~320 ms', 'until the “heard you” tick'], ['60 / 60', 'amounts exact, quiet shop'], ['0', 'silent wrong saves, quiet or street noise']]
-    stats.forEach(([b, l], i) => {
-      const y = 1.05 + i * 0.98
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.5, y, w: 3.3, h: 0.86, rectRadius: 0.12, fill: { color: i === 3 ? C.accent3 : C.accent1 }, line: { type: 'none' }, objectName: `stat ${i + 1}` })
-      text(s, b, { x: 0.68, y: y + 0.06, w: 3, h: 0.45, fontSize: 26, bold: true, color: C.background1, fontFace: THEME.headFontFace, objectName: `stat ${i + 1} number` })
-      text(s, l, { x: 0.68, y: y + 0.5, w: 3, h: 0.3, fontSize: 10.5, color: C.background1, objectName: `stat ${i + 1} label` })
+    s.addText('How it performs', { placeholder: 'title' })
+    text(s, 'Measured on the live app (servers in Mumbai) with recorded test sentences in Hindi, Kannada, Tamil and Telugu.', { x: 0.5, y: 1.0, w: 9, h: 0.3, fontSize: 12, color: C.text2, objectName: 'results intro' })
+    const stats = [
+      ['0.8 s', 'from when you stop speaking to hearing the reply', HEX.red],
+      ['0.3 s', 'until the tick that tells you it heard you', HEX.red],
+      ['60 of 60', 'amounts written correctly in a quiet shop', HEX.red],
+      ['56 of 60', 'amounts written correctly with street noise', HEX.red],
+    ]
+    const w = (9 - 3 * 0.2) / 4
+    stats.forEach(([b, l, fill], i) => {
+      const x = 0.5 + i * (w + 0.2)
+      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.5, w, h: 1.55, rectRadius: 0.12, fill: { color: fill }, line: { type: 'none' }, objectName: `stat ${i + 1}` })
+      text(s, b, { x: x + 0.2, y: 1.66, w: w - 0.4, h: 0.6, fontSize: 30, bold: true, color: HEX.white, fontFace: THEME.headFontFace, objectName: `stat ${i + 1} number` })
+      text(s, l, { x: x + 0.2, y: 2.3, w: w - 0.4, h: 0.65, fontSize: 11.5, color: HEX.white, objectName: `stat ${i + 1} label` })
     })
-    card(s, 4.1, 1.05, 5.4, 3.82, 'chart card')
-    s.addChart(pres.charts.BAR, [
-      { name: 'Before', labels: ['p50', 'p95'], values: [912, 1682] },
-      { name: 'KhataBhai now', labels: ['p50', 'p95'], values: [843, 1263] },
-    ], {
-      x: 4.25, y: 1.15, w: 5.1, h: 3.3, barDir: 'col', barGapWidthPct: 60,
-      chartColors: [HEX.line, HEX.red],
-      showTitle: true, title: 'First reply audio after you stop speaking (ms)', titleFontSize: 12, titleColor: HEX.ink, titleFontFace: '+mn-lt',
-      showValue: true, dataLabelPosition: 'outEnd', dataLabelFontSize: 11, dataLabelColor: HEX.ink, dataLabelFontFace: '+mn-lt',
-      showLegend: true, legendPos: 'b', legendFontSize: 11, legendColor: HEX.mute, legendFontFace: '+mn-lt',
-      catAxisLabelColor: HEX.mute, catAxisLabelFontSize: 12, catAxisLabelFontFace: '+mn-lt',
-      valAxisHidden: true, valGridLine: { style: 'none' }, catGridLine: { style: 'none' },
-      objectName: 'latency chart',
-    })
-    text(s, 'Production vs. preview, same suite: 4 languages, quiet + 5 dB street noise (56 / 60 exact in noise)', { x: 4.25, y: 4.5, w: 5.1, h: 0.3, fontSize: 9.5, color: C.text2, objectName: 'chart caption' })
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.5, y: 3.3, w: 9, h: 1.25, rectRadius: 0.12, fill: { color: HEX.white }, line: { color: HEX.line, width: 1 }, objectName: 'safety card' })
+    text(s, [
+      { text: 'No wrong amount was saved', options: { bold: true, fontSize: 15, color: HEX.green, fontFace: THEME.headFontFace, breakLine: true } },
+      { text: 'When it is noisy, the amount is large or the sentence is unclear, KhataBhai reads the entry back and waits for a yes. In the 4 noisy misses it asked again instead of saving.', options: { fontSize: 12, color: HEX.ink } },
+    ], { x: 0.75, y: 3.46, w: 8.5, h: 0.95, paraSpaceAfter: 6, objectName: 'safety text' })
   }
 
-  // ------------------------------------------------------------------ 6. reliable + private
+  // ------------------------------------------------------------------ 6. network + privacy
   {
     const s = pres.addSlide({ masterName: 'KB Content', sectionTitle: 'Results' })
-    s.addText('Reliable on bad networks, private by design', { placeholder: 'title' })
-    const col = (x, head, items, name) => {
-      card(s, x, 1.05, 4.4, 3.95, `${name} card`)
-      text(s, head, { x: x + 0.2, y: 1.17, w: 4, h: 0.3, fontSize: 15, bold: true, color: C.accent1, fontFace: THEME.headFontFace, objectName: `${name} head` })
-      items.forEach(([img, h, d], i) => {
-        const y = 1.6 + i * 0.84
-        dot(s, img, x + 0.2, y, 0.42, C.accent1, `${name} ${i + 1}`)
-        text(s, h, { x: x + 0.75, y: y - 0.02, w: 3.5, h: 0.28, fontSize: 13, bold: true, objectName: `${name} ${i + 1} head` })
-        text(s, d, { x: x + 0.75, y: y + 0.26, w: 3.5, h: 0.45, fontSize: 10.5, color: C.text2, fontFace: INDIC, objectName: `${name} ${i + 1} detail` })
-      })
-    }
-    col(0.5, 'When the network drops', [
-      [ic.redo, 'No entry lost silently', 'a turn cut off is re-sent: “नेटवर्क टूट गया था, फिर से लिख रहा हूँ।”'],
-      [ic.wifi, 'Dead link found in ~9 s', 'heartbeat + instant check on Wi-Fi ↔ mobile switches'],
-      [ic.mic, 'Speech kept', 'last seconds buffered, replayed at 3× after reconnect'],
-      [ic.question, 'Open question kept', '“सही है?” still answered after a drop · 6 / 6 chaos tests'],
-    ], 'network')
-    col(5.1, 'Your ledger, your phone', [
-      [ic.lock, 'Ledger only on the phone', 'AES-GCM, a key per customer; forgetting one shreds it'],
-      [ic.shield, 'Tamper-evident', 'SHA-256 hash chain over every entry and change'],
-      [ic.robot, 'Honest AI', 'says it is an AI on the first turn; never scores a customer'],
-      [ic.hand, 'Consent first', 'reminders only for adults who opted in'],
-    ], 'privacy')
+    s.addText('Bad networks and privacy', { placeholder: 'title' })
+    groupHead(s, 'When the network drops', 0.5, 1.0, 4.4, 'net head')
+    const net = [
+      ['Nothing is lost quietly', 'If the connection breaks mid-entry, KhataBhai saves it after reconnecting and says so.'],
+      ['Reconnects on its own', 'Notices a dead connection within seconds, including when the phone switches between Wi-Fi and mobile data.'],
+      ['Keeps what you said', 'Speech from the gap is replayed, and an open question like “सही है?” can still be answered.'],
+    ]
+    net.forEach(([h, b], i) => plainCard(s, 0.5, 1.4 + i * 1.18, 4.4, 1.06, h, b, `net ${i + 1}`))
+    groupHead(s, 'Where the data lives', 5.1, 1.0, 4.4, 'privacy head')
+    const priv = [
+      ['On the shopkeeper’s phone', 'The ledger is encrypted on the phone, with a separate key for each customer.'],
+      ['Changes can be traced', 'Every entry and correction is chained, so tampering shows. Nothing is ever silently deleted.'],
+      ['Customers are respected', 'It says it is an AI, never rates customers, and sends reminders only to those who agreed.'],
+    ]
+    priv.forEach(([h, b], i) => plainCard(s, 5.1, 1.4 + i * 1.18, 4.4, 1.06, h, b, `privacy ${i + 1}`))
   }
 
   // ------------------------------------------------------------------ 7. next + thank you
   pres.addSection({ title: 'Next' })
   {
     const s = pres.addSlide({ masterName: 'KB Close', sectionTitle: 'Next' })
-    s.addText('What’s next', { placeholder: 'title' })
+    s.addText('What we are building next', { placeholder: 'title' })
     const next = [
-      [ic.gem, 'Faster LLM', 'Gemini on Vertex AI Mumbai: ~650 ms vs ~1.1 s for hard turns, after a guard against confident guesses'],
-      [ic.whatsapp, 'WhatsApp notifications', 'reminders and statements to customers who opted in'],
-      [ic.mobile, 'Native app', 'Android first, offline-first, better mic control · in progress (Hajira)'],
-      [ic.upi, 'Payment integration', 'UPI collect links; a paid link settles the entry by itself'],
+      ['Faster answers', 'Gemini on Google Cloud in Mumbai for unusual sentences, once it is as careful as today.'],
+      ['WhatsApp notifications', 'Payment reminders and account statements for customers who agree.'],
+      ['Native app', 'An Android app that works offline and handles the microphone better.'],
+      ['Payments', 'UPI payment links. When a customer pays, the entry is settled on its own.'],
     ]
-    next.forEach(([img, h, d], i) => {
-      const x = 0.5 + i * 2.27
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.1, w: 2.12, h: 2.55, rectRadius: 0.14, fill: { color: HEX.cream }, line: { type: 'none' }, objectName: `next ${i + 1} card` })
-      s.addShape(pres.shapes.OVAL, { x: x + 0.18, y: 1.28, w: 0.5, h: 0.5, fill: { color: HEX.white }, line: { color: HEX.line, width: 1 }, objectName: `next ${i + 1} circle` })
-      s.addImage({ data: img, x: x + 0.3, y: 1.4, w: 0.26, h: 0.26, objectName: `next ${i + 1} glyph` })
-      text(s, h, { x: x + 0.18, y: 1.9, w: 1.8, h: 0.55, fontSize: 14, bold: true, color: C.accent1, valign: 'bottom', objectName: `next ${i + 1} head` })
-      text(s, d, { x: x + 0.18, y: 2.55, w: 1.8, h: 1.0, fontSize: 11, color: C.text1, objectName: `next ${i + 1} detail` })
+    const w = (9 - 3 * 0.2) / 4
+    next.forEach(([h, b], i) => {
+      const x = 0.5 + i * (w + 0.2)
+      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 1.15, w, h: 1.75, rectRadius: 0.12, fill: { color: HEX.cream }, line: { type: 'none' }, objectName: `next ${i + 1} card` })
+      text(s, [
+        { text: h, options: { bold: true, fontSize: 14.5, color: HEX.red, fontFace: THEME.headFontFace, breakLine: true } },
+        { text: b, options: { fontSize: 11.5, color: HEX.ink } },
+      ], { x: x + 0.2, y: 1.32, w: w - 0.4, h: 1.45, paraSpaceAfter: 6, objectName: `next ${i + 1} text` })
     })
-    text(s, 'Thank you', { x: 0.5, y: 4.15, w: 5, h: 0.6, fontSize: 34, bold: true, color: C.background1, fontFace: THEME.headFontFace, objectName: 'thanks' })
-    text(s, [{ text: 'Try it: ', options: { color: C.background1 } }, { text: 'voice-khata-delta.vercel.app', options: { color: C.background1, bold: true, hyperlink: { url: 'https://voice-khata-delta.vercel.app' } } }], { x: 5.2, y: 4.3, w: 4.3, h: 0.35, fontSize: 14, align: 'right', objectName: 'live link' })
-    text(s, 'Team Purrfect  ·  Gnani Voice Hackathon PS2', { x: 5.2, y: 4.65, w: 4.3, h: 0.3, fontSize: 11, color: C.background1, align: 'right', objectName: 'team close' })
+    text(s, 'Thank you', { x: 0.5, y: 4.05, w: 5, h: 0.7, fontSize: 36, bold: true, color: C.background1, fontFace: THEME.headFontFace, objectName: 'thanks' })
+    text(s, [{ text: 'Try it at ', options: { color: C.background1 } }, { text: 'voice-khata-delta.vercel.app', options: { color: C.background1, bold: true, hyperlink: { url: 'https://voice-khata-delta.vercel.app' } } }], { x: 5.0, y: 4.2, w: 4.5, h: 0.35, fontSize: 14, align: 'right', objectName: 'live link' })
+    text(s, 'Team Purrfect, Atria Institute of Technology', { x: 5.0, y: 4.55, w: 4.5, h: 0.3, fontSize: 11, color: C.background1, align: 'right', objectName: 'team close' })
   }
 
   await pres.writeFile({ fileName: OUT })

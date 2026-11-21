@@ -1,6 +1,6 @@
-# Voice Khata
+# KhataBhai
 
-Voice Khata is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice in under a second. The ledger lives encrypted on the phone.
+KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice in under a second. The ledger lives encrypted on the phone.
 
 **Hosted prototype:** https://voice-khata-delta.vercel.app
 
@@ -128,7 +128,7 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 
 ## Responsible AI and privacy
 
-- **AI disclosure.** The first turn of a session is spoken in the user's chosen language, for example: "I am Voice Khata, an AI assistant. Your ledger stays only on this phone."
+- **AI disclosure.** The first turn of a session is spoken in the user's chosen language, for example: "I am KhataBhai, an AI assistant. Your ledger stays only on this phone."
 - **Server logs include what was said.** The voice function writes one structured JSON log line per event (`server/log.ts`). For each turn that is the transcript, the parsed intent, the reply text, the ledger operations (customer id, amount, direction) and timings. Customer names and amounts therefore appear in Vercel's runtime logs, which keep them for about an hour on the current plan. Never logged: API keys and tokens (masked by field name), the phone's ledger snapshot (only counts), raw IP addresses (a short one-way hash), and backup ids, confirmation tokens or backup contents (the other endpoints log method, path, status and timing only). `LOG_LEVEL=debug` adds partial transcripts, commits and per-reply TTS detail.
 - **Ledger stays on the device.** Entries are stored in IndexedDB, encrypted with AES-GCM. Each customer has their own key, and shop-level data has a shop key.
 - **Erasure by crypto-shred.** Forgetting a customer deletes their key, so their records become unreadable. The hash chain covers ciphertext, so it still verifies afterwards.
