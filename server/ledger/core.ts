@@ -558,6 +558,11 @@ export class LedgerCore {
     return !!d.readBack || (!d.noisy && d.nameSure && d.confidence === 'high')
   }
 
+  /** A plain entry: every line names a known customer, says the direction (or is a promise) and was read with full confidence. */
+  isPlainEntry(intent: Extract<Intent, { type: 'entries' }>): boolean {
+    return intent.entries.every((e) => !!e.name && !!this.lookup(e.name) && (!!e.direction || e.promise) && e.confidence === 'high')
+  }
+
   /**
    * Can the fast parse alone answer the open question? When not, the agent reads the turn (it sees
    * `pending`) and may call answer_question. Taps always answer.
@@ -565,6 +570,8 @@ export class LedgerCore {
   canAnswerFast(text: string, intent: Intent): boolean {
     const p = this.pending
     if (!p) return true
+    // a fresh complete plain entry replaces the question, with no model in the way
+    if (intent.type === 'entries' && this.isPlainEntry(intent)) return true
     if (this.turnSrc === 'tap') return true
     if (intent.type === 'yes' || intent.type === 'no' || intent.type === 'undo') return true
     const words = text.trim().split(/\s+/).filter(Boolean).length

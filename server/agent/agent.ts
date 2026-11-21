@@ -61,8 +61,8 @@ function userTurn(ctx: AgentContext): string {
   ].join('\n')
 }
 
-export async function decide(ctx: AgentContext, tools: GeminiTool[], audio?: Buffer): Promise<{ calls: ToolCall[]; ms: number }> {
-  const r = await geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio)
+export async function decide(ctx: AgentContext, tools: GeminiTool[], audio?: Buffer, opts: { timeoutMs?: number } = {}): Promise<{ calls: ToolCall[]; ms: number }> {
+  const r = await geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio, opts)
   // a tool we do not have is never run
   return { calls: r.calls.filter((c): c is ToolCall => isToolName(c.name)), ms: r.ms }
 }

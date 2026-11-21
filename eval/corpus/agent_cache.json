@@ -1,10 +1,9 @@
 {
- "a79bb20668142fa34ef45df8ce603cb7d2fb72d6": {
+ "e27d5666c099936b499a00d4583f33f62dce1b66": {
   "calls": [
    {
     "name": "add_entries",
     "args": {
-     "sure": true,
      "entries": [
       {
        "name": "Suleman",
@@ -12,116 +11,117 @@
        "amount": 300
       },
       {
-       "direction": "payment",
        "amount": 400,
-       "name": "Mahi"
+       "name": "Mahi",
+       "direction": "payment"
       }
-     ]
+     ],
+     "sure": true
     }
    }
   ],
-  "ms": 3532.2538999999997
+  "ms": 1305.8535
  },
- "27be6c8c3703fe1f90b8ab82350300bde0e3dc54": {
+ "6c47abf7d5102f6de6433bf64d4bff5cbff758ae": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 1004.8500000000004
+  "ms": 632.6196999999997
  },
- "1e8d3653eeffaf08d5957ded4c9691a60e46a614": {
+ "32e938ab844548ea5a508a1828124df7de756be6": {
   "calls": [
    {
     "name": "unclear",
     "args": {}
    }
   ],
-  "ms": 539.456900000001
+  "ms": 415.60609999999997
  },
- "786da8385328255de9deb245538314e01840a621": {
+ "590a8078956d46e01cfc872a628fae68aeb1b37d": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 449.8172999999988
+  "ms": 598.8792000000003
  },
- "f7fc195dc0b321344b992ee6f5a4da20a9b6700f": {
+ "b1c3cdecc1ab2a2f3d121dbc687d70dd7a77f1b9": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 564.616399999999
+  "ms": 836.1961000000001
  },
- "55342ea8936177c9fdf4e9ca64b50862fc8b7af1": {
+ "ea4526257ff27305dbe07d44936d680e9a204d3c": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 612.7318999999989
+  "ms": 474.5653000000002
  },
- "c210873dc65772fc379590ba2cf2c472c0109c31": {
+ "6fcd841c2292bf8501c49e7a8a66110c25c1145d": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 2071.217999999997
+  "ms": 621.9358000000002
  },
- "bfa14f6ae19385f3b64a734ce12b63b23abb347d": {
+ "7b4dd8286cdade834c57f8653ea5e19b5236ea7d": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 8376.5161
+  "ms": 460.0632999999998
  },
- "48973681eae7e609bde0aa436fb29fa8294c8548": {
+ "0ed3a173f8fab6fbc52ae620fad51d7b02b2ac30": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 3898.8447000000015
+  "ms": 540.7658000000001
  },
- "a8267f6c34a4b316332dd1d5b209d75ca42c584e": {
+ "025b60f867a4cf6523ae761058f1a266dc34e473": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 1060.6401000000005
+  "ms": 622.0598
  },
- "45c45d57eef4846aa0b4d8851507a7df94f825f9": {
+ "a61d5fb919ac00b1c29bc9a4003011400ea60972": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 8730.161
+  "ms": 489.4934999999996
  },
- "2a70befe41bb4c7c39f3e658ce6e9e5bc74390c8": {
+ "ad28ba5351fdcb58059b0d028f76ea214182e0b8": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 7289.1993
+  "ms": 1533.8341999999993
  },
- "a09680c00f45547a1d90eb593b902c0ae9da2240": {
+ "5cb4e3df312507bf013cf7298b4cf7704ce950b8": {
   "calls": [
    {
     "name": "show_customer",
@@ -130,18 +130,18 @@
     }
    }
   ],
-  "ms": 822.3838000000032
+  "ms": 730.1162999999997
  },
- "b60113148f25d1fd9bc5b71868fad416d1666bcc": {
+ "6901ec94a0681f81f4d3c5e541ee6fd1430d9e6f": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 410.2739999999976
+  "ms": 776.4038
  },
- "e1a49c935e47682b6a11a0c9c068c2cb95f2111a": {
+ "2ed2248b9a157c95c29a592c0f9ef46ba7f3db92": {
   "calls": [
    {
     "name": "set_language",
@@ -150,18 +150,18 @@
     }
    }
   ],
-  "ms": 593.3297999999995
+  "ms": 653.7494999999999
  },
- "4ac0c5ea730cee74a571ef5255663e63bbb3341a": {
+ "ae159a7ce973eb1127b4e1ca39c4904dc7343936": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 1047.1036999999997
+  "ms": 745.9875999999986
  },
- "23700757cb8ed0377763c026c54d5e77b56024c5": {
+ "7159cc6cdf4c467e010050378cb323b58c58db20": {
   "calls": [
    {
     "name": "show_customer",
@@ -170,9 +170,9 @@
     }
    }
   ],
-  "ms": 1140.6825000000026
+  "ms": 3164.048700000001
  },
- "3f59fd081c98342b6c6345e7b4b6da6dd605243f": {
+ "87e7e978a6bb96ea773e79d146ceaf3c2b7c5c95": {
   "calls": [
    {
     "name": "add_entries",
@@ -180,35 +180,35 @@
      "entries": [
       {
        "direction": null,
-       "name": "Suresh",
-       "amount": 300
+       "amount": 300,
+       "name": "Suresh"
       }
      ],
-     "sure": true
+     "sure": false
     }
    }
   ],
-  "ms": 630.3012000000017
+  "ms": 3345.428799999998
  },
- "5244fe1506f5117a68d3f8907eb679f0f50ea69f": {
+ "842c42bd1a04ff7e39bcb33a38005d462502d846": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 628.1970000000001
+  "ms": 5310.816599999998
  },
- "e22414d9f3f48be4b4293fa7520eca8afc7d91db": {
+ "b630781c645f23ad7e6f6fc18791e18d716fd1cd": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 714.6357999999964
+  "ms": 5575.6888000000035
  },
- "329b6750d661e7be497c5769c01cfa58e1e715f7": {
+ "d6d5d379c05a2c586d510b2c9a6a76383addd546": {
   "calls": [
    {
     "name": "show_customer",
@@ -217,9 +217,58 @@
     }
    }
   ],
-  "ms": 448.71160000000236
+  "ms": 7158.471099999995
  },
- "879f918b679452a599a74dbaaba5d676f0e93303": {
+ "5aac4bce6fa0186d915d2f056d93dc6b24d4c437": {
+  "calls": [
+   {
+    "name": "add_entries",
+    "args": {
+     "sure": true,
+     "entries": [
+      {
+       "amount": 300,
+       "direction": "credit",
+       "name": "Suresh"
+      }
+     ]
+    }
+   }
+  ],
+  "ms": 1329.5838999999978
+ },
+ "563d2268b61e41b386d26b477bfb39aa74525977": {
+  "calls": [
+   {
+    "name": "show_customer",
+    "args": {
+     "name": "Suresh"
+    }
+   }
+  ],
+  "ms": 2617.000699999997
+ },
+ "283703657d991e05c584cb59d1f52d8a3f93ec56": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 1927.487599999993
+ },
+ "ad10249c6ad5fcb114d8669ebf594c183929766b": {
+  "calls": [
+   {
+    "name": "show_customer",
+    "args": {
+     "name": "Suresh"
+    }
+   }
+  ],
+  "ms": 5113.225600000005
+ },
+ "c0cd5be14eb5bbfe1b61d6027e8edd9021388688": {
   "calls": [
    {
     "name": "add_entries",
@@ -235,9 +284,9 @@
     }
    }
   ],
-  "ms": 863.869399999996
+  "ms": 2704.145199999999
  },
- "585455a1fd79e70c0446a280e45505db9179fc5b": {
+ "49e898243fc4ae628221e4ed65044cffb4cf1a8c": {
   "calls": [
    {
     "name": "show_customer",
@@ -246,85 +295,36 @@
     }
    }
   ],
-  "ms": 661.0440999999992
+  "ms": 1720.1042999999918
  },
- "52cf3ca9921da09e54537f65bf21cc01db3ce099": {
+ "7410d5fdd9535f35c5561af8886b9ddad9352384": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 525.2525000000023
+  "ms": 819.2774999999965
  },
- "f3b68e69061bdc669a12c8552f06868997cfd47d": {
-  "calls": [
-   {
-    "name": "show_customer",
-    "args": {
-     "name": "Suresh"
-    }
-   }
-  ],
-  "ms": 661.1322
- },
- "49731bbe51ab46600522d82107db6e60887a5bfa": {
-  "calls": [
-   {
-    "name": "add_entries",
-    "args": {
-     "sure": true,
-     "entries": [
-      {
-       "direction": "credit",
-       "name": "Suresh",
-       "amount": 300
-      }
-     ]
-    }
-   }
-  ],
-  "ms": 1126.2632999999987
- },
- "659c86411fdfdaf53343c0f0b861df1153b1c1c8": {
-  "calls": [
-   {
-    "name": "show_customer",
-    "args": {
-     "name": "Suresh"
-    }
-   }
-  ],
-  "ms": 443.01380000000063
- },
- "a5412be18f52c6cb8aeceee6ff494635548999af": {
+ "d206945fb7c58d1b5643a71a35eca729e5bbd321": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 613.9380999999994
+  "ms": 978.2357999999949
  },
- "c45cbdda6dbcbb885f7e965cb6c9043b2ede994f": {
+ "c8781e83030a37055f5660e5650c0a60b2e7d5de": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 577.4956999999995
+  "ms": 4254.357300000003
  },
- "636eea924c75bb30a869257bc4852ed2e4e2c944": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 2936.0801999999967
- },
- "ee22e343f9b000bbabadae75b8fa4875477f2a96": {
+ "297aaf95084eea034999ab34c1a6ac8828fc4a35": {
   "calls": [
    {
     "name": "show_customer",
@@ -333,9 +333,9 @@
     }
    }
   ],
-  "ms": 3929.031600000002
+  "ms": 6737.954500000007
  },
- "82e65de38a71dd1c936e43aeab6ea711ce74bd5f": {
+ "98157c0053c0fb6b606fe7ba075525180a2b51f8": {
   "calls": [
    {
     "name": "add_entries",
@@ -343,17 +343,17 @@
      "entries": [
       {
        "amount": 300,
-       "name": null,
-       "direction": null
+       "direction": null,
+       "name": null
       }
      ],
      "sure": false
     }
    }
   ],
-  "ms": 1193.06289999999
+  "ms": 3871.1762000000017
  },
- "1cd32ec5b2295a47da39f42a49ec367cb25a1ed0": {
+ "41148eeb338a5a6fdfdec9935ebee29db78d384b": {
   "calls": [
    {
     "name": "answer_question",
@@ -363,85 +363,87 @@
     }
    }
   ],
-  "ms": 1641.4012999999977
+  "ms": 713.9259999999922
  },
- "538d7de7b24881e99ccf207971b74d223aadd866": {
+ "918b026646b1a4f567ae5df3431e129e31a29369": {
   "calls": [
    {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 5838.244500000001
- },
- "d49f35edcead860b396f8ade343bf405785f495a": {
-  "calls": [
-   {
-    "name": "show_customer",
+    "name": "answer_question",
     "args": {
-     "name": "ಸುಲೇಮಾನ್"
+     "kind": "direction",
+     "value": "credit"
     }
    }
   ],
-  "ms": 1506.5126000000018
+  "ms": 763.372199999998
  },
- "7b3f1a73c9a3cd9a1eacb5294c3d88e83fbb6b08": {
+ "08c1801b482f73d195eaa89686dd3059c1461ada": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 652.9311000000016
+  "ms": 574.7891000000091
  },
- "f87dfe61dd4bc520d2dfce0a093037cf055ed48f": {
+ "bd03e2823e9f4c7290d9790a48c7591da44acbbb": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 785.8443000000116
+  "ms": 497.20520000001125
  },
- "7be8e30bb7beaa7c0faca51a7f79fabd159bd7c9": {
+ "cce9b2a1612421d735dc4133f516c87234882042": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 1155.8491000000067
+ },
+ "0e59be424e1940026e529bef6ad8d965a00ffc4c": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 536.7361999999994
+ },
+ "1fabd7e63f89a273f9c9f59034ac80f27820bc00": {
   "calls": [
    {
     "name": "add_entries",
     "args": {
-     "sure": false,
      "entries": [
       {
-       "direction": "credit",
-       "name": "Mohan",
-       "amount": 300
+       "amount": 300,
+       "direction": null,
+       "name": null
       }
-     ]
+     ],
+     "sure": false
     }
    }
   ],
-  "ms": 922.829700000002
+  "ms": 6493.496700000003
  },
- "c5af252d82e8bb5988b44e6c1ca4b5d1b9496546": {
+ "9db6f8745d9a47891c2b82cf6b15bb1445455b35": {
   "calls": [
    {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 442.0835999999981
- },
- "be7c552be58f6379930a66bb7713e4a320daec01": {
-  "calls": [
-   {
-    "name": "show_customer",
+    "name": "answer_question",
     "args": {
-     "name": "Mahe"
+     "kind": "direction",
+     "value": "credit"
     }
    }
   ],
-  "ms": 685.0958000000101
+  "ms": 835.6502000000037
  },
- "cead1988159b9e0f83d5131162d87a0d7ebaedd2": {
+ "a80902f3726d80080e80cb894f35d63a2301546f": {
   "calls": [
    {
     "name": "add_entries",
@@ -457,45 +459,45 @@
     }
    }
   ],
-  "ms": 694.0941000000166
+  "ms": 687.9864999999991
  },
- "2ff7081b2207bbf5cb527ac2ace65d60286f82f2": {
+ "db7925bd39809e7a78a6f1410b20aa2482896c83": {
   "calls": [
    {
     "name": "add_entries",
     "args": {
-     "sure": true,
+     "sure": false,
      "entries": [
       {
-       "direction": "payment",
+       "name": "Mahe",
        "amount": 300,
-       "name": "Mahe"
+       "direction": "payment"
       }
      ]
     }
    }
   ],
-  "ms": 896.1994000000122
+  "ms": 2100.1735999999946
  },
- "0e69feabcf06dd94cdb185b1484c882c86a98e0c": {
+ "ed70a0c29074042804c3234da11eabaa445cb310": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 595.9208999999973
+  "ms": 450.6249000000098
  },
- "6daeb4c78115cb66730e011e85d2b610ee3b8208": {
+ "af198973a9ddcff690bc67962aaca40bc5f50992": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 409.02430000001914
+  "ms": 1142.6409999999887
  },
- "1d0cb1e232be8e2ed7e1efbe2c6840147272f6e6": {
+ "2041e662f40455c12f9678ec48b70ff058ccfe46": {
   "calls": [
    {
     "name": "show_customer",
@@ -504,44 +506,148 @@
     }
    }
   ],
-  "ms": 448.20840000000317
+  "ms": 640.0656000000017
  },
- "3a01252786c6c4cc59d23a64b89cb856f915f42d": {
+ "fbf0a10c825f46333391433744bd58ab277a9922": {
   "calls": [
    {
     "name": "unclear",
     "args": {}
    }
   ],
-  "ms": 430.5995000000112
+  "ms": 639.084600000002
  },
- "70a4f2fb3752360f8d8781698c952168cc497ec3": {
+ "a706ad455308ebf153be7dfd3576a49bd85a99a3": {
   "calls": [
    {
     "name": "not_for_me",
     "args": {}
    }
   ],
-  "ms": 549.0301000000036
+  "ms": 482.4924000000028
  },
- "80a11d2847907ace8c082b90e0a9771ab9233623": {
+ "ce75093942f1550660b772d63e3c54022294c7da": {
   "calls": [
    {
     "name": "unclear",
     "args": {}
    }
   ],
-  "ms": 450.90970000001835
+  "ms": 936.625
  },
- "7a30a92eaa1c14d90e520552a76da50307c151e2": {
+ "f9a1475e8f586009245fbc37b2035f8fd2a22e57": {
   "calls": [
    {
     "name": "add_entries",
     "args": {
      "entries": [
       {
-       "amount": 300,
+       "direction": null,
        "name": "Mahi",
+       "amount": 300
+      }
+     ]
+    }
+   }
+  ],
+  "ms": 722.9112000000023
+ },
+ "6a1ad15fbbf4898f9088a738b4fb26e4f47974ae": {
+  "calls": [
+   {
+    "name": "answer_question",
+    "args": {
+     "value": "credit",
+     "kind": "direction"
+    }
+   }
+  ],
+  "ms": 766.4091000000044
+ },
+ "0140b786c08e0ac1bd3f10fd48392bdc05427797": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 806.1148000000103
+ },
+ "0fc47dc3dba71d5c2564916ecf0ec0d8bda6ff61": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 799.7889999999898
+ },
+ "a344f0e79285e459d7e376e4214915338ef7b4a1": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 625.9795999999915
+ },
+ "cb2596570718f002e6ae8d30689e09759b9ee338": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 526.9073000000062
+ },
+ "ca9a05002f9c8747a742ac4301f524ebeaa833cc": {
+  "calls": [
+   {
+    "name": "not_for_me",
+    "args": {}
+   }
+  ],
+  "ms": 532.7774999999965
+ },
+ "fee00300eaff6df3d07a2a87683d73b3df3d2c7e": {
+  "calls": [
+   {
+    "name": "add_entries",
+    "args": {
+     "entries": [
+      {
+       "amount": 400,
+       "name": "Suleiman",
+       "direction": null
+      }
+     ],
+     "sure": false
+    }
+   }
+  ],
+  "ms": 928.0368999999919
+ },
+ "3d45f0a2e936cb45e688f1e014a76d6525808438": {
+  "calls": [
+   {
+    "name": "answer_question",
+    "args": {
+     "kind": "direction",
+     "value": "credit"
+    }
+   }
+  ],
+  "ms": 689.1809999999969
+ },
+ "4e16e88d8f147221a5cd5ba72036d712f1712872": {
+  "calls": [
+   {
+    "name": "add_entries",
+    "args": {
+     "entries": [
+      {
+       "name": "Suleiman",
+       "amount": 300,
        "direction": null
       }
      ],
@@ -549,114 +655,9 @@
     }
    }
   ],
-  "ms": 817.460699999996
+  "ms": 494.55500000000757
  },
- "8f7eeb870377d20122371978d0f273821a533c75": {
-  "calls": [
-   {
-    "name": "answer_question",
-    "args": {
-     "value": "credit",
-     "kind": "direction"
-    }
-   }
-  ],
-  "ms": 503.632500000007
- },
- "b771236e3eb201a2d3ceec30afb94e675607ded8": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 462.72949999998673
- },
- "736fde4ebccb450a10f7256379424d80ad57d82f": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 590.3927000000258
- },
- "7cf558ca594571bd753588500b207b3b934f7371": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 429.3738000000012
- },
- "677269c330712d1844272b72e4a9021242b146d3": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 489.6012000000046
- },
- "4addf5b9dc893f78a85271f29eef05b35c661c7d": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 748.9075000000012
- },
- "e52872f528109a4a7120daba249ac07a49602c46": {
-  "calls": [
-   {
-    "name": "add_entries",
-    "args": {
-     "sure": true,
-     "entries": [
-      {
-       "amount": 400,
-       "name": "Suleiman",
-       "direction": null
-      }
-     ]
-    }
-   }
-  ],
-  "ms": 513.0564000000013
- },
- "c046c99858a6b20f6805bb88490da0a0b4438f29": {
-  "calls": [
-   {
-    "name": "answer_question",
-    "args": {
-     "value": "credit",
-     "kind": "direction"
-    }
-   }
-  ],
-  "ms": 710.7563999999838
- },
- "5fb1d38cfac957259b4a56452cf6dfefecbcdee9": {
-  "calls": [
-   {
-    "name": "add_entries",
-    "args": {
-     "sure": true,
-     "entries": [
-      {
-       "name": "Suleiman",
-       "amount": 300,
-       "direction": null
-      }
-     ]
-    }
-   }
-  ],
-  "ms": 924.6179999999877
- },
- "d678654a7aadec6690d0717b8b33405381baf061": {
+ "f68d7f785ae903e719b9dc0d12941db589aaed2b": {
   "calls": [
    {
     "name": "add_entries",
@@ -664,17 +665,17 @@
      "sure": false,
      "entries": [
       {
+       "amount": 100,
        "name": "Suleiman",
-       "direction": null,
-       "amount": 100
+       "direction": null
       }
      ]
     }
    }
   ],
-  "ms": 770.2513000000035
+  "ms": 664.9281000000046
  },
- "aab554db43a3a46e9c2d3cbe700c97fae996c911": {
+ "e93e2f3e3c75e36434e292ac61cadb0e639d8689": {
   "calls": [
    {
     "name": "add_entries",
@@ -690,72 +691,24 @@
     }
    }
   ],
-  "ms": 570.4635000000126
+  "ms": 1034.3617999999988
  },
- "380d62669bb885984706a877cecdc232a52139ce": {
+ "e976271a2c3f7ba95d8521f4e44b8213a558f069": {
   "calls": [
    {
     "name": "add_entries",
     "args": {
      "entries": [
       {
+       "amount": 200,
        "direction": "credit",
-       "name": "Suleiman",
-       "amount": 200
+       "name": "Suleiman"
       }
      ],
      "sure": true
     }
    }
   ],
-  "ms": 611.5909000000102
- },
- "7a258c39a832363126f4ddf201eea2e0ad635044": {
-  "calls": [
-   {
-    "name": "answer_question",
-    "args": {
-     "value": "credit",
-     "kind": "direction"
-    }
-   }
-  ],
-  "ms": 1549.6439
- },
- "975d8475379cfdbcba8f46312c0779cb38f02981": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 552.8588
- },
- "36cad5f1ef26b479a9d93dd89274efc24ff37564": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 885.5462000000002
- },
- "366523a37df62b0fa51f3e92f3a9200c03f33fc8": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 904.4148999999998
- },
- "f6c1a7740f8f6efb80d581a0326efd561502a994": {
-  "calls": [
-   {
-    "name": "not_for_me",
-    "args": {}
-   }
-  ],
-  "ms": 676.1608999999999
+  "ms": 502.84619999999995
  }
 }

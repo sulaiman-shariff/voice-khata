@@ -478,6 +478,11 @@ export class Session {
     const early = this.earlyCommit
     const finalAt = this.now()
     const pcm = this.takeUttAudio()
+    // the streams' readings of THIS utterance (set by pickHeard just before): read and cleared first,
+    // so a dropped final never leaks them into the next turn
+    const streams = this.lastHeard
+    this.lastHeard = null
+    const heard = streams?.some((h) => h.text === text) ? streams : undefined
     const heardAt = this.heardAt
     this.heardAt = null
     resetUtterance(this.energy)
@@ -501,8 +506,6 @@ export class Session {
     const gated = this.gate(text)
     if (gated === null) return // asleep and not addressed to us, or a wake / sleep word on its own
     text = gated
-    const heard = this.lastHeard ?? undefined
-    this.lastHeard = null
     const t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang, heardAt, heard }
     this.dispatchFinal(text, t)
   }
@@ -699,7 +702,7 @@ export class Session {
 
   /** Instant path: every line names a known customer, says the direction and was read with full confidence. */
   private isInstant(intent: Extract<Intent, { type: 'entries' }>): boolean {
-    return intent.entries.every((e) => !!e.name && !!this.ledger.lookup(e.name) && (!!e.direction || e.promise) && e.confidence === 'high')
+    return this.ledger.isPlainEntry(intent)
   }
 
   /** The one amount each language stream heard (streams with several amounts are left out). */
@@ -726,7 +729,7 @@ export class Session {
       heard,
       history: this.ledger.history.slice(-6),
       screen: 'home',
-      customers: this.snap.customers.map((c) => c.name),
+      customers: this.snap.customers.flatMap((c) => [c.name, ...c.aliases]),
       recent,
       pending: this.ledger.pendingView(),
     }

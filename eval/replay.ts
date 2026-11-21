@@ -21,8 +21,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { mentionsMoney } from '../shared/intent.js'
 import type { LedgerOp, PendingView, ServerMsg, SnapCustomer, Snapshot } from '../shared/protocol.js'
-import { type AgentContext, type ToolCall, decide } from '../server/agent/agent.js'
-import { GEMINI_TOOLS } from '../server/agent/tools.js'
+import { AGENT_SYSTEM, type AgentContext, type ToolCall, decide } from '../server/agent/agent.js'
+import { GEMINI_TOOLS, TOOL_SCHEMAS } from '../server/agent/tools.js'
 import { Session } from '../server/session.js'
 
 type Step = { say: string } | { tap: 'yes' | 'no' | 'undo' } | { answer: string } | { type: string }
@@ -41,7 +41,9 @@ const CACHE = 'eval/corpus/agent_cache.json'
 type Cached = { calls: ToolCall[]; ms: number }
 const cache: Record<string, Cached> = (!record || args.includes('--fill')) && fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {}
 const agentMs: number[] = []
-const requestKey = (ctx: AgentContext) => crypto.createHash('sha1').update(JSON.stringify(ctx)).digest('hex')
+// the key covers the prompt and the tool declarations too: change either and the cache is stale
+const PROMPT_HASH = crypto.createHash('sha1').update(AGENT_SYSTEM).update(JSON.stringify(TOOL_SCHEMAS)).digest('hex')
+const requestKey = (ctx: AgentContext) => crypto.createHash('sha1').update(PROMPT_HASH).update(JSON.stringify(ctx)).digest('hex')
 const only = args.includes('--sid') ? args[args.indexOf('--sid') + 1] : null
 const convs: Conv[] = JSON.parse(fs.readFileSync(file, 'utf8'))
 
@@ -175,10 +177,7 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
       if (p?.kind !== 'confirm' || (next && ('tap' in next || 'answer' in next || ('say' in next && /^(yes|haan|ha|ಹೌದು|ಸರಿ|no|nahi|ಇಲ್ಲ)/i.test(next.say))))) break
       // a read-back the logged user never got to answer: yes only for an entry they meant
       const who = p.name ? canon(p.name) : null
-      // ...and only while that meant line is not already written (a second copy is not meant)
-      const lines = [...c.saves, ...c.allow].filter(([n, rs, d]) => n === who && rs * 100 === p.paise && d === p.direction)
-      const done = written.filter((w) => w.name === who && w.rs * 100 === p.paise && w.dir === p.direction).length
-      const meant = lines.length > done
+      const meant = [...c.saves, ...c.allow].some(([n, rs, d]) => n === who && rs * 100 === p.paise && d === p.direction)
       score.oracle++
       await send({ tap: meant ? 'yes' : 'no' })
     }

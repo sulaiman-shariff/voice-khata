@@ -234,6 +234,19 @@ describe('a heard name not in the ledger is never written without a yes', () => 
     expect(h.written()).toEqual([['id1', 200, 'credit']])
   })
 
+  it.each([
+    ['"Mahe Talk 300" (from "Mahi took 300")', [cust('m', 'Mahi')], 'Mahe Talk 300.', null, 'm'],
+    ['a model reading "ಸುರೇಶ್ದು" (Suresh is)', [cust('s', 'Suresh')], 'Sureshdu 300 rupees sala aite.', addEntry('ಸುರೇಶ್ದು', 300, 'credit'), 's'],
+    ['a model name containing a customer ("Suresh mele")', [cust('s', 'Suresh')], 'Suresh hesaru mele 300 sala', addEntry('Suresh mele', 300, 'credit'), 's'],
+  ])('%s is the existing customer, never a new account', async (_label, people, text, reading, cid) => {
+    const h = harness(people, { lang: 'en', agent: reading ? () => reading : undefined })
+    await h.turn(text)
+    if (h.asks === 'direction') await h.turn('udhaar')
+    if (h.asks === 'confirm') await h.turn('yes')
+    expect(h.accounts()).toEqual([])
+    expect(h.written()).toEqual([[cid, 300, 'credit']])
+  })
+
   it('with no Suresh yet, "Sureshdu" opens an account called Suresh (not "Sureshdu") after a yes', async () => {
     const h = harness([cust('m', 'Mahi')], { lang: 'en' })
     await h.turn('Sureshdu 300 rupees sala aite.')
@@ -925,5 +938,44 @@ describe('attention: the window and the sleep word', () => {
     await h.typed('Ramesh 300')
     expect(h.asks).not.toBeNull()
     expect(states(h.out).at(-1)).toBe('awake')
+  })
+})
+
+describe('fast answers need no model, and a dropped final leaves nothing behind', () => {
+  it('a fresh complete plain entry replaces an open "whose?" question even when the agent is down', async () => {
+    const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], {
+      agent: (ctx) => {
+        if (ctx.pending) throw new Error('timeout')
+        return callsOf({ name: 'add_entries', args: { entries: [{ name: null, amount: 300, direction: null }] } })
+      },
+    })
+    await h.turn('teen sau likh do bhai')
+    expect(h.asks).toBe('name')
+    await h.turn('Suresh ka 200 udhaar')
+    expect(h.written()).toEqual([['s', 200, 'credit']])
+    expect(h.asks).toBeNull()
+  })
+
+  it('streams heard while asleep and dropped do not reach the next turn', async () => {
+    const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')])
+    h.cb.pick!([{ locale: 'hi-IN', text: 'Suresh ko 500 de do' }, { locale: 'en-IN', text: 'Suresh ko 300 de do' }])
+    h.cb.onFinal!('Suresh ko 500 de do') // asleep, not addressed: dropped
+    await h.s.idle()
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    h.cb.onFinal!('Ramesh ka 300 udhaar') // a single stream: no pick call
+    await h.s.idle()
+    expect(h.asks).not.toBe('confusable') // no "300 or 500?"
+    expect(lastCard(h.out)).toMatchObject({ paise: 30000 })
+  })
+
+  it('a dropped utterance does not become the ctx.heard of the next turn', async () => {
+    const h = harness([cust('r', 'Ramesh')], { agent: () => callsOf({ name: 'show_customer', args: { name: 'Ramesh' } }) })
+    h.cb.pick!([{ locale: 'hi-IN', text: 'chai do' }, { locale: 'en-IN', text: 'chai do' }])
+    h.cb.onFinal!('chai do') // asleep: dropped
+    await h.s.idle()
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    h.cb.onFinal!('Ramesh ka hisaab dikhao')
+    await h.s.idle()
+    expect(h.agentCalls[0].ctx.heard).toEqual([{ locale: 'hi-IN', text: 'Ramesh ka hisaab dikhao' }])
   })
 })

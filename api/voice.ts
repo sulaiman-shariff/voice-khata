@@ -13,6 +13,7 @@ import { SttStream } from '../server/gnani/stt.js'
 import { MultiStt } from '../server/gnani/multi.js'
 import { TtsPool } from '../server/gnani/tts.js'
 import { decide } from '../server/agent/agent.js'
+import { WARM_TIMEOUT_MS } from '../server/parse/gemini.js'
 import { GEMINI_TOOLS } from '../server/agent/tools.js'
 import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
@@ -95,7 +96,7 @@ wss.on('connection', (ws, req) => {
   if (!warmed) {
     warmed = true
     // fetch the model's token and open TLS for this instance (the first call after a cold start is slow)
-    void decide({ lang: 'en', heard: [{ locale: 'en-IN', text: 'hello' }], history: [], screen: 'home', customers: [], recent: [], pending: null }, GEMINI_TOOLS).catch(() => {})
+    void decide({ lang: 'en', heard: [{ locale: 'en-IN', text: 'hello' }], history: [], screen: 'home', customers: [], recent: [], pending: null }, GEMINI_TOOLS, undefined, { timeoutMs: WARM_TIMEOUT_MS }).catch(() => {})
   }
   const tts = new TtsPool(key, 2, L.child({ part: 'tts' }))
   const send = (m: ServerMsg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
