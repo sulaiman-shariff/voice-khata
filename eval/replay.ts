@@ -5,7 +5,8 @@
  * throughout: the point is what the understanding path does with what was heard.
  *
  *   npx tsx eval/replay.ts [eval/corpus/prod.json] [--label name] [-v]
- *   npx tsx --env-file=.env eval/replay.ts --record     # call Gemini live and refresh the cache
+ *   npx tsx --env-file=.env eval/replay.ts --record     # call Gemini live and rebuild the cache
+ *   ... --record --fill                                # only call for requests the cache lacks
  *
  * Scores, summed over sessions:
  *   wrong     entries written that the shopkeeper did not mean (worst)
@@ -38,7 +39,7 @@ const verbose = args.includes('-v')
 const record = args.includes('--record')
 const CACHE = 'eval/corpus/agent_cache.json'
 type Cached = { calls: ToolCall[]; ms: number }
-const cache: Record<string, Cached> = fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {}
+const cache: Record<string, Cached> = (!record || args.includes('--fill')) && fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {}
 const agentMs: number[] = []
 const requestKey = (ctx: AgentContext) => crypto.createHash('sha1').update(JSON.stringify(ctx)).digest('hex')
 const only = args.includes('--sid') ? args[args.indexOf('--sid') + 1] : null
@@ -75,14 +76,17 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
     },
     agent: async (ctx) => {
       const key = requestKey(ctx)
-      if (record) {
+      if (record && !cache[key]) {
         let r: Cached
-        try {
-          r = await decide(ctx, GEMINI_TOOLS)
-        } catch (e) {
-          // a failed call is not cached: the replay sees it as missing, like the session sees a failure
-          console.log(`agent failed for "${ctx.heard[0].text}": ${String(e).slice(0, 120)}`)
-          throw e
+        // a flaky call is retried: the cache holds what the model said, not what a timeout lost
+        for (let attempt = 1; ; attempt++) {
+          try {
+            r = await decide(ctx, GEMINI_TOOLS)
+            break
+          } catch (e) {
+            console.log(`agent failed (try ${attempt}) for "${ctx.heard[0].text}": ${String(e).slice(0, 100)}`)
+            if (attempt >= 3) throw e
+          }
         }
         agentMs.push(r.ms)
         cache[key] = { calls: r.calls, ms: r.ms }
@@ -100,6 +104,7 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
     newId: () => `n${++ids}`,
   })
   s.onClient({ type: 'hello', lang: c.lang as never, snapshot: snapshot(), firstRun: false, ptt: false })
+  s.onClient({ type: 'wake', source: 'tap' }) // awake throughout: the sessions start asleep
   await s.idle()
 
   const written: { name: string | null; rs: number; dir: string }[] = []
@@ -170,7 +175,10 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
       if (p?.kind !== 'confirm' || (next && ('tap' in next || 'answer' in next || ('say' in next && /^(yes|haan|ha|ಹೌದು|ಸರಿ|no|nahi|ಇಲ್ಲ)/i.test(next.say))))) break
       // a read-back the logged user never got to answer: yes only for an entry they meant
       const who = p.name ? canon(p.name) : null
-      const meant = [...c.saves, ...c.allow].some(([n, rs, d]) => n === who && rs * 100 === p.paise && d === p.direction)
+      // ...and only while that meant line is not already written (a second copy is not meant)
+      const lines = [...c.saves, ...c.allow].filter(([n, rs, d]) => n === who && rs * 100 === p.paise && d === p.direction)
+      const done = written.filter((w) => w.name === who && w.rs * 100 === p.paise && w.dir === p.direction).length
+      const meant = lines.length > done
       score.oracle++
       await send({ tap: meant ? 'yes' : 'no' })
     }
