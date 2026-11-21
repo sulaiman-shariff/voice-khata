@@ -932,6 +932,41 @@ describe('attention: asleep and awake', () => {
     expect(h.written()).toHaveLength(1)
   })
 
+  it('asleep: "Hata bhai, Ramesh 300 udhaar" (a misheard KhataBhai) wakes and writes', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await spoke(h, 'Hata bhai, Ramesh 300 udhaar')
+    expect(states(h.out)).toEqual(['asleep', 'awake'])
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+  })
+
+  it('asleep: "Aata bhai 300 ka hua" (flour) stays asleep', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await spoke(h, 'Aata bhai 300 ka hua')
+    expect(states(h.out)).toEqual(['asleep'])
+    expect(h.ops()).toEqual([])
+    expect(h.said).toEqual([])
+  })
+
+  it('a phone wake is confirmed by "aata bhai" (how recognisers hear KhataBhai)', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'wake', source: 'phone' })
+    await spoke(h, 'Aata bhai, Ramesh ka 300 udhaar')
+    expect(states(h.out).at(-1)).toBe('awake')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+  })
+
+  it('awake: "hata bhai" is an undo, not a bare wake', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('Ramesh ka 340 udhaar')
+    const eid = h.entries()[0].eid
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    h.said.length = 0
+    h.cb.onFinal!('hata bhai')
+    await h.s.idle()
+    expect(h.said).not.toContain(say('hi').awakeHello())
+    expect(h.ops().at(-1)).toEqual({ op: 'void', eid, reason: 'spoken undo' })
+  })
+
   it('our own reply containing KhataBhai does not wake it', async () => {
     const h = harness([cust('r', 'Ramesh')], { lang: 'en', speakMs: 80 })
     h.s.onClient({ type: 'hello', lang: 'en', snapshot: h.s.snap, firstRun: true, ptt: false })

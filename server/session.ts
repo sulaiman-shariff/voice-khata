@@ -155,7 +155,9 @@ export class Session {
   private gate(text: string): string | null {
     const asleep = this.attention.state === 'asleep'
     if (asleep && this.isSpeaking()) return null // never wake on what we are saying ourselves
-    const wake = spotWake(text, this.phoneUnconfirmed)
+    // the misheard forms ("Hata bhai") only wake a sleeping app or confirm the phone's detector;
+    // awake, "hata bhai" is an undo and is never stripped
+    const wake = spotWake(text, { fuzzy: this.phoneUnconfirmed, weak: asleep || this.phoneUnconfirmed })
     if (asleep && !wake.found) {
       this.log.debug('asleep_dropped', { text })
       return null
