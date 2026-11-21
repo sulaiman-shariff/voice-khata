@@ -8,7 +8,7 @@ const run = (cmd, args, opts = {}) => {
   if (r.status !== 0) process.exit(r.status ?? 1)
 }
 
-const jbr = 'C:\Program Files\Android\Android Studio\jbr'
+const jbr = 'C:/Program Files/Android/Android Studio/jbr'
 if (!process.env.JAVA_HOME && existsSync(jbr)) process.env.JAVA_HOME = jbr
 const sdk = sdkDir()
 if (sdk) process.env.ANDROID_HOME = process.env.ANDROID_HOME || sdk
