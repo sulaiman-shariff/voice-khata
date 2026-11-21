@@ -77,6 +77,7 @@ export type ClientMsg =
   | { type: 'replay_start' } // binary frames until replay_end are buffered speech from a dropped connection
   | { type: 'replay_end' }
   | { type: 'wake'; source: 'tap' | 'hold' | 'phone' } // the shopkeeper woke the agent without the wake word
+  | { type: 'sleep' } // tapped while awake: go back to sleep now
   | { type: 'hold_end' } // the mic button held for 'wake' was released
 
 /** A question the agent is waiting on (drives the confirm card on screen). */

@@ -67,6 +67,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let turnAudioBytes = 0
 
   let pttHeld = false
+  /** a 'wake' with source 'hold' was sent and its hold_end has not been */
+  let holdActive = false
   let pttTailTimer: ReturnType<typeof setTimeout> | null = null
 
   // bad-network handling (src/lib/link.ts)
@@ -114,10 +116,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   }
 
   /** Awake/asleep changed (server answer or optimistic local change after a tap). */
-  function setAwake(a: boolean) {
+  function setAwake(a: boolean, quiet = false) {
     if (awake === a) return
     awake = a
-    ev.attention?.(a ? 'awake' : 'asleep')
+    if (!quiet) ev.attention?.(a ? 'awake' : 'asleep') // quiet: a reconnect reset, not worth a chime
     if (a && status === 'asleep') setStatus('listening')
     else if (!a && status === 'listening') setStatus('asleep')
   }
@@ -552,7 +554,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         hello(sock)
         adopt(sock)
         log.info('reconnected', { attempt: backoffIdx })
-        setAwake(false) // a new server session starts asleep; it says so if it is awake
+        setAwake(false, true) // a new server session starts asleep; it says so if it is awake
         setStatus(idleStatus())
       } catch (e) {
         log.warn('reconnect_failed', { error: String(e) })
@@ -623,6 +625,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         }, OLD_SOCKET_GRACE_MS)
       }
       adopt(sock)
+      setAwake(false, true) // the new session starts asleep; its 'attention' (sent after hello) says otherwise
       swapping = false
       log.info('swap_done', { ms: Math.round(performance.now() - swapT0) })
     } catch (e) {
@@ -719,6 +722,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     } catch (e) {
       log.error('mic_attach_failed', { error: String(e) })
       ev.error(e instanceof Error ? e.message : String(e))
+      holdActive = false
+      send({ type: 'sleep' }) // the wake we sent has nothing to listen with
+      setAwake(false)
+      ev.micError?.()
     }
   }
 
@@ -789,6 +796,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     metricsTimer = null
     pendingMetrics = null
     pttHeld = false
+    holdActive = false
     swapInFlight = false
     swapping = false
     if (ws) {
@@ -880,18 +888,24 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     wake(source) {
       if (!running) return
       log.info('wake', { source })
+      if (source === 'hold') {
+        if (holdActive) return // never two hold wakes for one press
+        holdActive = true
+      }
       send({ type: 'wake', source })
       setAwake(true) // optimistic: the server's 'attention' confirms (or says asleep)
       if (!stream) void attachMic()
     },
     holdEnd() {
-      if (!running) return
+      if (!running || !holdActive) return // no hold started: nothing to end
+      holdActive = false
       log.debug('hold_end')
       send({ type: 'hold_end' })
     },
     sleep() {
       if (!running) return
       log.info('sleep')
+      send({ type: 'sleep' })
       setAwake(false)
     },
     setLang(l) {

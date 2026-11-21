@@ -87,6 +87,8 @@ export interface VoiceEvents {
   attention?(state: 'asleep' | 'awake'): void
   /** The turn is over: the on-screen captions are stale. */
   turnDone?(): void
+  /** The microphone could not be opened after a wake (permission refused, no device). */
+  micError?(): void
 }
 
 export interface VoiceClient {

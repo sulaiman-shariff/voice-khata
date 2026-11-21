@@ -173,6 +173,7 @@ export function MicButton({ status, levelSource, on, handsFree, t, onTap, onHold
   const s = 1 + Math.min(level * 3, 0.6)
   const live = on && status !== 'offline'
   const asleep = !on || status === 'asleep'
+  const dim = asleep || status === 'offline' // offline: awake in name only, nothing is heard
   const interrupt = live && status === 'speaking'
   const label = asleep ? t.micStart : interrupt ? t.interrupt : t.micStop
   return (
@@ -189,8 +190,9 @@ export function MicButton({ status, levelSource, on, handsFree, t, onTap, onHold
         type="button"
         aria-label={label}
         // one toggle: pressed = awake
-        aria-pressed={!asleep && !interrupt}
-        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); onTap() } }}
+        aria-pressed={!dim && !interrupt}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); if (handsFree) onTap(); else down() } }}
+        onKeyUp={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !handsFree) up() }}
         onPointerDown={(e) => { e.preventDefault(); down() }}
         onPointerUp={up}
         onPointerCancel={up}
@@ -198,7 +200,7 @@ export function MicButton({ status, levelSource, on, handsFree, t, onTap, onHold
         onContextMenu={(e) => e.preventDefault()}
         className={cn(
           'relative grid size-24 touch-none select-none place-items-center rounded-full shadow-xl transition-colors',
-          asleep ? 'bg-card text-primary/60 ring-4 ring-primary/20' : status === 'speaking' ? 'bg-payment text-white' : 'bg-primary text-primary-foreground',
+          dim ? 'bg-card text-primary/60 ring-4 ring-primary/20' : status === 'speaking' ? 'bg-payment text-white' : 'bg-primary text-primary-foreground',
         )}
       >
         {interrupt ? <Square className="size-8 fill-current" /> : <Mic className="size-10" />}
