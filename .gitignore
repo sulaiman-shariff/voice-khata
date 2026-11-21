@@ -26,3 +26,6 @@ eval/recordings/
 
 # subagent-driven development scratch (ledger, briefs, reviews)
 .superpowers/
+
+# parallel agents' worktrees
+.claude/worktrees/
