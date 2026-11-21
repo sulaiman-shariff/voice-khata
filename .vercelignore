@@ -3,8 +3,10 @@ eval/
 .env
 .env.*
 !.env.example
+!.env.android
 *.wav
 *.npy
 *.parquet
 *.zip
 *.mp4
+android/
