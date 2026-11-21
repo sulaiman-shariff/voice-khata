@@ -11,6 +11,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
 import { MultiStt } from '../server/gnani/multi.js'
+import { transcribeSarvam } from '../server/sarvam.js'
 import { TtsPool } from '../server/gnani/tts.js'
 import { transcribeRest } from '../server/gnani/rest.js'
 import { LLM_MODEL, readWithLlm, warmUp } from '../server/parse/llm.js'
@@ -131,6 +132,8 @@ wss.on('connection', (ws, req) => {
     sendAudio: (pcm) => ws.readyState === WebSocket.OPEN && ws.send(pcm),
     log: L,
     record: process.env.KB_RECORD_DIR ? recorder(process.env.KB_RECORD_DIR, sid) : undefined,
+    // second opinion on unclear turns, when a Sarvam key is configured
+    verify: process.env.SARVAM_API_KEY ? (pcm, terms) => transcribeSarvam(process.env.SARVAM_API_KEY!, pcm, terms) : undefined,
   })
   let audioFrames = 0
   // replayed speech (and live audio that arrives meanwhile) goes through a paced queue, in order

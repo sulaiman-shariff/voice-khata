@@ -761,3 +761,39 @@ describe('turn taking', () => {
     expect(await talk((h) => h.cb.onPartial?.('Ramesh का कुल'))).toBe(false)
   })
 })
+
+describe('a second opinion (Sarvam) on unclear turns', () => {
+  it('rescues a turn Gnani misheard, and reads it back before writing', async () => {
+    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: async () => ({ text: 'रमेश 500 खाता', lang: 'hi-IN' }), llm: () => ({ intent: 'unclear', sure: false }) })
+    await h.turn("Ramesh pancho khatam It's all.")
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('confirm')
+    expect(h.said.join(' ')).toMatch(/500/)
+    await h.turn('yes')
+    expect(h.written()).toEqual([['r', 500, 'credit']])
+  })
+
+  it('a different amount from the second opinion becomes a question, never a guess', async () => {
+    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: async () => ({ text: 'Ramesh 500' }) })
+    await h.turn('Ramesh 300')
+    await h.answer('udhaar')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('confusable') // "300 or 500?"
+    await h.turn('500')
+    expect(h.written()).toEqual([['r', 500, 'credit']])
+  })
+
+  it('a clean reading of a known customer is written without waiting for it', async () => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: () => { calls++; return new Promise(() => {}) } })
+    await h.turn('Ramesh 300 credit')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+    expect(calls).toBe(1) // asked, but not waited on
+  })
+
+  it('a second opinion that fails or never answers changes nothing', async () => {
+    const h = harness([cust('r', 'Ramesh')], { lang: 'en', verify: async () => { throw new Error('down') } })
+    await h.turn('Ramesh 300')
+    expect(h.asks).toBe('direction')
+  })
+})

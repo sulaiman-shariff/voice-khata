@@ -52,6 +52,11 @@ export interface SessionDeps {
   sendAudio: (pcm: Buffer) => void
   /** Structured logger for this session (server/log.ts); silent when absent. */
   log?: Logger
+  /**
+   * A second, independent reading of a turn's audio (Sarvam): used to rescue turns Gnani could not
+   * read and to catch amount disagreements. Never the only reason anything is written.
+   */
+  verify?: (pcm: Buffer, keyterms: string[]) => Promise<{ text: string; lang?: string }>
   /** Local test runs only (KB_RECORD_DIR): keep each turn's audio and what was made of it. */
   record?: (turn: Record<string, unknown>, pcm?: Buffer) => void
   now?: () => number
@@ -68,6 +73,8 @@ const ANOMALY_FACTOR = 5
 /** with no history for the customer, ₹10,000 or more is read back first */
 const BIG_PAISE = 10_000_00
 const PENDING_TTL_MS = 45_000
+/** How long an unclear turn waits for the second opinion (deps.verify) before going on without it. */
+export const VERIFY_WAIT_MS = 1500
 /** Ledger words per language, given to the recogniser as hints (see keyterms()). */
 const LEDGER_TERMS: Record<string, string[]> = {
   en: ['credit', 'paid', 'udhaar', 'jama', 'rupees', 'clear'],
@@ -175,6 +182,10 @@ export class Session {
   private uttBytes = 0
   /** amounts the second reading heard for the turn being handled (null: none asked or none usable) */
   private secondAmounts: number[] | null = null
+  /** this turn's words came from the second opinion, not Gnani: read every line back */
+  private fromVerifier = false
+  /** what the second opinion heard this turn (for the turn record) */
+  private verified: { text: string; lang?: string; used: boolean } | null = null
   private lastPartial = ''
   private committed = false
   private commitAt: number | null = null
@@ -678,6 +689,38 @@ export class Session {
     const second = rest && wantSecond ? this.secondReading(rest, text) : null
     const rescue = wantRescue ? rest : null
 
+    // Second opinion (Sarvam) on the same audio. A clean reading is not held up: the check is only
+    // logged. An unclear one waits for it (VERIFY_WAIT_MS at most): a better reading is used, and is
+    // read back; a different amount becomes a question ("300 or 500?").
+    this.fromVerifier = false
+    this.verified = null
+    let verifyAmounts: number[] | null = null
+    const ver = !this.pending && _src === 'voice' && t?.pcm?.length && this.deps.verify ? this.verifyRead(t.pcm) : null
+    if (ver) {
+      if (this.confidentEntry(intent)) {
+        const heard = text
+        void ver.then((r) => {
+          if (r?.text) this.log.info('verify', { turn, text: heard, other: r.text, lang: r.lang, agree: Session.sameAmounts(heard, r.text), waited: false })
+        })
+      } else {
+        const r = await ver
+        if (r?.text) {
+          const used = this.readScore(r.text) > this.readScore(text)
+          this.verified = { text: r.text, lang: r.lang, used }
+          this.log.info('verify', { turn, text, other: r.text, lang: r.lang, used, waited: true })
+          if (used) {
+            this.deps.send({ type: 'final', text: r.text })
+            text = r.text
+            intent = parseFast(text)
+            this.fromVerifier = true
+          } else if (intent.type === 'entries') {
+            const v = parseAmounts(r.text).map((a) => a.value).filter((x) => x > 0)
+            if (v.length) verifyAmounts = v
+          }
+        }
+      }
+    }
+
     let unsureChange = false
     if (!this.pending && this.needsLlm(text, intent)) {
       const change = this.isChangeTalk(text, intent)
@@ -719,7 +762,7 @@ export class Session {
       if (rescued) ({ text, intent } = rescued)
     } else if (!this.pending) this.followDetectedLang(t?.lang, intent)
     const parseMs = this.now() - t0
-    this.secondAmounts = second ? await second : null
+    this.secondAmounts = second ? await second : verifyAmounts
 
     const before = this.pending
     let reply = this.pending
@@ -794,7 +837,7 @@ export class Session {
       turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, heardAll, intent: intent.type, path,
       reply: reply?.parts.join(' ') ?? null, pending: this.pending?.kind ?? null,
       ops: reply?.ops ?? [], snrDb: t?.snrDb ?? null, noisy: t?.noisy ?? null,
-      finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null,
+      finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null, verified: this.verified,
     }, t?.pcm)
     // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
     if (_src === 'voice' && !reply && !this.pending) this.deps.send({ type: 'not_entry', text })
@@ -1082,6 +1125,8 @@ export class Session {
         reasons.push('second-reading-differs')
       }
     } else if (sec?.includes(e.amount.value)) reasons.push('second-reading-agrees')
+    // the words came from the second opinion only (Gnani heard something else): read back
+    if (this.fromVerifier) reasons.push('verifier-only')
     return {
       heardName: e.name,
       cid: null,
@@ -1092,7 +1137,7 @@ export class Session {
       direction: e.direction,
       dayOffset: e.dayOffset,
       promise: e.promise,
-      confidence: e.confidence,
+      confidence: this.fromVerifier ? 'low' : e.confidence,
       reasons,
       path,
       transcript,
@@ -1536,6 +1581,31 @@ export class Session {
     this.lastHeard = heard
     if (best !== 0) this.log.info('heard_in_other_language', { chose: heard[best].locale, heard, scores })
     return best
+  }
+
+  /** The second opinion, or null if it fails or takes longer than VERIFY_WAIT_MS. */
+  private verifyRead(pcm: Buffer): Promise<{ text: string; lang?: string } | null> {
+    const read = this.deps.verify!(pcm, this.keyterms()).catch((e) => {
+      this.log.warn('verify_failed', { error: e })
+      return null
+    })
+    const late = new Promise<null>((r) => {
+      const timer = setTimeout(() => r(null), VERIFY_WAIT_MS)
+      timer.unref?.()
+    })
+    return Promise.race([read, late])
+  }
+
+  /** A reading clean enough not to wait for a second opinion: known customers, credit/paid said, nothing in doubt. */
+  private confidentEntry(intent: Intent): boolean {
+    return intent.type === 'entries' && intent.entries.every((e) =>
+      !!e.name && !!(e.direction || e.promise) && e.confidence === 'high' && (!!this.lookup(e.name) || !!this.knownWithin(e.name)))
+  }
+
+  /** Do two readings carry the same amounts? (for the verify log) */
+  static sameAmounts(a: string, b: string): boolean {
+    const x = parseAmounts(a).map((s) => s.value).sort().join(',')
+    return x !== '' && x === parseAmounts(b).map((s) => s.value).sort().join(',')
   }
 
   /** How well a transcript reads as something said to the ledger (higher is better). */

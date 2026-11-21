@@ -32,6 +32,8 @@ export interface HarnessOpts {
   recent?: SnapEntry[]
   llm?: (text: string, ctx: LlmContext) => Partial<LlmReading>
   transcribe2?: (pcm: Buffer) => Promise<{ text: string; lang?: string }>
+  /** the second opinion (Sarvam in production) */
+  verify?: (pcm: Buffer) => Promise<{ text: string; lang?: string }>
   speakMs?: number
   resume?: string
   resend?: string
@@ -66,6 +68,7 @@ export function harness(customers: SnapCustomer[] = [], opts: HarnessOpts = {}) 
       return opts.llm(text, ctx)
     },
     transcribe2: opts.transcribe2,
+    verify: opts.verify,
     secondReading: true,
     send: (m) => out.push(m),
     sendAudio: () => {},
