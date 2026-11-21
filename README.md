@@ -1,6 +1,6 @@
 # KhataBhai
 
-KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice. The ledger lives encrypted on the phone. Version 2 replaced the rule-and-LLM turn loop with a Gemini agent that picks one of 30 tools, each of which runs through the same ledger safety layer, and with a wake word so the app only acts when called.
+KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice. The ledger lives encrypted on the phone. Version 2 replaced the rule-and-LLM turn loop with a Gemini agent that picks one of 29 tools, each of which runs through the same ledger safety layer, and with a wake word so the app only acts when called.
 
 **Hosted prototype:** https://khatabhai-nine.vercel.app
 
@@ -17,7 +17,7 @@ KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, buil
 | Credit or payment | Decided from case markers ("ne" means payment, "ko" means credit) and, in Kannada, Tamil and Telugu, from the verb person. When direction cannot be read, the agent asks. |
 | Corrections and undo | "Nahi, 430", "galat, jama tha", "Ramesh nahi Suresh" amend the last entry. "Hata do" voids it. Nothing is erased; an amend or void is a new event in the log. |
 | Noise | A server-side energy tracker estimates the shop's noise floor and each utterance's SNR. When the SNR is below 11 dB, or cannot be estimated, the agent reads the entry back and waits for a yes or no before saving. In a quiet shop it saves, speaks a read-back and shows an undo toast. |
-| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A confident save is confirmed with a short cached "लिख दिया" (name and amount are on screen) instead of a 3 s read-back. The chime, highlight and toast no longer wait for the encrypted write. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
+| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A save is confirmed in one spoken sentence with the customer's new balance, so the screen and the voice always agree. The chime, highlight and toast no longer wait for the encrypted write. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
 
@@ -37,7 +37,7 @@ flowchart LR
   end
   STT["Gnani Prisma v3.0 STT"]
   TTS["Gnani Timbre v3.0 TTS"]
-  LLM["Gemini on Vertex AI (asia-south1)<br/>agent: one call per turn, 30 tools"]
+  LLM["Gemini on Vertex AI (asia-south1)<br/>agent: one call per turn, 29 tools"]
   NEON[("Neon Postgres<br/>backup ciphertext,<br/>confirmation tokens")]
   UI <-- "WebSocket: 16 kHz PCM up,<br/>PCM and JSON ops down" --> S
   S <-- WebSocket --> STT
@@ -93,8 +93,9 @@ Where a clean turn's time goes: Prisma's final transcript arrives about 800 ms a
 
 The app is asleep until it is called, so a shop's chatter is not acted on.
 
-- **Waking:** a tap on the mic, a hold of the mic (stays awake while held), the wake word "KhataBhai" heard by the server, or the on-phone detector. The on-phone detector (`src/lib/wake/`, onnxruntime-web in a worker) needs the model file `public/wakeword/khatabhai.onnx`. **That file is not in this build yet**, so the phone falls back to server-side wake spotting: audio is streamed, and the server wakes on the word in the transcript (`shared/wake.ts`, phonetic match across scripts: "खाता भाई", "Khata Bhai"). When the model lands, a redeploy switches the phone to the on-device gate, after which no audio leaves the phone while asleep.
-- **Awake:** 15 s after the last interaction (`server/attention.ts`). It never goes back to sleep while a question is open and younger than 45 s. Speech that is not for the app makes the agent call `not_for_me`, which shows the line dimmed and writes nothing.
+- **Waking:** a tap on the mic, a hold of the mic (stays awake while held), or the wake word "KhataBhai". The phone runs the trained wake-word model `public/wakeword/khatabhai.onnx` (`src/lib/wake/`, onnxruntime-web in a worker, threshold 0.6). While asleep behind it, no audio leaves the phone; on a detection the last 2 s are sent and the server confirms the word in the transcript (`shared/wake.ts`, phonetic match across scripts: "खाता भाई", "Khata Bhai"), or goes back to sleep. If the model cannot load, the phone falls back to streaming and the server spots the word itself. Misheard forms ("Hata bhai", "Khadha bhai") wake only a sleeping app, and "aata bhai" (aata is flour) only confirms a phone detection; while awake they are ordinary words ("hata bhai" is an undo).
+- **Wake model, measured** (`npx tsx eval/wake_detector.ts`, the app's own inference path on onnxruntime-web WASM in Node): the trainer's held-out positives 21/21 woke; addressed synthetic counter lines 30/30; about 14.5 false wakes per hour from a bare "khata" (no "bhai") in the synthetic counter scenes, which the server's transcript check sends back to sleep; pure shop noise 0 false wakes per hour; about 2 ms of inference per 80 ms chunk.
+- **Awake:** 15 s after the app last answered (a reply, a write or a question; `server/attention.ts`). It never goes back to sleep while a question is open and younger than 45 s, nor in the middle of an utterance. Speech that is not for the app makes the agent call `not_for_me`, which shows the line dimmed, writes nothing and does not extend the 15 s, so talk to customers lets the app fall asleep. Going to sleep drops a question that has expired.
 - **Sleep words:** "bas", "that's all", "go to sleep" and equivalents.
 - **Listening languages:** the session's language plus `LISTEN_LANGS` (default `en-IN,hi-IN,kn-IN`) at once, one Prisma stream each on the same audio (`server/gnani/multi.ts`). The agent sees every transcript.
 
@@ -102,11 +103,11 @@ The app is asleep until it is called, so a shop's chatter is not acted on.
 
 `server/agent/agent.ts` makes one Gemini call per turn with the transcripts of all streams, the last few exchanges, the screen, the customer names, the latest numbered entries and the open question. It answers only with tool calls (several per turn are allowed). If the transcripts cannot be trusted it calls `unclear`; the utterance audio (up to 20 s) is then sent in one second call to a model that hears audio (`AGENT_AUDIO_MODEL`), inside a 2 500 ms budget.
 
-The 30 tools (`server/agent/tools.ts`):
+The 29 tools (`server/agent/tools.ts`):
 - Entries: `add_entries`, `change_entry`, `remove_entry`, `undo_last`, `move_entry`, `settle`.
 - Show and ask: `show_customer`, `show_dues`, `show_history`, `show_today`, `search`, `top_debtors`, `close_view`, `query_balance`.
 - Customers: `add_customer`, `rename_customer`, `merge_customers`, `set_phone`, `send_reminder`, `send_statement`.
-- Settings: `set_language`, `set_read_back`, `set_speed`, `set_shop_name`, `open_privacy`, `backup`, `erase_all`.
+- Settings: `set_language`, `set_speed` (slower, normal, faster), `set_shop_name`, `open_privacy`, `backup`, `erase_all`. Every save is spoken in full with the customer's new balance; there is no setting to shorten it.
 - Dialogue: `answer_question`, `not_for_me`, `unclear`.
 
 ### Safety rules (enforced in code, not in the prompt)
@@ -117,7 +118,9 @@ The 30 tools (`server/agent/tools.ts`):
 - Remove, move, merge, settle and erase always ask first. `undo_last` is instant only for an entry written in this session in the last 60 s.
 - `erase_all` erases only when the shopkeeper types the word shown on screen; a spoken or tapped yes never does.
 - `send_reminder` needs opt-in and an adult customer, and only prepares a WhatsApp share; the shopkeeper taps send.
-- `answer_question` takes yes, no or an amount only from what was heard, never from the model.
+- `answer_question` takes yes, no or an amount only from what was heard, never from the model. An on-screen option the model picks counts only when what was heard picks it too (the amount was said, or the name, "doosra" or "300 wala" points at it).
+- A spoken undo ("hata do") is instant only for an entry this session wrote in the last 60 s; an older one is read back first.
+- "Save anyway" on a dimmed line is handled as addressed to the app, but its words are still speech: a new name in it is read back first.
 - The same entry is never written twice within 60 s, and every write from an audio reading is read back.
 - If the agent call fails or times out, a plain entry still saves through the parser; anything else gets "did not catch that" in the turn language.
 
@@ -161,8 +164,8 @@ Orchestration (attention, turn detection, the agent's tools, validation, dialogu
 - **Customer confirmation link.** Neon stores only a random token, the shop display name, amount, direction, date and the customer's response. No customer name and no phone number. Tokens expire after 30 days.
 - **Reminders are opt-in.** A reminder is a WhatsApp share link that the shopkeeper sends. It is offered only for customers marked as opted in and as adults, and uses polite template text. A spoken request for a customer who has not opted in is declined.
 - **No scoring.** The app does not rank, rate or comment on customers. It records what was said.
-- **LLM boundaries.** The agent can only call tools, never speak free text; replies are our templates, and the model is told never to judge a customer. The transcripts (and, for an unclear turn, the utterance audio) are sent to Google Vertex AI in asia-south1.
-- **Asleep means not acted on.** Today the server-side wake fallback receives the audio stream and discards it until the wake word. Once the on-phone model file is deployed, no audio is sent while asleep.
+- **LLM boundaries.** The agent can only call tools, never speak free text; replies are our templates, and the model is told never to judge a customer. The transcripts are sent to Google Vertex AI: to asia-south1 (Mumbai) and, to hold the latency budget, at the same time to the Vertex `global` endpoint, whose serving region Google chooses (each agent turn sends about 3 requests, one Mumbai and two global; `AGENT_HEDGE_MS=off` sends Mumbai only). For an unclear turn the utterance audio is sent once more, to Mumbai only. This triples the model cost per agent turn; instant-path turns make no call.
+- **Asleep means not acted on.** With the on-phone wake model loaded, no audio leaves the phone while asleep (only the 2 s around a detection, for the server to confirm). If the model cannot load, the phone falls back to streaming and the server discards the audio until it hears the wake word.
 - **Test data.** Only Gnani stock voices, public datasets and public noise recordings. No real customer data and no team voice recordings.
 - **DPDP alignment.** The design follows the notice, consent, erasure, security and children's-data duties of India's Digital Personal Data Protection Rules (notified 14 Nov 2025; core duties apply from about May 2027). This is an engineering alignment, not a legal opinion.
 
@@ -194,7 +197,7 @@ Orchestration (attention, turn detection, the agent's tools, validation, dialogu
 
 The 8 misses are 4 sentences, twice each, and all safe: "Ramesh 340" (the agent chose `undo_last` or `show_customer`; `undo_last` asks because nothing was written this session), and three promise or "add 200" lines where the agent left direction null, so the app asks instead of writing. An earlier scoring on the raw tool arguments flagged 4 silent wrongs ("Deepak ne saath rupaye diye" read as 60 payment, "Sunitu dobar 1,000 on credit"); the app's own tools turn those into read-backs, which is why silent wrong is scored on what the tools actually write.
 
-**Against the 3 s budget.** The product budget is 3 s from the end of speech to the reply. The agent call itself took 374 to 604 ms inside the function on the live site (5 calls), but a typed turn through the WebSocket took 1.0 to 3.6 s end to end (13 turns, the 3.6 s one a three-entry read-back), and earlier measurements of agent turns with speech put the p90 at about 3.5 to 4 s. That is over the 3 s budget at p90. The instant path (no model call) is well inside it. These are small samples.
+**Against the 3 s budget.** The product budget is 3 s from the end of speech to the reply. With the race (Mumbai plus two `global` requests, first answer wins; Task 16 bench, `eval/agent_latency.ts`, real contexts) the agent call is p50 about 1.4 s and p90 about 2.3 s, against Mumbai alone at p50 2.2 s and p90 5.5 s in a congested spell. Earlier, the agent call took 374 to 604 ms inside the function on the live site (5 calls), but a typed turn through the WebSocket took 1.0 to 3.6 s end to end (13 turns, the 3.6 s one a three-entry read-back), and earlier measurements of agent turns with speech put the p90 at about 3.5 to 4 s. That is over the 3 s budget at p90. The instant path (no model call) is well inside it. These are small samples.
 
 ### Audio for unclear moments
 
@@ -273,7 +276,8 @@ Environment variables (names only; `.env` is gitignored):
 - `DATABASE_URL` (optional; enables backup and confirmation links, set by the Neon integration on Vercel)
 - `CRON_SECRET` (optional; protects the cleanup cron)
 - `LOG_LEVEL` (optional; `debug`, `info` (default), `warn` or `error`)
-- `VERTEX_LOCATION` (default `asia-south1`), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`), `AGENT_AUDIO_MODEL` (model for the audio second call, default `gemini-3.5-flash-lite`), `LLM_TIMEOUT_MS` (agent call timeout, default 3000)
+- `VERTEX_LOCATION` (default `asia-south1`), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`), `AGENT_AUDIO_MODEL` (model for the audio second call, default `gemini-3.5-flash-lite`), `LLM_TIMEOUT_MS` (agent call timeout, default 3000; it covers an access-token refresh too)
+- `AGENT_HEDGE_MS` (delay before the extra agent requests start; default 0, all at once; `off` sends Mumbai only), `AGENT_HEDGE_LOCATION` (where the extra requests go, comma-separated, one request each; default `global,global`)
 - `LISTEN_LANGS` (default `en-IN,hi-IN,kn-IN`; languages heard in every session, `off` for the session language only)
 - `STT_MIN_SILENCE_MS`, `STT_VAD_THRESHOLD` (optional; Prisma realtime VAD tuning, not sent unless set)
 - `KB_RECORD_DIR`, `VK_DEBUG` (optional; local debugging)
