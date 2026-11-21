@@ -1,6 +1,6 @@
 /**
  * Real-model check of conversation context, lists and changing older entries, over the same WebSocket the
- * phone uses, with typed turns (no audio). Uses the real Claude Haiku reading, unlike the unit tests.
+ * phone uses, with typed turns (no audio). Uses the real Gemini agent, unlike the unit tests.
  *   npx tsx --env-file=.env eval/text_dialogue.ts [ws-url]
  */
 import WebSocket from 'ws'
