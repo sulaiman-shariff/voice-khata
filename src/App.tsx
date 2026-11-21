@@ -1,4 +1,4 @@
-import { BellRing, Globe, Keyboard, Menu as MenuIcon, Plus, Search, WifiOff } from 'lucide-react'
+import { BellRing, BookOpen, Globe, Keyboard, Menu as MenuIcon, Plus, Search, WifiOff } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { balance, daySummary, displayName, dues, promises } from '../shared/ledger.js'
@@ -20,6 +20,7 @@ import { CustomerSheet, PrivacySheet, toastRemind } from '@/ui/Sheets'
 import { ui } from '@/ui/strings'
 import { Dropdown } from '@/ui/Dropdown'
 import { MenuSheet } from '@/ui/Menu'
+import { ImportSheet, type ImportSink } from '@/ui/ImportSheet'
 import { ProfileForm } from '@/ui/Profile'
 import { applyTheme } from '@/ui/theme'
 import { dueForReminder, runAutoReminders, sendReminder } from '@/lib/remind'
@@ -58,7 +59,10 @@ function Home({ store }: { store: KhataStore }) {
   const [metrics, setMetrics] = useState<(TurnMetrics & { clientFirstAudioMs: number | null }) | null>(null)
   const [tab, setTab] = useState<'today' | 'dues'>('today')
   const [cid, setCid] = useState<string | null>(null)
-  const [sheet, setSheet] = useState<'menu' | 'privacy' | null>(null)
+  const [sheet, setSheet] = useState<'menu' | 'privacy' | 'import' | null>(null)
+  // rows read aloud from an old paper khata go straight to the open import sheet
+  const importSink = useRef<ImportSink['current']>(null)
+  const importHandsFree = useRef<boolean | null>(null)
   // the bottom panel (question card, mic) floats over the list: the list is padded by its real height
   const footer = useRef<HTMLElement>(null)
   const [footerH, setFooterH] = useState(260)
@@ -124,6 +128,7 @@ function Home({ store }: { store: KhataStore }) {
       metrics: setMetrics,
       error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),
+      importRows: (rows, text) => importSink.current?.(rows, text),
     })
     primeFeedback()
     voice.current = v
@@ -191,6 +196,21 @@ function Home({ store }: { store: KhataStore }) {
     }
     if (sent) toast.success(`${t.remindSent} × ${sent}`)
     if (failed) toast.error(`${t.remindFailed} × ${failed}`)
+  }
+
+  /** Import "read aloud": the mic must be on and open (hands-free) while the book is read. */
+  const importReading = async (on: boolean): Promise<boolean> => {
+    if (on) {
+      if (!voice.current) await start(store.settings.lang!)
+      const v = voice.current
+      if (!v) return false
+      if (!store.settings.handsFree) { importHandsFree.current = false; v.setHandsFree(true) }
+      v.setImportMode(true)
+      return true
+    }
+    voice.current?.setImportMode(false)
+    if (importHandsFree.current === false) { voice.current?.setHandsFree(false); importHandsFree.current = null }
+    return true
   }
 
   const setLanguage = (v: string) => {
@@ -283,6 +303,9 @@ function Home({ store }: { store: KhataStore }) {
               <div className="rounded-2xl border-2 border-dashed p-5 text-center">
                 <div className="text-base text-muted-foreground">{t.noEntries}</div>
                 <div className="mt-4 mb-2 text-sm font-semibold">{t.tryThese}</div>
+                <button onClick={() => setSheet('import')} className="mb-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 font-semibold text-primary-foreground shadow-md active:scale-[.98]">
+                  <BookOpen className="size-5" />{t.importCta}
+                </button>
                 <div className="flex flex-col gap-2">
                   {[t.ex1, t.ex2, t.ex3].map((x) => (
                     <button key={x} onClick={() => void sendTyped(x)} className="min-h-12 rounded-2xl bg-card px-4 py-2 text-lg font-medium shadow-sm ring-1 ring-primary/30 active:scale-[.98]">“{x}”</button>
@@ -376,7 +399,8 @@ function Home({ store }: { store: KhataStore }) {
       <CustomerSheet store={store} cid={cid} t={t} backup={backup} onClose={() => setCid(null)} onChanged={() => voice.current?.sendSnapshot()} onEntry={openEntry} />
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
-      <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onRemindAll={() => void remindAll()}
+      <ImportSheet store={store} open={sheet === 'import'} t={t} sink={importSink} onReading={importReading} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
+      <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onImport={() => setSheet('import')} onRemindAll={() => void remindAll()}
         onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />

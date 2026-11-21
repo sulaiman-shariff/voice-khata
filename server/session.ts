@@ -11,6 +11,7 @@ import { type Direction, type EntryIntent, type Intent, dangling, directionAnswe
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
+import { parseImport } from '../shared/import.js'
 import { type Lang, LANGS, LOCALE, guardReply, langFromLocale, say, sayMore, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { type Logger, nullLogger } from './log.js'
@@ -145,6 +146,8 @@ export class Session {
   private speed: 0.8 | 1 | 1.2 = 1
   /** auto language: the stream listens with indic-auto, replies follow each turn's language */
   private auto = false
+  /** reading an old paper khata aloud: sentences become review rows on the phone, nothing is saved */
+  private importMode = false
   private warmedAll = false
   /** read every saved entry back in full instead of a short ack (Settings) */
   private readBackAll = false
@@ -277,6 +280,14 @@ export class Session {
       case 'readback':
         this.log.info('setting', { readBack: msg.on })
         this.readBackAll = msg.on
+        break
+      case 'import':
+        this.log.info('setting', { importMode: msg.on })
+        this.importMode = msg.on
+        if (msg.on && this.pending) {
+          this.pending = null
+          this.deps.send({ type: 'pending', pending: null })
+        }
         break
       case 'playback_done':
         this.log.debug('playback_done')
@@ -678,6 +689,14 @@ export class Session {
   ): Promise<void> {
     const t0 = this.now()
     this.turnSrc = _src
+    if (this.importMode && _src !== 'resend') {
+      // "Ramesh 500, Suresh 300 ..." read from the book: rows for the review table, no reply
+      const rows = parseImport(text)
+      this.log.info('import_read', { text, rows: rows.length })
+      this.deps.send({ type: 'import_rows', rows, text })
+      this.deps.send({ type: 'turn_done', resume: this.exportState() })
+      return
+    }
     // started now so it runs alongside parsing; only noisy money turns ask for it
     let intent: Intent = parseFast(text)
     let path: 'fast' | 'llm' | 'none' = 'fast'

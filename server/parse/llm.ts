@@ -183,7 +183,7 @@ let nextKey = 0
 // Gemini 3 takes thinkingLevel, 2.5 a thinkingBudget; dropped for good if the model rejects it
 let thinking: Record<string, unknown> | undefined = /gemini-2\./.test(GEMINI_MODEL) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' }
 
-class GeminiError extends Error {
+export class GeminiError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfterMs?: number) {
     super(message)
   }
@@ -223,6 +223,16 @@ async function geminiOnce(key: string, user: string, signal?: AbortSignal): Prom
 }
 
 async function readWithGemini(user: string, signal?: AbortSignal): Promise<Partial<LlmReading>> {
+  return withGeminiKey((key) => geminiOnce(key, user, signal), signal)
+}
+
+/**
+ * Run one Gemini call with key rotation: each call starts from the next key; a key that fails
+ * (429 quota, 401/403, 5xx, timeout, network) is benched and the next one is tried at once.
+ * A 400 is thrown as is (another key will not fix a bad request). Shared by the slow-path
+ * reader and the ledger photo reader (server/parse/vision.ts).
+ */
+export async function withGeminiKey<T>(call: (key: string) => Promise<T>, signal?: AbortSignal): Promise<T> {
   const keys = geminiKeys()
   if (!keys.length) throw new Error('no GEMINI_API_KEY set')
   const now = Date.now()
@@ -234,7 +244,7 @@ async function readWithGemini(user: string, signal?: AbortSignal): Promise<Parti
   for (const key of order) {
     if (signal?.aborted) break
     try {
-      return await geminiOnce(key, user, signal)
+      return await call(key)
     } catch (e) {
       last = e
       const status = e instanceof GeminiError ? e.status : -1

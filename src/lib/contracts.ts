@@ -2,6 +2,7 @@
  * Interfaces between the UI and the parts built separately (store, voice client, backup).
  * Implementations: src/lib/store.ts, src/lib/voice.ts, src/lib/backup.ts.
  */
+import type { ImportRow } from '../../shared/import.js'
 import type { Customer, Entry, LedgerState } from '../../shared/ledger.js'
 import type { LedgerOp, PendingView, ServerMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
@@ -96,6 +97,8 @@ export interface VoiceEvents {
   resent?(text: string): void
   /** The last thing heard was taken as talk to someone else: nothing written, nothing asked. */
   notEntry?(text: string): void
+  /** Import mode: rows read aloud from an old paper khata, for review. */
+  importRows?(rows: ImportRow[], text: string): void
 }
 
 export interface VoiceClient {
@@ -115,6 +118,8 @@ export interface VoiceClient {
   setHandsFree(on: boolean): void
   setFastSpeech(on: boolean): void
   setReadBackAll(on: boolean): void
+  /** Import mode on/off: while on, speech fills the import review table and nothing is saved. */
+  setImportMode(on: boolean): void
   /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
   bargeIn(): void
 }

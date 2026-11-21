@@ -3,6 +3,7 @@
  * The ledger lives on the phone; the server is stateless across connections and works from
  * the snapshot the phone sends, replying with ledger ops for the phone to apply.
  */
+import type { ImportRow } from './import.js'
 import type { Direction } from './ledger.js'
 import type { Lang } from './replies.js'
 
@@ -69,6 +70,8 @@ export type ClientMsg =
   }
   | { type: 'speed'; speed: 0.8 | 1 | 1.2 }
   | { type: 'readback'; on: boolean }
+  /** importing an old paper khata read aloud: every sentence becomes review rows, nothing is saved */
+  | { type: 'import'; on: boolean }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'ptt_start' }
   | { type: 'ptt_end' }
@@ -133,6 +136,8 @@ export type ServerMsg =
   | { type: 'pending'; pending: PendingView | null }
   | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' }
   | { type: 'remind'; cid: string; text: string }
+  /** import mode: "name amount" pairs heard in one sentence, for the phone's review table */
+  | { type: 'import_rows'; rows: ImportRow[]; text: string }
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */

@@ -1,4 +1,4 @@
-import { BellRing, ChevronRight, MapPin, Palette, Pencil, Phone, ShieldCheck, Store, User } from 'lucide-react'
+import { BellRing, BookOpen, ChevronRight, MapPin, Palette, Pencil, Phone, ShieldCheck, Store, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
@@ -11,10 +11,11 @@ import type { UiStrings } from './strings'
 import { THEMES, applyTheme } from './theme'
 
 /** The hamburger menu (left side): shop profile, colour theme, WhatsApp reminders, voice, my data. */
-export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onRemindAll }: {
+export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImport, onRemindAll }: {
   store: KhataStore; open: boolean; t: UiStrings; onClose: () => void
   onChanged: (p: { handsFree?: boolean; fastSpeech?: boolean; readBackAll?: boolean }) => void
   onPrivacy: () => void
+  onImport: () => void
   onRemindAll: () => void
 }) {
   const st = store.settings
@@ -49,6 +50,11 @@ export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onRem
               </div>
             )}
           </section>
+
+          {/* old paper khata */}
+          <button onClick={onImport} className="flex min-h-12 w-full items-center gap-2 rounded-lg bg-primary px-3 font-semibold text-primary-foreground shadow-md">
+            <BookOpen className="size-5" /><span className="flex-1 text-left">{t.importTitle}</span><ChevronRight className="size-4" />
+          </button>
 
           {/* colour theme */}
           <section>

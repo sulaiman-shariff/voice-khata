@@ -10,7 +10,60 @@ npm run server      # voice function on ws://localhost:8787 (reads .env, restart
 npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (580 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (587 pass) and `npx tsc -b` (clean).
+
+---
+
+## 5. Import an old paper khata (read aloud, type, or photo)
+
+**Status:** built and committed locally. Type check and unit tests pass. **Not yet tested by hand**: the owner tests it, and feedback goes under "Feedback and fixes".
+
+**Problem:** a shop that kept its khata in a book should not have to type every customer again.
+
+### What the user sees
+- **Where to start:**
+  - ☰ → **Import old khata**.
+  - On an empty History tab: "Have a paper khata? Import it".
+- **Three tabs**, all filling one **review table**:
+  1. **Read aloud:** tap "Start reading" and read the book line by line: "Ramesh 500… Suresh 300 jama…". Each sentence's name–amount pairs appear as rows. Nothing is saved and the agent does not answer or ask anything in this mode. The mic is switched to hands-free while reading.
+  2. **Type:** one customer per line ("Ramesh 500", "Suresh - ₹1,200", "Geeta 300 jama", "500 Geeta") → "Add rows".
+  3. **Photo:** take or choose a photo of a khata page. The phone shrinks it to about 1600 px JPEG; Gemini reads every customer row (name in the original script, final balance, crossed-out figures replaced, totals and headings skipped). Hard-to-read rows are marked "check this".
+- **Review table:** each row has:
+  - an editable name and amount,
+  - **Owes / Advance** (credit or payment),
+  - a customer match (the existing customer, or "+ New: name"),
+  - a delete button.
+
+  Two near-identical matches (two Rameshes) default to "new" so the shopkeeper chooses. "Balance as of" sets the date of the opening balances (default today).
+- **Save all:** writes one opening-balance entry per row in one batch.
+  - New names become customers, and two rows for one new name share one account.
+  - Entries carry `source.lang = 'import'`, `reasons: ['import']`, and a transcript like "opening balance (from photo)".
+  - Unsure photo rows are saved with `confidence: 'low'`.
+
+### How it is built
+- **`shared/import.ts` `parseImport()`:** pure parser for typed lines and spoken lists. It uses the existing amount parser (digits, ₹, Indian commas, number words like "paanch sau"/"dedh sau").
+  - The words before an amount are the name; a paid word after it (jama, paid, advance, Cr) makes the row an advance.
+  - Page furniture ("page 2", "date", "total", "sr no") is skipped.
+- **Read-aloud mode:**
+  - New client message `{type:'import', on}`, accepted by the validator in `api/voice.ts`.
+  - While it is on, `Session.handleText` sends `{type:'import_rows', rows, text}` and `turn_done`, and returns. No ops, no reply, no LLM call, and any open question is cleared.
+  - The voice client re-sends the mode after a reconnect.
+- **Photo:**
+  - `api/import.ts`, `POST {image: dataURL}` → `{rows, ms}`. Own origin only, about 4.5 MB cap, nothing stored.
+  - `server/parse/vision.ts` reads the page with **`gemini-3.5-flash`** (override with `GEMINI_VISION_MODEL`). It uses function calling with a fixed row schema, the same path as the slow-path reader.
+  - `cleanRows()` drops rows with no name, a non-positive amount, or an absurd amount.
+  - It uses the same 3 Gemini keys: the rotation loop was pulled out of `llm.ts` into `withGeminiKey()`, shared by both readers.
+  - `vercel.json` gives `api/import.ts` 60 s. The local server and the Vite proxy serve `/api/import`.
+- **UI:** `src/ui/ImportSheet.tsx`, menu entry, empty-state button, 22 new strings in hi/en/kn/ta/te (`EXTRA4`).
+- **Privacy:** the "My data" note now says khata photos go to Gemini to be read.
+
+### Tests added
+- `shared/import.test.ts`: lines, advance words, a spoken list with number words, amount first, page headings ignored.
+- `server/parse/vision.test.ts`: photo-row clean-up.
+- `server/session.test.ts`: import mode sends rows and saves nothing; turning it off goes back to normal.
+
+### Feedback and fixes
+_(to be filled in from the owner's testing)_
 
 ---
 

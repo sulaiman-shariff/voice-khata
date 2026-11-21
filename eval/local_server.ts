@@ -1,6 +1,6 @@
 /**
  * Run the voice function locally: npx tsx --env-file=.env eval/local_server.ts  (ws://localhost:8787, or PORT)
- * Also serves the HTTP functions (/api/remind, /api/backup, /api/confirm) on the same port, as
+ * Also serves the HTTP functions (/api/remind, /api/import, /api/backup, /api/confirm) on the same port, as
  * Vercel would, so `npm run dev` can proxy /api/* here.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -9,6 +9,7 @@ import server from '../api/voice.js'
 type Fn = { fetch: (req: Request) => Promise<Response> }
 const routes: Record<string, () => Promise<{ default: Fn }>> = {
   '/api/remind': () => import('../api/remind.js'),
+  '/api/import': () => import('../api/import.js'),
   '/api/backup': () => import('../api/backup.js'),
   '/api/confirm': () => import('../api/confirm.js'),
 }
@@ -40,4 +41,4 @@ server.removeAllListeners('request')
 server.on('request', (req, res) => void http(req, res))
 
 const port = Number(process.env.PORT ?? 8787)
-server.listen(port, () => console.log(`voice function on ws://localhost:${port} (+ /api/remind, /api/backup, /api/confirm)`))
+server.listen(port, () => console.log(`voice function on ws://localhost:${port} (+ /api/remind, /api/import, /api/backup, /api/confirm)`))

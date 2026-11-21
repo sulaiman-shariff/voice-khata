@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["bom1"],
   "functions": {
-    "api/voice.ts": { "maxDuration": 300 }
+    "api/voice.ts": { "maxDuration": 300 },
+    "api/import.ts": { "maxDuration": 60 }
   },
   "crons": [{ "path": "/api/cleanup", "schedule": "17 3 * * *" }],
   "rewrites": [{ "source": "/c/(.*)", "destination": "/index.html" }]

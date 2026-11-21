@@ -336,6 +336,21 @@ function feed(h: ReturnType<typeof harness>, buf: Buffer) {
   }
 }
 
+describe('import an old khata (read aloud)', () => {
+  it('import mode turns each sentence into review rows and saves nothing', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'import', on: true })
+    await h.turn('Ramesh 500 Suresh 300 jama')
+    expect(h.ops()).toHaveLength(0)
+    expect(h.said).toHaveLength(0)
+    const m = h.out.filter((x) => x.type === 'import_rows').at(-1) as { rows: { name: string; amount: number; direction: string }[] }
+    expect(m.rows).toEqual([{ name: 'Ramesh', amount: 500, direction: 'credit' }, { name: 'Suresh', amount: 300, direction: 'payment' }])
+    h.s.onClient({ type: 'import', on: false })
+    await h.turn('Ramesh ka 100 udhaar')
+    expect(h.entries()).toHaveLength(1)
+  })
+})
+
 describe('auto language', () => {
   it('listens with indic-auto and replies in the language just spoken, same turn', async () => {
     const h = harness([cust('r', 'Ramesh')], { auto: true })

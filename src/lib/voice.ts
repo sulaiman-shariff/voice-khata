@@ -31,6 +31,7 @@ interface StartOpts {
   handsFree: boolean
   fastSpeech?: boolean
   readBackAll?: boolean
+  importMode?: boolean
 }
 
 export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
@@ -122,6 +123,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll, resume, ...(again ? { resend: again } : {}),
     })
     opts.firstRun = false // the disclosure plays once, not on every reconnect
+    if (opts.importMode) sendTo(sock, { type: 'import', on: true }) // a reconnect keeps the import mode
     if (again) {
       log.warn('resend', { text: again })
       ev.resent?.(again)
@@ -250,6 +252,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         case 'remind':
           ev.remind(m.cid, m.text)
           break
+        case 'import_rows':
+          ev.importRows?.(m.rows, m.text)
+          break
         case 'error':
           ev.error(m.message)
           settleIfSilent()
@@ -333,6 +338,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         break
       case 'remind':
         ev.remind(m.cid, m.text)
+        break
+      case 'import_rows':
+        ev.importRows?.(m.rows, m.text)
         break
       case 'metrics':
         if (!turnSaid) settleIfSilent()
@@ -812,6 +820,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
+    setImportMode(on: boolean) {
+      log.info('setting', { importMode: on })
+      if (opts) opts.importMode = on
+      send({ type: 'import', on })
+    },
     setReadBackAll(on: boolean) {
       log.info('setting', { readBackAll: on })
       if (opts) opts.readBackAll = on
