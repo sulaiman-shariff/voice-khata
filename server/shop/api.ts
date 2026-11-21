@@ -52,6 +52,9 @@ interface InCustomer {
   balance: number
   promise_day: string | null
   oldest_unpaid_day: string | null
+  due_day: string | null
+  plan_next_day: string | null
+  plan_part_paise: number | null
 }
 
 function parseCustomers(xs: unknown): InCustomer[] | null {
@@ -68,7 +71,12 @@ function parseCustomers(xs: unknown): InCustomer[] | null {
     if (typeof bal !== 'number' || !Number.isInteger(bal) || Math.abs(bal) >= 1e11) return null
     const day = (d: unknown) => (typeof d === 'string' && DAY_RE.test(d) ? d : null)
     seen.add(cid)
-    out.push({ cid, name, phone, balance: bal, promise_day: day(x.promiseDay), oldest_unpaid_day: day(x.oldestUnpaidDay) })
+    const part = x.planPartPaise
+    const planPart = typeof part === 'number' && Number.isInteger(part) && part > 0 && part < 1e11 ? part : null
+    out.push({
+      cid, name, phone, balance: bal, promise_day: day(x.promiseDay), oldest_unpaid_day: day(x.oldestUnpaidDay),
+      due_day: day(x.dueDay), plan_next_day: planPart ? day(x.planNextDay) : null, plan_part_paise: planPart && day(x.planNextDay) ? planPart : null,
+    })
   }
   return out
 }
@@ -98,17 +106,20 @@ export async function handleReceivables(req: Request): Promise<Response> {
     await sql`
       WITH incoming AS (
         SELECT * FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
-          AS x(cid text, name text, phone text, balance bigint, promise_day text, oldest_unpaid_day text)
+          AS x(cid text, name text, phone text, balance bigint, promise_day text, oldest_unpaid_day text,
+            due_day text, plan_next_day text, plan_part_paise bigint)
       ), unacked AS (
         SELECT body->>'cid' AS cid, SUM((body->>'paise')::bigint) AS paise FROM pending_events
         WHERE shop_id = ${shopId} AND kind = 'payment' AND acked_at IS NULL GROUP BY 1
       )
-      INSERT INTO receivables (shop_id, cid, name, phone, balance_paise, promise_day, oldest_unpaid_day, updated_at)
-      SELECT ${shopId}, i.cid, i.name, i.phone, i.balance - COALESCE(u.paise, 0), i.promise_day, i.oldest_unpaid_day, now()
+      INSERT INTO receivables (shop_id, cid, name, phone, balance_paise, promise_day, oldest_unpaid_day, due_day, plan_next_day, plan_part_paise, updated_at)
+      SELECT ${shopId}, i.cid, i.name, i.phone, i.balance - COALESCE(u.paise, 0), i.promise_day, i.oldest_unpaid_day,
+        i.due_day, i.plan_next_day, i.plan_part_paise, now()
       FROM incoming i LEFT JOIN unacked u ON u.cid = i.cid
       ON CONFLICT (shop_id, cid) DO UPDATE SET
         name = EXCLUDED.name, phone = EXCLUDED.phone, balance_paise = EXCLUDED.balance_paise,
-        promise_day = EXCLUDED.promise_day, oldest_unpaid_day = EXCLUDED.oldest_unpaid_day, updated_at = now()`
+        promise_day = EXCLUDED.promise_day, oldest_unpaid_day = EXCLUDED.oldest_unpaid_day,
+        due_day = EXCLUDED.due_day, plan_next_day = EXCLUDED.plan_next_day, plan_part_paise = EXCLUDED.plan_part_paise, updated_at = now()`
     const cids = rows.map((r) => r.cid)
     const gone = (await sql`DELETE FROM receivables WHERE shop_id = ${shopId} AND NOT (cid = ANY(${cids}::text[])) RETURNING cid`) as unknown[]
     log.info('receivables_synced', { fn: 'receivables', customers: rows.length, removed: gone.length })

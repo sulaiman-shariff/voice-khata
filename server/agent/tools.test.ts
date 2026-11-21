@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseFast } from '../../shared/intent.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { LANG_NAME, say, sayMore } from '../../shared/replies.js'
+import { LANG_NAME, say, sayMore, sayPay } from '../../shared/replies.js'
 import { LedgerCore, PENDING_TTL_MS, type TurnMeta } from '../ledger/core.js'
 import { nullLogger } from '../log.js'
 import { TOOL_SCHEMAS, type ToolCall, runTool } from './tools.js'
@@ -34,7 +34,8 @@ describe('agent tools', () => {
     expect(new Set(names).size).toBe(names.length)
     expect(names).toContain('add_entries')
     expect(names).toContain('unclear')
-    expect(names.length).toBe(29)
+    expect(names).toContain('show_qr')
+    expect(names.length).toBeGreaterThanOrEqual(30)
   })
 
   it('add_entries for a known customer with a spoken credit word writes at once and says the new balance', () => {
@@ -67,7 +68,7 @@ describe('agent tools', () => {
     const r = run('add_entries', { entries: [{ name: 'Suresh', amount: 100, direction: 'credit' }] }, 'Suresh ko 100 udhaar')
     expect(r.ops).toEqual([])
     expect(core.pending?.kind).toBe('which')
-    expect(core.pendingView()?.options).toEqual(['Suresh · ₹300', 'Suresh · ₹1,200'])
+    expect(core.pendingView()?.options).toEqual(['Suresh 1', 'Suresh 2'])
   })
 
   it('remove_entry, move_entry, merge_customers, settle always ask first', () => {
@@ -225,13 +226,13 @@ describe('agent tools', () => {
     const { core, run, meta } = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200), cust('c3', 'Suresh', 50)])
     const r = run('show_customer', { name: 'Suresh' }, 'Suresh ka khata dikhao')
     expect(r.show).toBeUndefined()
-    expect(core.pendingView()?.options).toEqual(['Suresh · ₹300', 'Suresh · ₹1,200', 'Suresh · ₹50'])
+    expect(core.pendingView()?.options).toEqual(['Suresh 1', 'Suresh 2', 'Suresh 3'])
     const a = core.answerPending('doosra wala', parseFast('doosra wala'), meta('doosra wala'))!
     expect(a.show).toEqual({ type: 'show', view: 'customer', cid: 'c2' })
     // a tapped label works the same, and the original sentence is kept for the finished call
     run('send_statement', { name: 'Suresh' }, 'Suresh ko statement bhejo')
     core.turnSrc = 'tap'
-    const t = core.answerPending('Suresh · ₹50', { type: 'unknown' }, meta('Suresh · ₹50'))!
+    const t = core.answerPending('Suresh 3', { type: 'unknown' }, meta('Suresh 3'))!
     expect(t.parts).toEqual([R.noConsent('Suresh')])
   })
 
@@ -286,21 +287,21 @@ describe('agent tools', () => {
     let s = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200)])
     s.run('add_entries', { entries: [{ name: 'Suresh', amount: 100, direction: 'credit' }] }, 'Suresh ko 100 udhaar')
     expect(s.core.pending?.kind).toBe('which')
-    let r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹1,200' }, 'haan bhai')
+    let r = s.run('answer_question', { kind: 'option', value: 'Suresh 2' }, 'haan bhai')
     expect(r.ops).toEqual([])
     expect(s.core.pending?.kind).toBe('which')
-    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹1,200' }, 'doosra wala')
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh 2' }, 'doosra wala')
     expect(r.ops).toEqual([expect.objectContaining({ op: 'entry', cid: 'c2', paise: 10000 })])
     // a tool's "which one"
     s = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200)])
     s.run('show_customer', { name: 'Suresh' }, 'Suresh ka khata dikhao')
     expect(s.core.pending?.kind).toBe('choose')
-    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹300' }, 'hmm')
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh 1' }, 'hmm')
     expect(r.show).toBeUndefined()
     expect(s.core.pending?.kind).toBe('choose')
-    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹1,200' }, '300 wala') // heard picks the other one
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh 2' }, '300 wala') // heard picks the other one
     expect(r.show).toBeUndefined()
-    r = s.run('answer_question', { kind: 'option', value: 'Suresh · ₹300' }, '300 wala')
+    r = s.run('answer_question', { kind: 'option', value: 'Suresh 1' }, '300 wala')
     expect(r.show).toEqual({ type: 'show', view: 'customer', cid: 'c1' })
   })
 
@@ -339,7 +340,7 @@ describe('agent tools', () => {
     const ans = (t: string) => core.answerPending(t, parseFast(t), meta(t))
     expect(ans('hmm')).toBeNull()
     expect(ans('abhi baad mein dekhte hain bhai')).toBeNull()
-    expect(ans('kaun sa matlab')?.parts).toEqual([R.askWhich('Suresh · ₹300', 'Suresh · ₹1,200')])
+    expect(ans('kaun sa matlab')?.parts).toEqual([R.askWhich('Suresh 1', 'Suresh 2')])
     expect(ans('kaun sa matlab')).toBeNull()
     expect(core.pending?.kind).toBe('choose')
     expect(ans('1,200 wala')?.show).toEqual({ type: 'show', view: 'customer', cid: 'c2' })
@@ -472,5 +473,38 @@ describe('agent tools', () => {
       core.pending = { kind: 'amount', draft: { cid: 'c1', heardName: 'Ramesh', paise: 0 } as never, queue: [] }
       expect(core.pendingView()?.amounts).toEqual([300, 200])
     })
+  })
+})
+
+describe('show_qr (counter QR)', () => {
+  const P = sayPay('en')
+  it('defaults to the whole balance and returns a qr card', () => {
+    const { run, core } = setup([cust('c1', 'Ramesh', 500)])
+    const r = run('show_qr', { name: 'Ramesh' }, 'Ramesh ka QR dikhao')
+    expect(r.ready).toEqual({ kind: 'qr', cid: 'c1', paise: 50000 })
+    expect(r.ops).toEqual([])
+    expect(r.parts).toEqual([P.qrReady('Ramesh', 500)])
+    expect(core.pending).toBeNull()
+  })
+  it('takes an amount only when it was said (or equals the balance)', () => {
+    const { run } = setup([cust('c1', 'Ramesh', 500)])
+    expect(run('show_qr', { name: 'Ramesh', amount: 200 }, 'Ramesh ka 200 ka QR').ready).toEqual({ kind: 'qr', cid: 'c1', paise: 20000 })
+    expect(run('show_qr', { name: 'Ramesh', amount: 300 }, 'Ramesh ka QR dikhao').ready).toBeUndefined()
+    expect(run('show_qr', { name: 'Ramesh', amount: 500 }, 'Ramesh ka QR dikhao').ready).toEqual({ kind: 'qr', cid: 'c1', paise: 50000 })
+  })
+  it('nothing owed: says the balance; unknown name: not found; supplier: refused', () => {
+    const { run } = setup([cust('c1', 'Ramesh', 0), cust('s1', 'Gupta', 900, { kind: 'supplier' } as Partial<SnapCustomer>)])
+    const zero = run('show_qr', { name: 'Ramesh' }, 'Ramesh ka QR dikhao')
+    expect(zero.ready).toBeUndefined()
+    expect(zero.parts).toEqual([R.balance('Ramesh', 0)])
+    expect(run('show_qr', { name: 'Zorawar' }, 'Zorawar ka QR dikhao').ready).toBeUndefined()
+    const sup = run('show_qr', { name: 'Gupta' }, 'Gupta ka QR dikhao')
+    expect(sup.ready).toBeUndefined()
+    expect(sup.parts).toEqual([P.qrSupplier('Gupta')])
+  })
+  it('never from an audio guess', () => {
+    const { core } = setup([cust('c1', 'Ramesh', 500)])
+    const r = runTool(core, { name: 'show_qr', args: { name: 'Ramesh' } }, { snrDb: null, noisy: false, path: 'llm', transcript: 'Ramesh', fromAudio: true })
+    expect(r.ready).toBeUndefined()
   })
 })

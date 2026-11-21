@@ -1012,6 +1012,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps 
       log.debug('hold_end')
       send({ type: 'hold_end' })
     },
+    announce(a) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return false
+      send({ type: 'announce', ...a })
+      return true
+    },
     sleep() {
       if (!running) return
       log.info('sleep')

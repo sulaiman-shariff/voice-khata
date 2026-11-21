@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PendingView, ServerMsg } from '../shared/protocol.js'
-import { say } from '../shared/replies.js'
+import { say, sayPay } from '../shared/replies.js'
 import { addEntry, callsOf, cust, ent, harness } from './test-harness.js'
 
 const lastCard = (out: ServerMsg[]) => (out.filter((m) => m.type === 'pending').at(-1) as { pending: PendingView | null }).pending
@@ -1339,5 +1339,49 @@ describe('a model-supplied new name is read back even when the direction is tapp
     await h.answer('udhaar')
     expect(h.accounts()).toEqual([])
     expect(h.asks).toBe('confirm')
+  })
+})
+
+describe('soundbox: a payment that landed off the phone is said aloud', () => {
+  it('says who paid, how much, and what is left', async () => {
+    const h = harness([cust('r', 'Ramesh', 500)], { lang: 'en' })
+    h.s.onClient({ type: 'announce', kind: 'payment', cid: 'r', paise: 30000, balancePaise: 20000 })
+    await h.s.idle()
+    expect(h.said).toEqual([sayPay('en').paymentReceived('Ramesh', 300, 200)])
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBeNull()
+  })
+
+  it('a part-paid link asks about a link for the rest; yes makes the WhatsApp card', async () => {
+    const h = harness([cust('r', 'Ramesh', 500, { remindersOptIn: true, adult: true })], { lang: 'en' })
+    h.s.onClient({ type: 'announce', kind: 'payment', cid: 'r', paise: 36000, balancePaise: 14000, partial: true })
+    await h.s.idle()
+    const P = sayPay('en')
+    expect(h.said.join(' ')).toBe(`${P.paymentReceived('Ramesh', 360, 140)} ${P.partialPaid(140)}`)
+    expect(h.asks).toBe('modify')
+    expect(lastCard(h.out)).toMatchObject({ kind: 'modify', paise: 14000 })
+    await h.tap('yes')
+    const ready = h.out.filter((m) => m.type === 'ready' && 'kind' in m).at(-1) as { kind: string; cid: string; text: string }
+    expect(ready).toMatchObject({ kind: 'whatsapp', cid: 'r' })
+    expect(ready.text).toContain('140')
+    expect(h.ops()).toEqual([])
+  })
+
+  it('no question for a customer who did not agree to messages, nor when nothing is left', async () => {
+    const h = harness([cust('r', 'Ramesh', 500), cust('s', 'Suresh', 500, { remindersOptIn: true, adult: true })], { lang: 'en' })
+    h.s.onClient({ type: 'announce', kind: 'payment', cid: 'r', paise: 10000, balancePaise: 40000, partial: true })
+    await h.s.idle()
+    expect(h.asks).toBeNull()
+    h.tick(5000) // the first announcement has played out
+    h.s.onClient({ type: 'announce', kind: 'payment', cid: 's', paise: 50000, balancePaise: 0, partial: true })
+    await h.s.idle()
+    expect(h.asks).toBeNull()
+  })
+
+  it('an unknown customer is not announced', async () => {
+    const h = harness([cust('r', 'Ramesh', 500)], { lang: 'en' })
+    h.s.onClient({ type: 'announce', kind: 'payment', cid: 'zz', paise: 10000 })
+    await h.s.idle()
+    expect(h.said).toEqual([])
   })
 })

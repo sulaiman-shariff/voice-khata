@@ -25,20 +25,23 @@
  *    entries filtered by day).
  */
 import { parseFast } from '../../shared/intent.js'
+import { CASH_CATEGORIES, type CashCategory, collectFrom, daysBetween } from '../../shared/ledger.js'
+import { sayShop } from '../../shared/replies-shop.js'
 import { NAME_SURE, matchName } from '../../shared/names.js'
 import { formatINR, parseAmounts } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { LANGS, LANG_NAME, type Lang, eraseWord, guardReply, say, sayMore } from '../../shared/replies.js'
-import { type ChooseOption, LedgerCore, type Reply, type TurnMeta, WRITTEN_KEEP_MS } from '../ledger/core.js'
+import { LANGS, LANG_NAME, type Lang, eraseWord, guardReply, say, sayMore, sayPay } from '../../shared/replies.js'
+import { type ChooseOption, type EntryExtras, LedgerCore, type Reply, type TurnMeta, WRITTEN_KEEP_MS, cleanTag } from '../ledger/core.js'
 import type { GeminiTool } from '../parse/gemini.js'
 import { type LlmReading, validate } from '../parse/llm.js'
 
 export const TOOL_NAMES = [
   'add_entries', 'change_entry', 'remove_entry', 'undo_last', 'move_entry', 'settle',
   'show_customer', 'show_dues', 'show_history', 'show_today', 'search', 'top_debtors', 'close_view',
-  'add_customer', 'rename_customer', 'merge_customers', 'set_phone', 'send_reminder', 'send_statement',
+  'add_customer', 'rename_customer', 'merge_customers', 'set_phone', 'send_reminder', 'send_statement', 'show_qr',
   'set_language', 'set_speed', 'set_shop_name', 'open_privacy', 'backup', 'erase_all',
   'answer_question', 'query_balance', 'not_for_me', 'unclear',
+  'show_overdue', 'collect_today', 'set_plan', 'cancel_plan', 'add_cash', 'set_tag',
 ] as const
 export type ToolName = (typeof TOOL_NAMES)[number]
 export interface ToolCall { name: ToolName; args: Record<string, unknown> }
@@ -71,6 +74,12 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
           direction: { anyOf: [DIR, { type: 'null' }] },
           day_offset: { ...INT, description: 'omit for today; -1 yesterday' },
           promise: { type: 'boolean', description: 'a future payment ("kal de dega")' },
+          due_offset: { ...INT, description: 'credit to be paid within this many days ("das din mein", "kal tak" = 1); only if said' },
+          due_weekday: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], description: 'credit to be paid by this weekday ("Somvaar tak"); only if said' },
+          due_date: { ...INT, description: 'credit to be paid by this date of the month ("15 tarikh tak"); only if said' },
+          items: { type: 'array', items: STR, description: 'the goods listed for this line, as said ("do kilo chawal", "ek Maggi")' },
+          party: { type: 'string', enum: ['supplier'], description: 'the shop\'s own supplier (wholesaler): "Gupta ji ko 5000 dene hain" (credit = goods the shop took, owes them), "Gupta ji ko 2000 diye" (payment = the shop paid them)' },
+          new_customer: { type: 'boolean', description: 'true only when the shopkeeper says this is a new / second person with a name already in the ledger ("naya Ramesh", "doosra Ramesh")' },
         }, ['name', 'amount', 'direction']),
       },
       sure: { type: 'boolean', description: 'false when any part is a guess' },
@@ -94,6 +103,38 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
   { name: 'set_phone', description: 'Save a customer\'s 10-digit mobile number.', parameters: obj({ name: STR, phone: STR }, ['name', 'phone']) },
   { name: 'send_reminder', description: 'Prepare a polite WhatsApp reminder of the balance (only for customers who agreed).', parameters: obj({ name: STR }, ['name']) },
   { name: 'send_statement', description: 'Prepare a WhatsApp statement of a customer\'s entries.', parameters: obj({ name: STR }, ['name']) },
+  {
+    name: 'show_qr',
+    description: 'Show a UPI QR on the screen for a customer at the counter to pay ("Ramesh ka QR dikhao"). Omit amount to collect the whole balance.',
+    parameters: obj({ name: STR, amount: { type: 'number', description: 'rupees, only if said' } }, ['name']),
+  },
+  { name: 'show_overdue', description: 'Customers whose oldest unpaid credit is older than some days ("kiska 30 din se purana hai"). Default 30.', parameters: obj({ days: INT }) },
+  { name: 'collect_today', description: 'Who to collect from today: due dates reached, promises for today, dues older than 30 days ("aaj kisse lena hai").', parameters: obj({}) },
+  {
+    name: 'set_plan',
+    description: 'Split a customer\'s dues into instalments ("Ramesh ka 3000, teen hafte mein"; "har hafte 500"). Asked first. Amounts and the number of parts only as said.',
+    parameters: obj({
+      name: STR,
+      total: { type: 'number', description: 'rupees to split; omit for the whole balance' },
+      parts: { ...INT, description: 'number of instalments, only if said' },
+      part_amount: { type: 'number', description: 'rupees per instalment, only if said' },
+      every: { type: 'string', enum: ['day', 'week', 'month'], description: 'how often (default week)' },
+    }, ['name']),
+  },
+  { name: 'cancel_plan', description: 'End a customer\'s instalment plan (asked first).', parameters: obj({ name: STR }, ['name']) },
+  {
+    name: 'add_cash',
+    description: 'Cashbook (galla) money that is NO customer\'s: shop expenses and cash put in or taken out ("aaj 500 ka maal kharida", "bijli 800", "galle mein 2000 daale"). Never for a named customer or supplier.',
+    parameters: obj({
+      amount: { type: 'number', description: 'rupees, exactly as said' },
+      dir: { type: 'string', enum: ['in', 'out'], description: 'in = into the cash box, out = spent / taken out' },
+      category: { type: 'string', enum: [...CASH_CATEGORIES], description: 'stock (goods bought), bills (electricity, phone), rent, wages, personal, other when unsure' },
+      note: { ...STR, description: 'a few words of what it was for' },
+      day_offset: { ...INT, description: 'omit for today; -1 yesterday' },
+      sure: { type: 'boolean', description: 'false when any part is a guess' },
+    }, ['amount', 'category']),
+  },
+  { name: 'set_tag', description: 'Give a customer a nickname that tells two people with one name apart ("purane Ramesh ko doodhwala bolo").', parameters: obj({ name: STR, tag: STR }, ['name', 'tag']) },
   { name: 'set_language', description: 'Change the language the app speaks.', parameters: obj({ lang: { type: 'string', enum: [...LANGS] } }, ['lang']) },
   {
     name: 'set_speed', description: 'How fast the app speaks: slower ("dheere bolo"), normal again, or faster ("tez bolo").',
@@ -125,6 +166,33 @@ const int = (v: unknown): number | null => (Number.isInteger(v) ? (v as number) 
 const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase())
 /** YYYY-MM-DD in India, offset by n days (the shop's calendar). */
 const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
+/** a due date must have been said: "tak", "by", "till", a date word */
+const DUE_HEARD = /(^|[\s,])(tak|takk|tarikh|taarikh|till|until|by|before|within|mein|me)([\s,.?!]|$)|तक|तारीख|में|ವರೆಗೆ|ಒಳಗೆ|ತಾರೀಖು|வரை|க்குள்|தேதி|వరకు|లోపు|తేదీ|വരെ|ക്കകം|पर्यंत|তারিখ|পর্যন্ত|মধ্যে|સુધી|ਤੱਕ/i
+/** "naya / doosra Ramesh": a second person with a name the ledger has */
+const NEW_HEARD = /(^|\s)(naya|nayi|naye|doosra|dusra|doosri|dusri|new|another|second)(\s|$)|नया|नई|दूसरा|दूसरी|ಹೊಸ|ಇನ್ನೊಬ್ಬ|புதிய|இன்னொரு|కొత్త|ఇంకో|പുതിയ|മറ്റൊരു|नवीन|দূসরা|নতুন|আরেক|નવા|બીજા|ਨਵਾਂ|ਦੂਜਾ/i
+const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+/** The pay-by day the model read (offset, weekday or date of the month), as YYYY-MM-DD in India. */
+function dueFrom(e: Record<string, unknown>): string | undefined {
+  const off = int(e.due_offset)
+  if (off !== null && off >= 1 && off <= 120) return istDay(off)
+  const wd = typeof e.due_weekday === 'string' ? WEEKDAYS.indexOf(e.due_weekday) : -1
+  if (wd >= 0) {
+    const now = new Date(Date.now() + 5.5 * 3600_000).getUTCDay()
+    return istDay(((wd - now + 7) % 7) || 7)
+  }
+  const date = int(e.due_date)
+  if (date !== null && date >= 1 && date <= 31) {
+    const t = istDay(0)
+    const [y, m, d] = t.split('-').map(Number)
+    const pick = (yy: number, mm: number) => {
+      const last = new Date(Date.UTC(yy, mm, 0)).getUTCDate()
+      return `${yy}-${String(mm).padStart(2, '0')}-${String(Math.min(date, last)).padStart(2, '0')}`
+    }
+    return date > d ? pick(y, m) : m === 12 ? pick(y + 1, 1) : pick(y, m + 1)
+  }
+  return undefined
+}
+const EVERY = { day: 1, week: 7, month: 30 } as const
 
 /** The sentence the tool was called for, and every language stream's reading of it (when there are several). */
 /**
@@ -176,7 +244,7 @@ function optionHeard(core: LedgerCore, idx: number, value: string, heard: string
     case 'choose':
       return heard.some((t) => LedgerCore.chooseIndex(p.options, t) === idx)
     case 'which': {
-      const opts: ChooseOption[] = p.options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, args: {} }))
+      const opts: ChooseOption[] = core.whichOptions(p.options)
       return heard.some((t) => LedgerCore.chooseIndex(opts, t) === idx)
     }
     default:
@@ -214,9 +282,9 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     if (pinned) return core.snap.customers.find((c) => c.cid === pinned) ?? null
     const name = str(a[slot])
     if (!name) return null
-    // a "which one" option sent back exactly as shown ("Suresh · ₹300")
-    const byLabel = core.snap.customers.filter((c) => core.label(c) === name)
-    if (byLabel.length === 1) return byLabel[0]
+    // a name as the agent's list shows it ("Ramesh (doodhwala)", "Gupta [supplier]") or a label ("Ramesh 2")
+    const listed = core.fromListName(name)
+    if (listed) return listed
     const c = core.lookup(name)
     if (c) {
       const twins = core.snap.customers.filter((x) => x.name.toLowerCase() === c.name.toLowerCase())
@@ -231,7 +299,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
   /** Ask which customer (all of them as options); the answer finishes this same tool call. */
   const askWhich = (slot: string, options: SnapCustomer[], extra: ChooseOption[] = []): Reply => {
     const opts: ChooseOption[] = [
-      ...options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, args: { ...a, [`${slot}__cid`]: c.cid } })),
+      ...options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, id: c.cid, ...(c.tag ? { tag: c.tag } : {}), args: { ...a, [`${slot}__cid`]: c.cid } })),
       ...extra,
     ]
     const labels = opts.map((o) => o.label)
@@ -268,7 +336,10 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     const e = entries.find((x) => x.cid === cid && !x.promise)
     return e ? { amt: e.paise / 100, dir: e.direction } : undefined
   }
-  const owing = () => core.snap.customers.filter((c) => c.balancePaise > 0).sort((x, y) => y.balancePaise - x.balancePaise)
+  // customers who owe the shop: suppliers (the shop owes them) never
+  const owing = () => core.snap.customers.filter((c) => c.kind !== 'supplier' && c.balancePaise > 0).sort((x, y) => y.balancePaise - x.balancePaise)
+  const S = sayShop(lang)
+  const balanceOf = (c: SnapCustomer) => (c.kind === 'supplier' ? S.supplierBalance(c.name, c.balancePaise / 100) : R.balance(core.spokenName(c), c.balancePaise / 100))
   const duesReply = (): Reply => {
     const o = owing()
     const show = { type: 'show', view: 'dues' } as const
@@ -295,6 +366,25 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const intent = validate(text, raw, known, recent.length)
       if (intent.type !== 'entries') return notCaught()
       if (meta.fromAudio) for (const e of intent.entries) { e.reasons = [...e.reasons, 'from-audio']; e.confidence = 'low' }
+      // what the model added to each line (due date, items, supplier, a new twin), only when the words say it
+      const rawEntries = (Array.isArray(a.entries) ? a.entries : []) as Record<string, unknown>[]
+      const used = new Set<number>()
+      const dueSaid = heard.some((t) => DUE_HEARD.test(t))
+      const newSaid = heard.some((t) => NEW_HEARD.test(t))
+      for (const e of intent.entries) {
+        const i = rawEntries.findIndex((x, k) => !used.has(k) && x && x.amount === e.amount.value && (str(x.name) ?? null) === e.name)
+        if (i < 0) continue
+        used.add(i)
+        const x = rawEntries[i]
+        const extra: EntryExtras = {}
+        const due = dueSaid && e.direction === 'credit' && !e.promise ? dueFrom(x) : undefined
+        if (due) extra.due = due
+        const items = Array.isArray(x.items) ? x.items.map(str).filter((v): v is string => !!v && v.length <= 40).slice(0, 12) : []
+        if (items.length) extra.note = items.join(', ')
+        if (x.party === 'supplier' && e.name && !core.lookup(e.name)) extra.supplier = true
+        if (x.new_customer === true && newSaid && e.name && core.snap.customers.some((c) => c.name.toLowerCase() === e.name!.toLowerCase())) extra.forceNew = true
+        Object.assign(e, extra)
+      }
       // the same customer + amount + direction as an entry written in the last 60 s: the model
       // repeating itself (or a re-read of one sentence) is not a second entry. Saying it plainly
       // again takes the instant path, which still writes.
@@ -370,8 +460,18 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const name = str(a.name)
       if (!name) return notCaught()
       const same = core.snap.customers.find((c) => [c.name, ...c.aliases].some((n) => n.toLowerCase() === name.toLowerCase()))
-      if (same) return speak(R.showCustomer(same.name, same.balancePaise / 100, lastOf(same.cid)))
       const newName = titleCase(name)
+      // "naya / doosra Ramesh": a second Ramesh, read back, then asked for a nickname
+      if (same && heard.some((t) => NEW_HEARD.test(t))) {
+        const cid = core.freshId()
+        core.pending = {
+          kind: 'modify', ops: [{ op: 'add_customer', cid, name: newName }], done: R.customerAdded(newName), focus: cid,
+          view: { kind: 'modify', name: newName, newCustomer: true },
+          then: { pending: { kind: 'nickname', cid, name: newName }, ask: S.nicknameAsk(newName) },
+        }
+        return speak(M.addAsk(newName))
+      }
+      if (same) return speak(R.showCustomer(same.name, same.balancePaise / 100, lastOf(same.cid)))
       // a name close to one we have is probably that customer, misheard: ask which
       if (a._new !== true) {
         const near = [...new Map([...(core.lookup(name) ? [core.lookup(name)!] : []), ...core.candidates(name).map((x) => x.c)].map((c) => [c.cid, c])).values()]
@@ -422,6 +522,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     case 'send_reminder': {
       const c = need('name')
       if (isReply(c)) return c
+      if (c.kind === 'supplier') return speak(S.noSupplierReminder(c.name))
       if (c.balancePaise <= 0) return speak(R.balance(c.name, c.balancePaise / 100))
       // only customers who agreed to messages, and adults
       if (!c.remindersOptIn || !c.adult) return speak(R.noConsent(c.name))
@@ -436,6 +537,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     case 'send_statement': {
       const c = need('name')
       if (isReply(c)) return c
+      if (c.kind === 'supplier') return speak(S.noSupplierReminder(c.name))
       if (!c.remindersOptIn || !c.adult) return speak(R.noConsent(c.name))
       const lines = entries.filter((e) => e.cid === c.cid && !e.promise).slice(0, 10)
         .map((e) => `${e.day}  ${e.direction === 'credit' ? '+' : '-'}₹${formatINR(e.paise / 100)}`)
@@ -443,6 +545,26 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       if (!body) return notCaught()
       core.focusCid = c.cid
       return { parts: [R.statementReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text: body } }
+    }
+    case 'show_qr': {
+      // a QR for the customer at the counter: the amount said, else the whole balance. Nothing is
+      // written; the payment books itself when it lands (webhook -> pending -> announce).
+      const c = need('name')
+      if (isReply(c)) return c
+      // the shop pays suppliers; it never collects from them
+      if (c.kind === 'supplier') return speak(sayPay(lang).qrSupplier(c.name))
+      const said = num(a.amount)
+      let paise: number
+      if (said !== null) {
+        paise = Math.round(said * 100)
+        // like any amount: it must have been heard, or be exactly the balance
+        const heardIt = heard.some((t) => parseAmounts(t).some((x) => Math.round(x.value * 100) === paise))
+        if (!heardIt && paise !== c.balancePaise) return notCaught()
+      } else paise = c.balancePaise
+      if (paise <= 0) return speak(R.balance(c.name, c.balancePaise / 100))
+      if (paise < 100) return notCaught()
+      core.focusCid = c.cid
+      return { parts: [sayPay(lang).qrReady(c.name, paise / 100)], ops: [], ready: { kind: 'qr', cid: c.cid, paise } }
     }
     case 'erase_all':
       // only the typed word erases (LedgerCore.answerPending)
@@ -461,7 +583,8 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       }
       if (isReply(c)) return c
       core.focusCid = c.cid
-      const part = call.name === 'show_customer' ? R.showCustomer(c.name, c.balancePaise / 100, lastOf(c.cid)) : R.balance(c.name, c.balancePaise / 100)
+      const part = c.kind === 'supplier' ? balanceOf(c)
+        : call.name === 'show_customer' ? R.showCustomer(core.spokenName(c), c.balancePaise / 100, lastOf(c.cid)) : R.balance(core.spokenName(c), c.balancePaise / 100)
       return { parts: [part], ops: [], show: { type: 'show', view: 'customer', cid: c.cid } }
     }
     case 'show_dues':
@@ -484,8 +607,108 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       return { parts: [R.showHistory(label, list.length)], ops: [], show }
     }
     case 'show_today': {
+      // "aaj ka hisaab": credit and payments, new customers, the largest dues, today's promises, the galla
       const t = core.snap.today
-      return { parts: [R.showToday(t.creditPaise / 100, t.paymentPaise / 100)], ops: [], show: { type: 'show', view: 'today' } }
+      const today = istDay(0)
+      const promised = [...new Set(entries.filter((e) => e.promise && e.day === today).map((e) => e.cid))]
+        .map((cid) => core.snap.customers.find((c) => c.cid === cid)).filter((c): c is SnapCustomer => !!c).map((c) => core.spokenName(c))
+      const text = S.dailySummary({
+        credit: t.creditPaise / 100, paid: t.paymentPaise / 100, newCustomers: t.newCustomers ?? 0,
+        top: owing().slice(0, 3).map((c) => ({ name: core.spokenName(c), amt: c.balancePaise / 100 })),
+        promises: promised.slice(0, 5),
+        ...(t.cashIn ? { cashIn: t.cashIn / 100 } : {}), ...(t.cashOut ? { cashOut: t.cashOut / 100 } : {}),
+      })
+      return { parts: [guardReply(text) ?? R.showToday(t.creditPaise / 100, t.paymentPaise / 100)], ops: [], show: { type: 'show', view: 'today' } }
+    }
+    case 'show_overdue': {
+      const days = Math.min(365, Math.max(1, int(a.days) ?? 30))
+      const today = istDay(0)
+      const old = owing().filter((c) => c.oldestDay && daysBetween(c.oldestDay, today) > days)
+      const show = { type: 'show', view: 'overdue', days } as const
+      if (!old.length) return { parts: [S.noOverdue(days)], ops: [], show }
+      const total = old.reduce((t, c) => t + c.balancePaise, 0) / 100
+      return { parts: [S.overdueList(old.length, days, total, old.slice(0, 3).map((c) => core.spokenName(c)))], ops: [], show }
+    }
+    case 'collect_today': {
+      const rows = collectFrom(core.snap.customers.map((c) => ({
+        cid: c.cid, balancePaise: c.balancePaise, kind: c.kind, oldestDay: c.oldestDay, dueDay: c.dueDay, promiseDay: c.promiseDay,
+      })), istDay(0))
+      const show = { type: 'show', view: 'collect' } as const
+      if (!rows.length) return { parts: [S.nothingToCollect()], ops: [], show }
+      const nameOf = (cid: string) => { const c = core.snap.customers.find((x) => x.cid === cid); return c ? core.spokenName(c) : '' }
+      return { parts: [S.collectToday(rows.length, rows.reduce((t, r) => t + r.paise, 0) / 100, rows.slice(0, 3).map((r) => nameOf(r.cid)))], ops: [], show }
+    }
+    case 'set_plan': {
+      const c = need('name')
+      if (isReply(c)) return c
+      if (c.kind === 'supplier') return speak(S.noSupplierReminder(c.name))
+      if (c.balancePaise <= 0) return speak(R.balance(c.name, c.balancePaise / 100))
+      // every number said, whole or word by word ("3000 teen hafte" reads as one 3003 and as 3000 + 3)
+      const saidAmounts = heard.flatMap((t) => [
+        ...parseAmounts(t).flatMap((x) => [x.value, ...x.alternatives]),
+        ...t.split(/ +/).flatMap((w) => parseAmounts(w).map((x) => x.value)),
+      ])
+      const heardIt = (rs: number) => saidAmounts.includes(rs)
+      const totalRs = num(a.total)
+      const partRs = num(a.part_amount)
+      let parts = int(a.parts)
+      // every amount and the number of parts only as said (the whole balance needs no number)
+      if (totalRs !== null && !heardIt(totalRs) && Math.round(totalRs * 100) !== c.balancePaise) return notCaught()
+      if (partRs !== null && !heardIt(partRs)) return notCaught()
+      if (parts !== null && !heardIt(parts)) return notCaught()
+      const totalPaise = totalRs !== null ? Math.round(totalRs * 100) : c.balancePaise
+      if (totalPaise <= 0) return notCaught()
+      if (totalPaise > c.balancePaise) return speak(R.balance(c.name, c.balancePaise / 100))
+      if (parts === null && partRs !== null && partRs > 0) parts = Math.ceil(totalPaise / Math.round(partRs * 100))
+      if (parts === null || parts < 1 || parts > 52) return notCaught()
+      const everyDays = a.every === 'day' || a.every === 'week' || a.every === 'month' ? EVERY[a.every] : 7
+      const partPaise = Math.floor(totalPaise / parts)
+      if (partPaise < 100) return notCaught()
+      core.pending = {
+        kind: 'modify', focus: c.cid,
+        ops: [{ op: 'set_plan', cid: c.cid, pid: core.freshId(), totalPaise, parts, everyDays, startOffset: everyDays }],
+        done: S.planSet(core.spokenName(c), partPaise / 100, everyDays),
+        view: { kind: 'modify', name: core.label(c), paise: totalPaise },
+      }
+      return speak(S.planAsk(core.spokenName(c), totalPaise / 100, parts, partPaise / 100, everyDays))
+    }
+    case 'cancel_plan': {
+      const c = need('name')
+      if (isReply(c)) return c
+      if (!c.plan) return speak(S.noPlan(core.spokenName(c)))
+      core.pending = {
+        kind: 'modify', focus: c.cid, ops: [{ op: 'cancel_plan', cid: c.cid, pid: c.plan.pid }],
+        done: S.planCancelled(core.spokenName(c)), view: { kind: 'modify', name: core.label(c) },
+      }
+      return speak(S.planCancelAsk(core.spokenName(c)))
+    }
+    case 'add_cash': {
+      const amt = num(a.amount)
+      if (amt === null || amt <= 0 || !heard.some((t) => parseAmounts(t).some((x) => x.value === amt))) return notCaught()
+      const category: CashCategory = (CASH_CATEGORIES as readonly string[]).includes(a.category as string) ? a.category as CashCategory : 'other'
+      // spending categories go out of the galla; "other" needs the direction said
+      const dir: 'in' | 'out' | null = a.dir === 'in' || a.dir === 'out' ? a.dir : category !== 'other' ? 'out' : null
+      if (!dir) return notCaught()
+      const note = str(a.note)?.slice(0, 60)
+      const dayOffset = Math.max(-30, Math.min(0, int(a.day_offset) ?? 0))
+      const op = { op: 'cash' as const, eid: core.freshId(), paise: Math.round(amt * 100), dir, category, ...(note ? { note } : {}), dayOffset }
+      // a customer named in the sentence: their line wins, so this is only read back, never written at once
+      const named = heard.some((t) => !!core.knownWithin(t))
+      if (a.sure === false || named) {
+        core.pending = { kind: 'modify', focus: core.focusCid ?? '', ops: [op], done: S.cashSaved(amt, dir, category), view: { kind: 'modify', name: S.category(category), paise: op.paise } }
+        return speak(S.cashAsk(amt, dir, category))
+      }
+      return { parts: [S.cashSaved(amt, dir, category)], ops: [op] }
+    }
+    case 'set_tag': {
+      const c = need('name')
+      if (isReply(c)) return c
+      const raw = str(a.tag)
+      const tag = raw ? cleanTag(raw) : ''
+      // the nickname must have been said
+      if (!tag || !heard.some((t) => LedgerCore.mentions(t, tag))) return notCaught()
+      core.focusCid = c.cid
+      return { parts: [S.tagSet(c.name, tag)], ops: [{ op: 'set_tag', cid: c.cid, tag }] }
     }
     case 'search': {
       const q = str(a.text)
@@ -502,7 +725,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     }
     case 'top_debtors': {
       const n = Math.min(5, Math.max(1, int(a.count) ?? 3))
-      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'top_debtors', count: n } }
+      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => core.spokenName(c)))], ops: [], show: { type: 'show', view: 'top_debtors', count: n } }
     }
     case 'close_view':
       return { parts: [R.closed()], ops: [], show: { type: 'show', view: 'close' } }

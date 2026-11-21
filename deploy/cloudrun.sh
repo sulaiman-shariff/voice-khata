@@ -23,7 +23,7 @@ npx esbuild server/cloudrun.ts --bundle --platform=node --format=esm --target=no
 ENVFILE=$(mktemp)
 trap 'rm -f "$ENVFILE"' EXIT
 for k in DATABASE_URL RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET VONAGE_API_KEY VONAGE_API_SECRET \
-         VONAGE_WHATSAPP_FROM VONAGE_WEBHOOK_TOKEN VONAGE_SIGNATURE_SECRET CRON_SECRET; do
+         VONAGE_WHATSAPP_FROM VONAGE_WEBHOOK_TOKEN VONAGE_SIGNATURE_SECRET CRON_SECRET GNANI_API_KEY; do
   v=${!k:-}
   [ -n "$v" ] && printf '%s: "%s"\n' "$k" "$v" >> "$ENVFILE"
 done
@@ -31,7 +31,7 @@ echo 'REGION: "asia-south1"' >> "$ENVFILE"
 
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com cloudscheduler.googleapis.com $G
 gcloud run deploy $SERVICE --source deploy/cloudrun --region $REGION $G --allow-unauthenticated \
-  --cpu 1 --memory 256Mi --min-instances 0 --max-instances 1 --concurrency 20 --cpu-throttling --timeout 60 \
+  --cpu 1 --memory 512Mi --min-instances 0 --max-instances 1 --concurrency 20 --cpu-throttling --timeout 60 \
   --env-vars-file "$ENVFILE" --quiet
 
 URL=$(gcloud run services describe $SERVICE --region $REGION $G --format='value(status.url)')
@@ -47,7 +47,7 @@ gcloud scheduler jobs $op http voicekhata-reminders --location $REGION $G \
 
 echo
 echo "Cloud Run: $URL"
-echo "Razorpay webhook (Dashboard -> Webhooks, events payment_link.paid + payment_link.partially_paid,"
+echo "Razorpay webhook (Dashboard -> Webhooks, events payment_link.paid + payment_link.partially_paid + qr_code.credited,"
 echo "  secret = RAZORPAY_WEBHOOK_SECRET from .env):  $URL/webhooks/razorpay"
 echo "Vonage sandbox inbound:  $URL/webhooks/vonage/inbound?k=$VONAGE_WEBHOOK_TOKEN"
 echo "Vonage sandbox status:   $URL/webhooks/vonage/status?k=$VONAGE_WEBHOOK_TOKEN"

@@ -73,6 +73,8 @@ export interface Inbound {
   from: string
   text: string
   payload?: string
+  /** a voice note: where Vonage keeps the audio (OGG/Opus), fetched with the account's basic auth */
+  audioUrl?: string
 }
 
 export function parseInbound(body: unknown): Inbound | null {
@@ -84,10 +86,15 @@ export function parseInbound(body: unknown): Inbound | null {
     text?: string
     reply?: { id?: string; title?: string }
     button?: { payload?: string; text?: string }
+    audio?: { url?: string }
   }
   if (!b || b.channel !== 'whatsapp' || !b.from || !b.message_uuid) return null
   const from = String(b.from).replace(/\D/g, '')
   if (b.message_type === 'reply') return { messageId: b.message_uuid, from, text: b.reply?.title ?? '', payload: b.reply?.id }
+  if (b.message_type === 'audio') {
+    const url = typeof b.audio?.url === 'string' && /^https:\/\/\S{1,1000}$/.test(b.audio.url) ? b.audio.url : undefined
+    return { messageId: b.message_uuid, from, text: '', ...(url ? { audioUrl: url } : {}) }
+  }
   if (b.message_type === 'button') return { messageId: b.message_uuid, from, text: b.button?.text ?? '', payload: b.button?.payload }
   return { messageId: b.message_uuid, from, text: typeof b.text === 'string' ? b.text : '' }
 }

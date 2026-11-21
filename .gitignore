@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.android
 
 # deps / build
 node_modules/
@@ -35,3 +36,9 @@ wakeword/.venv/
 wakeword/data/
 wakeword/work/
 wakeword/.cache/
+
+# demo videos (shared outside the repo)
+*.mp4
+
+# Android build outputs
+*.apk

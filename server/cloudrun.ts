@@ -2,8 +2,8 @@
  * The Cloud Run service: only what outside services and schedules call. The app, the voice socket
  * and everything the phone calls stay on Vercel; both share the Neon database.
  *
- *   POST /webhooks/razorpay           a customer paid a link        (X-Razorpay-Signature)
- *   POST /webhooks/vonage/inbound     a customer replied 1/2/3/STOP (Vonage JWT, or ?k= token)
+ *   POST /webhooks/razorpay           a customer paid a link or a counter QR (X-Razorpay-Signature)
+ *   POST /webhooks/vonage/inbound     a customer replied 1/2/3/STOP, a promise, a voice note (Vonage JWT, or ?k= token)
  *   POST /webhooks/vonage/status      delivery receipts             (same)
  *   POST /internal/reminders-tick     hourly automatic reminders    (Cloud Scheduler, x-cron-secret)
  *   GET  /health (Cloud Run reserves /healthz)

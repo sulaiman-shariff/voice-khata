@@ -982,3 +982,83 @@ export const reminderWords = (lang: Lang): ReminderWords => REMINDER[lang]
 
 /** Does a reminder line use a pressing or judging word (the BANNED list)? For tests. */
 export const pressingWord = (text: string): boolean => BANNED.some((re) => re.test(text))
+
+/**
+ * Payments that land by themselves (counter QR, Razorpay link): the "soundbox" announcement, the
+ * partial-payment follow-up, and the counter QR read-out. Every template goes through guardReply.
+ */
+export interface PayReplies {
+  /** "Received 500 from Ramesh. 200 still due." (`balance` is after the payment; < 0 = advance) */
+  paymentReceived: (name: string, amt: number, balance: number) => string
+  /** a link paid only in part: offer a new link for what is left (a yes/no question) */
+  partialPaid: (left: number) => string
+  /** show_qr: the counter QR is on the screen */
+  qrReady: (name: string, amt: number) => string
+  /** show_qr for a supplier: the shop pays them, so there is nothing to collect */
+  qrSupplier: (name: string) => string
+}
+type Bal = (b: number) => string
+const pay = (got: (n: string, a: number) => string, bal: Bal) => (n: string, a: number, b: number) => `${got(n, a)} ${bal(b)}`
+const PAY: Record<Lang, PayReplies> = {
+  hi: {
+    paymentReceived: pay((n, a) => `${n} से ${r(a)} रुपये मिल गए।`, (b) => (b > 0 ? `अब ${r(b)} रुपये बाकी हैं।` : b < 0 ? `${r(-b)} रुपये पहले से जमा हैं।` : 'पूरा हिसाब साफ़।')),
+    partialPaid: (l) => `${r(l)} रुपये अभी बाकी हैं। बाकी के लिए नया लिंक भेजूँ?`,
+    qrReady: (n, a) => `${n} के लिए ${r(a)} रुपये का QR स्क्रीन पर है।`,
+    qrSupplier: (n) => `${n} सप्लायर हैं, उनसे पैसे नहीं लेने हैं, इसलिए QR नहीं बनाया।`,
+  },
+  en: {
+    paymentReceived: pay((n, a) => `Received ${r(a)} rupees from ${n}.`, (b) => (b > 0 ? `${r(b)} rupees still due.` : b < 0 ? `${r(-b)} rupees paid in advance.` : 'Account fully settled.')),
+    partialPaid: (l) => `${r(l)} rupees still due. Shall I send a new link for the rest?`,
+    qrReady: (n, a) => `The QR for ${r(a)} rupees for ${n} is on the screen.`,
+    qrSupplier: (n) => `${n} is a supplier, so there is nothing to collect and no QR.`,
+  },
+  kn: {
+    paymentReceived: pay((n, a) => `${n} ಅವರಿಂದ ${r(a)} ರೂಪಾಯಿ ಬಂತು.`, (b) => (b > 0 ? `ಇನ್ನೂ ${r(b)} ರೂಪಾಯಿ ಬಾಕಿ ಇದೆ.` : b < 0 ? `${r(-b)} ರೂಪಾಯಿ ಮುಂಗಡ ಜಮಾ ಇದೆ.` : 'ಲೆಕ್ಕ ಪೂರ್ತಿ ಚುಕ್ತಾ.')),
+    partialPaid: (l) => `ಇನ್ನೂ ${r(l)} ರೂಪಾಯಿ ಬಾಕಿ ಇದೆ. ಉಳಿದದ್ದಕ್ಕೆ ಹೊಸ ಲಿಂಕ್ ಕಳುಹಿಸಲಾ?`,
+    qrReady: (n, a) => `${n} ಅವರಿಗೆ ${r(a)} ರೂಪಾಯಿಯ QR ಪರದೆಯ ಮೇಲಿದೆ.`,
+    qrSupplier: (n) => `${n} ಸರಬರಾಜುದಾರರು, ಅವರಿಂದ ಹಣ ಬರಬೇಕಿಲ್ಲ, ಹಾಗಾಗಿ QR ಮಾಡಲಿಲ್ಲ.`,
+  },
+  ta: {
+    paymentReceived: pay((n, a) => `${n} இடமிருந்து ${r(a)} ரூபாய் வந்தது.`, (b) => (b > 0 ? `இன்னும் ${r(b)} ரூபாய் பாக்கி.` : b < 0 ? `${r(-b)} ரூபாய் முன்பணமாக உள்ளது.` : 'கணக்கு முழுவதும் தீர்ந்தது.')),
+    partialPaid: (l) => `இன்னும் ${r(l)} ரூபாய் பாக்கி. மீதிக்கு புதிய லிங்க் அனுப்பட்டுமா?`,
+    qrReady: (n, a) => `${n} அவர்களுக்கு ${r(a)} ரூபாய் QR திரையில் உள்ளது.`,
+    qrSupplier: (n) => `${n} சப்ளையர், அவரிடம் வசூலிக்க ஒன்றுமில்லை, அதனால் QR இல்லை.`,
+  },
+  te: {
+    paymentReceived: pay((n, a) => `${n} గారి నుండి ${r(a)} రూపాయలు వచ్చాయి.`, (b) => (b > 0 ? `ఇంకా ${r(b)} రూపాయలు బాకీ.` : b < 0 ? `${r(-b)} రూపాయలు ముందుగా జమ ఉన్నాయి.` : 'లెక్క పూర్తిగా తీరింది.')),
+    partialPaid: (l) => `ఇంకా ${r(l)} రూపాయలు బాకీ. మిగతాదానికి కొత్త లింక్ పంపనా?`,
+    qrReady: (n, a) => `${n} గారికి ${r(a)} రూపాయల QR స్క్రీన్ మీద ఉంది.`,
+    qrSupplier: (n) => `${n} సరఫరాదారు, వారి నుండి రావాల్సింది లేదు, కాబట్టి QR చేయలేదు.`,
+  },
+  ml: {
+    paymentReceived: pay((n, a) => `${n} ൽ നിന്ന് ${r(a)} രൂപ കിട്ടി.`, (b) => (b > 0 ? `ഇനി ${r(b)} രൂപ ബാക്കി.` : b < 0 ? `${r(-b)} രൂപ മുൻകൂറായി ഉണ്ട്.` : 'കണക്ക് മുഴുവൻ തീർന്നു.')),
+    partialPaid: (l) => `ഇനി ${r(l)} രൂപ ബാക്കി. ബാക്കിക്ക് പുതിയ ലിങ്ക് അയക്കട്ടെ?`,
+    qrReady: (n, a) => `${n} ന് ${r(a)} രൂപയുടെ QR സ്ക്രീനിൽ ഉണ്ട്.`,
+    qrSupplier: (n) => `${n} വിതരണക്കാരനാണ്, അവരിൽ നിന്ന് ഒന്നും കിട്ടാനില്ല, അതിനാൽ QR ഇല്ല.`,
+  },
+  mr: {
+    paymentReceived: pay((n, a) => `${n} यांच्याकडून ${r(a)} रुपये मिळाले.`, (b) => (b > 0 ? `अजून ${r(b)} रुपये बाकी आहेत.` : b < 0 ? `${r(-b)} रुपये आगाऊ जमा आहेत.` : 'हिशोब पूर्ण झाला.')),
+    partialPaid: (l) => `अजून ${r(l)} रुपये बाकी आहेत. उरलेल्यासाठी नवीन लिंक पाठवू का?`,
+    qrReady: (n, a) => `${n} यांच्यासाठी ${r(a)} रुपयांचा QR स्क्रीनवर आहे.`,
+    qrSupplier: (n) => `${n} पुरवठादार आहेत, त्यांच्याकडून काही घ्यायचे नाही, म्हणून QR केला नाही.`,
+  },
+  bn: {
+    paymentReceived: pay((n, a) => `${n}-এর কাছ থেকে ${r(a)} টাকা এসেছে।`, (b) => (b > 0 ? `এখনও ${r(b)} টাকা বাকি।` : b < 0 ? `${r(-b)} টাকা অগ্রিম জমা আছে।` : 'হিসাব পুরো মিটে গেছে।')),
+    partialPaid: (l) => `এখনও ${r(l)} টাকা বাকি। বাকিটার জন্য নতুন লিংক পাঠাব?`,
+    qrReady: (n, a) => `${n}-এর জন্য ${r(a)} টাকার QR স্ক্রিনে আছে।`,
+    qrSupplier: (n) => `${n} সরবরাহকারী, তাঁর কাছ থেকে কিছু পাওয়ার নেই, তাই QR হয়নি।`,
+  },
+  gu: {
+    paymentReceived: pay((n, a) => `${n} પાસેથી ${r(a)} રૂપિયા મળ્યા.`, (b) => (b > 0 ? `હજી ${r(b)} રૂપિયા બાકી છે.` : b < 0 ? `${r(-b)} રૂપિયા અગાઉથી જમા છે.` : 'હિસાબ પૂરો ચૂકતે થયો.')),
+    partialPaid: (l) => `હજી ${r(l)} રૂપિયા બાકી છે. બાકીના માટે નવી લિંક મોકલું?`,
+    qrReady: (n, a) => `${n} માટે ${r(a)} રૂપિયાનો QR સ્ક્રીન પર છે.`,
+    qrSupplier: (n) => `${n} સપ્લાયર છે, તેમની પાસેથી કંઈ લેવાનું નથી, એટલે QR નથી બનાવ્યો.`,
+  },
+  pa: {
+    paymentReceived: pay((n, a) => `${n} ਤੋਂ ${r(a)} ਰੁਪਏ ਮਿਲ ਗਏ।`, (b) => (b > 0 ? `ਅਜੇ ${r(b)} ਰੁਪਏ ਬਾਕੀ ਹਨ।` : b < 0 ? `${r(-b)} ਰੁਪਏ ਪੇਸ਼ਗੀ ਜਮ੍ਹਾ ਹਨ।` : 'ਹਿਸਾਬ ਪੂਰਾ ਚੁਕਤਾ।')),
+    partialPaid: (l) => `ਅਜੇ ${r(l)} ਰੁਪਏ ਬਾਕੀ ਹਨ। ਬਾਕੀ ਲਈ ਨਵਾਂ ਲਿੰਕ ਭੇਜਾਂ?`,
+    qrReady: (n, a) => `${n} ਲਈ ${r(a)} ਰੁਪਏ ਦਾ QR ਸਕਰੀਨ ਉੱਤੇ ਹੈ।`,
+    qrSupplier: (n) => `${n} ਸਪਲਾਇਰ ਹਨ, ਉਹਨਾਂ ਤੋਂ ਕੁਝ ਲੈਣਾ ਨਹੀਂ, ਇਸ ਲਈ QR ਨਹੀਂ ਬਣਾਇਆ।`,
+  },
+}
+export const sayPay = (lang: Lang): PayReplies => PAY[lang]

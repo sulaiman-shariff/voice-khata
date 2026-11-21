@@ -5,10 +5,12 @@
  * the model or the network, so a voice agent's tools can call it as well as the turn loop.
  */
 import { type Direction, type EntryIntent, type Intent, directionAnswer, mentionsMoney, mentionsSettle, nameAnswer, refersBack } from '../../shared/intent.js'
-import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
+import { uniqueLabels } from '../../shared/ledger.js'
+import { NAME_NEAR, NAME_SURE, matchName, phoneticKey } from '../../shared/names.js'
 import { parseAmounts } from '../../shared/numbers.js'
-import type { LedgerOp, PendingView, ServerMsg, SettingMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
+import type { LedgerOp, PendingView, ReadyCard, ServerMsg, SettingMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
 import { type Lang, LOCALE, eraseWord, say, sayMore } from '../../shared/replies.js'
+import { sayShop } from '../../shared/replies-shop.js'
 import type { Logger } from '../log.js'
 
 const ANOMALY_FACTOR = 5
@@ -18,6 +20,23 @@ export const PENDING_TTL_MS = 45_000
 /** how long an entry written in this session is remembered for an instant undo */
 export const WRITTEN_KEEP_MS = 60_000
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
+/** a "which one?" lists at most this many customers */
+export const MAX_WHICH = 4
+/** a nickname heard with the name beats a same-named twin matched on the name alone */
+const TAG_BONUS = 0.05
+/** the agent's customer list marks suppliers so ("Gupta [supplier]") and nicknames in brackets */
+const SUPPLIER_MARK = /\s*\[supplier\]$/i
+const LIST_NAME = /^(.+?)\s*\((.+)\)$/
+/**
+ * Sentences the fast path leaves to the agent even when they look like a plain entry: a due date
+ * ("Somvaar tak", "15 tarikh tak", "by Monday"), an instalment plan ("teen hafte mein", "har hafte"),
+ * a new twin ("naya Ramesh").
+ */
+const AGENT_ONLY = /(^|[\s,])(tak|takk|tak\.|tarikh|taarikh|till|until|by|hafte|hafta|mahine|kisht|kist|installments?|naya|nayi|naye|doosra|dusra|doosri|new)([\s,.?!]|$)|तक|तारीख|हफ़्ते|हफ्ते|किस्त|नया|दूसरा|ವರೆಗೆ|ತಾರೀಖು|ಕಂತು|ಹೊಸ|வரை|தேதி|தவணை|புதிய|వరకు|తేదీ|వాయిదా|కొత్త|വരെ|ഗഡു|पर्यंत|हप्त|পর্যন্ত|কিস্তি|સુધી|હપ્ત|ਤੱਕ|ਕਿਸ਼ਤ/i
+/** "skip it" for the nickname question */
+const SKIP_WORD = /^(chhodo|chodo|chhod do|skip|rehne do|rahne do|nahi|nahin|no|later|baad mein|छोड़ो|छोड़ दो|रहने दो|बाद में|ಬೇಡ|ವೇಡಾ|வேண்டாம்|వద్దు|വേണ്ട|नको|থাক|રહેવા દો|ਰਹਿਣ ਦਿਓ)[\s.!।]*$/i
+/** "new" in an answer to the sound-alike question ("naya", "new one") */
+const NEW_WORD = /(^|\s)(naya|nayi|naye|new|alag)(\s|$)|नया|नई|ಹೊಸ|புதிய|కొత్త|പുതിയ|नवीन|নতুন|નવા|ਨਵਾਂ/i
 
 /** How the turn being handled was heard: noise level, and whether the fast parser or the model read it. */
 export type TurnMeta = { snrDb: number | null; noisy: boolean; path: 'fast' | 'llm' }
@@ -47,7 +66,20 @@ export interface Draft {
   transcript: string
   snrDb: number | null
   noisy: boolean
+  /** pay-by date of a credit (YYYY-MM-DD), heard as "Somvaar tak" */
+  due?: string
+  /** itemised bill: the items said */
+  note?: string
+  /** a new account for this line is a supplier's */
+  supplier?: boolean
+  /** "naya / doosra Ramesh": open a new account even though a Ramesh exists */
+  forceNew?: boolean
+  /** the heard name only sounds like the customer it matched: offered as a new account too */
+  soundAlike?: string
 }
+
+/** What the agent may add to a line it read (not in the fast parser's EntryIntent). */
+export type EntryExtras = { due?: string; note?: string; supplier?: boolean; forceNew?: boolean }
 
 export type Pending =
   | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
@@ -63,12 +95,16 @@ export type Pending =
    * read-back before changing or removing an older entry (also merge, move, and a reminder):
    * on a yes the ops are written, `done` is said, and `ready` (if any) goes to the phone
    */
-  | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string; ready?: Reply['ready'] }
+  | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string; ready?: Reply['ready']; then?: { pending: Pending; ask: string } }
   /**
    * "Which one?" for an agent tool (two customers fit a name): the chosen option's args finish the
    * original tool call through the `choose` hook, against the sentence that asked for it.
    */
   | { kind: 'choose'; ask: string; tool: string; transcript: string; options: ChooseOption[]; reasked?: number }
+  /** a second customer with this name was just opened: how to tell them apart (a skip is fine) */
+  | { kind: 'nickname'; cid: string; name: string }
+  /** the heard name only sounds like `known`: that customer, or a new account `newName`, same entry */
+  | { kind: 'soundalike'; draft: Draft; queue: Draft[]; known: SnapCustomer; newName: string }
 
 export interface ChooseOption {
   /** shown on screen and matched exactly when tapped */
@@ -77,6 +113,10 @@ export interface ChooseOption {
   name: string
   /** the customer's balance in rupees: "the 300 one" */
   rupees?: number
+  /** sent back by a tap instead of the label (a cid), so a tap never hits the wrong twin */
+  id?: string
+  /** the customer's nickname: "doodhwala wale" picks this option */
+  tag?: string
   /** the tool's args with this option filled in */
   args: Record<string, unknown>
 }
@@ -102,7 +142,7 @@ export interface Reply {
   /** a setting changed by voice, for the phone to apply */
   setting?: SettingMsg
   /** something ready for the shopkeeper to send or save with one tap (nothing is sent by the server) */
-  ready?: { kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
+  ready?: ReadyCard
   /** heard, and taken as talk to someone else: nothing said, nothing written */
   notForMe?: true
 }
@@ -215,7 +255,7 @@ export class LedgerCore {
       if (Array.isArray(st.history)) this.history = st.history.filter((h): h is string => typeof h === 'string').slice(-8)
       if (typeof st.focusCid === 'string' || st.focusCid === null) this.focusCid = st.focusCid
       const pendingAge = age + (typeof st.pendingAgeMs === 'number' ? st.pendingAgeMs : 0)
-      const kinds = ['confirm', 'name', 'amount', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify', 'choose']
+      const kinds = ['confirm', 'name', 'amount', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify', 'choose', 'nickname', 'soundalike']
       const pendingOk = !!st.pending && typeof st.pending === 'object' && kinds.includes((st.pending as { kind?: string }).kind ?? '')
       if (pendingOk && pendingAge < PENDING_TTL_MS) {
         // an erase question from the blob always needs this language's typed word (never a yes, never the blob's word)
@@ -284,7 +324,7 @@ export class LedgerCore {
     this.pending = { kind: 'modify', ops, done, focus, view: { kind: 'modify', name, paise, direction: dir, newCustomer: opens || undefined } }
     return { parts: [opens ? R.confirmNew(name, paise / 100, dir) : M.changeAsk(name, paise / 100, dir)], ops: [] }
   }
-  draftFrom(e: EntryIntent, transcript: string, meta: TurnMeta): Draft {
+  draftFrom(e: EntryIntent & EntryExtras, transcript: string, meta: TurnMeta): Draft {
     let alt = e.reasons.includes('confusable') && e.amount.alternatives.length ? e.amount.alternatives[0] : null
     const reasons = [...e.reasons]
     return {
@@ -304,6 +344,10 @@ export class LedgerCore {
       snrDb: meta.snrDb,
       noisy: meta.noisy,
       spoken: this.turnSrc !== 'tap',
+      ...(e.due ? { due: e.due } : {}),
+      ...(e.note ? { note: e.note } : {}),
+      ...(e.supplier ? { supplier: true } : {}),
+      ...(e.forceNew ? { forceNew: true } : {}),
     }
   }
 
@@ -344,14 +388,82 @@ export class LedgerCore {
 
   /** Customer lookup for queries: best match at NEAR or better. */
   lookup(name: string): SnapCustomer | null {
-    const m = matchName(name, this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))[0]
+    const listed = this.fromListName(name)
+    if (listed) return listed
+    const tagged = this.tagMatch(name)
+    if (tagged && tagged.score >= NAME_SURE) return this.snap.customers.find((c) => c.cid === tagged.id) ?? null
+    const m = matchName(name, this.people())[0]
     return m && m.score >= NAME_NEAR ? this.snap.customers.find((c) => c.cid === m.id) ?? null : null
+  }
+
+  /** every customer's names (name and aliases), for matchName */
+  private people() {
+    return this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] }))
+  }
+
+  /**
+   * The best "nickname + name" match for words of two or more ("doodhwala Ramesh"). A single word is
+   * never tried: "Ramesh" alone must not pick the twin who has a nickname.
+   */
+  private tagMatch(heard: string): { id: string; score: number } | undefined {
+    if (heard.trim().split(/ +/).length < 2) return undefined
+    const people = this.taggedPeople()
+    return people.length ? matchName(heard, people)[0] : undefined
+  }
+
+  /** customers with a nickname, as "tag name" and "name tag" ("doodhwala Ramesh", "Ramesh Gali 3") */
+  private taggedPeople() {
+    return this.snap.customers.filter((c) => c.tag).map((c) => ({ id: c.cid, names: [`${c.tag} ${c.name}`, `${c.name} ${c.tag}`] }))
+  }
+
+  /**
+   * The customer a name from the agent's customer list means: "Ramesh (doodhwala)", "Gupta [supplier]",
+   * or a label exactly as shown ("Ramesh · Gali 3", "Ramesh 2"). Null when it is none of those.
+   */
+  fromListName(name: string): SnapCustomer | null {
+    const t = name.trim().replace(SUPPLIER_MARK, '').trim()
+    // a label only when it says more than the bare name ("Ramesh" alone still means any Ramesh)
+    const twin = (c: SnapCustomer) => this.snap.customers.some((x) => x.cid !== c.cid && x.name.toLowerCase() === c.name.toLowerCase())
+    const byLabel = this.snap.customers.filter((c) => this.label(c) === t && (this.label(c) !== c.name || !twin(c)))
+    if (byLabel.length === 1) return byLabel[0]
+    const m = LIST_NAME.exec(t)
+    if (!m) return null
+    const hits = this.snap.customers.filter((c) => c.name === m[1].trim() && (c.tag === m[2].trim() || this.label(c) === `${c.name} ${m[2].trim()}`))
+    return hits.length === 1 ? hits[0] : null
+  }
+
+  /**
+   * The customer list the agent sees: each name once, a nickname in brackets ("Ramesh (doodhwala)"),
+   * twins without one by their label ("Ramesh 2"), suppliers marked, then aliases.
+   */
+  customerList(): string[] {
+    const out: string[] = []
+    for (const c of this.snap.customers) {
+      const twin = this.snap.customers.some((x) => x.cid !== c.cid && x.name.toLowerCase() === c.name.toLowerCase())
+      const base = c.tag ? `${c.name} (${c.tag})` : twin ? this.label(c) : c.name
+      out.push(c.kind === 'supplier' ? `${base} [supplier]` : base, ...c.aliases)
+    }
+    return out
   }
 
   /** Resolve the heard name to a customer: sure / near (ask) / two candidates / new. */
   private resolveName(d: Draft): 'ok' | 'which' | SnapCustomer[] {
     if (d.cid || d.newName) return 'ok'
-    const m = matchName(d.heardName!, this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
+    // "naya / doosra Ramesh": a second account with a name we already have
+    if (d.forceNew) {
+      d.newName = titleCase(newCustomerName(d.heardName!))
+      d.nameSure = true
+      return 'ok'
+    }
+    // "doodhwala Ramesh": a nickname with the name picks that one
+    const listed = this.fromListName(d.heardName!)
+    const tagged = listed ? { id: listed.cid, score: 1 } : this.tagMatch(d.heardName!)
+    if (tagged && tagged.score >= NAME_SURE) {
+      d.cid = tagged.id
+      d.nameSure = true
+      return 'ok'
+    }
+    const m = matchName(d.heardName!, this.people())
     const near = m.filter((x) => x.score >= NAME_NEAR)
     if (!near.length) {
       // before opening a new account: does the heard name contain a customer we already have?
@@ -366,15 +478,21 @@ export class LedgerCore {
         return 'ok'
       }
       // two customers fit about equally ("Ramesh" / "Rameshwar", two Sureshes): ask, never pick or open a third
-      if (found.length >= 2) return found.slice(0, 3).map((x) => x.c)
+      if (found.length >= 2) return found.slice(0, MAX_WHICH).map((x) => x.c)
       d.newName = titleCase(newCustomerName(d.heardName!))
       d.nameSure = true
       return 'ok'
     }
+    // every customer who fits about as well as the best (two, three Rameshes): all of them are offered
     if (near.length >= 2 && near[1].score >= near[0].score - 0.03)
-      return near.slice(0, 2).map((x) => this.snap.customers.find((c) => c.cid === x.id)!)
+      return near.filter((x) => x.score >= near[0].score - 0.03).slice(0, MAX_WHICH).map((x) => this.snap.customers.find((c) => c.cid === x.id)!)
     d.cid = near[0].id
     d.nameSure = near[0].score >= NAME_SURE
+    // only a sound-alike ("Rakesh" for Ramesh): the read-back also offers a new account with that name
+    const known = this.snap.customers.find((c) => c.cid === d.cid)!
+    if (!d.nameSure && d.spoken && phoneticKey(d.heardName!) !== phoneticKey(near[0].matched) &&
+      ![known.name, ...known.aliases].some((n) => n.toLowerCase() === d.heardName!.toLowerCase()))
+      d.soundAlike = titleCase(newCustomerName(d.heardName!))
     return 'ok'
   }
 
@@ -407,6 +525,7 @@ export class LedgerCore {
     for (let i = 0; i < words.length; i++) {
       tries.add(words[i])
       if (i + 1 < words.length) tries.add(`${words[i]} ${words[i + 1]}`)
+      if (i + 2 < words.length) tries.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`)
       for (const suf of ['ದು', 'ದ', 'ರ', 'du', 'da', 'ra', 'ka', 'ki', 'ke', 'ಅವರ'])
         if (words[i].length > suf.length + 2 && words[i].toLowerCase().endsWith(suf)) tries.add(words[i].slice(0, -suf.length))
     }
@@ -414,18 +533,49 @@ export class LedgerCore {
     for (const t of tries)
       for (const m of matchName(t, people))
         if (m.score >= NAME_NEAR && m.score > (best.get(m.id) ?? 0)) best.set(m.id, m.score)
+    // a nickname said with the name ("doodhwala Ramesh") puts that customer ahead of a same-named twin
+    for (const t of tries) {
+      const m = this.tagMatch(t)
+      if (m && m.score >= NAME_SURE && m.score + TAG_BONUS > (best.get(m.id) ?? 0)) best.set(m.id, m.score + TAG_BONUS)
+    }
     return [...best]
       .map(([id, score]) => ({ c: this.snap.customers.find((x) => x.cid === id)!, score }))
       .sort((a, b) => b.score - a.score)
   }
 
-  /** How a customer is shown in a "which one?" question: with the balance when another has the same name. */
+  /**
+   * How a customer is shown and said: shared/ledger.ts uniqueLabels (nickname, phone digits, or
+   * "Ramesh 2"), always unique and never with a balance. Computed once per change of the list.
+   */
   label(c: SnapCustomer): string {
+    const list = this.snap.customers
+    if (this.labelMemo?.list !== list || this.labelMemo.n !== list.length || this.labelMemo.v !== this.labelsV)
+      this.labelMemo = { list, n: list.length, v: this.labelsV, map: uniqueLabels(list) }
+    return this.labelMemo.map.get(c.cid) ?? c.name
+  }
+  private labelMemo: { list: SnapCustomer[]; n: number; v: number; map: Map<string, string> } | null = null
+  /** bumped when a name, nickname or phone changes in the local snapshot */
+  private labelsV = 0
+  /** a second account with an existing name was opened in this reply: its nickname is asked once the reply is done */
+  private twinBorn: { cid: string; name: string } | null = null
+
+  /** the name to say for a customer: the label when another customer has the same name */
+  spokenName(c: SnapCustomer): string {
     const twin = this.snap.customers.some((x) => x.cid !== c.cid && x.name.toLowerCase() === c.name.toLowerCase())
-    return twin ? `${c.name} · ₹${(c.balancePaise / 100).toLocaleString('en-IN')}` : c.name
+    return twin ? this.label(c) : c.name
   }
   customerName(d: Draft): string {
-    return d.newName ?? this.snap.customers.find((c) => c.cid === d.cid)?.name ?? d.heardName ?? ''
+    const c = d.cid ? this.snap.customers.find((x) => x.cid === d.cid) : undefined
+    return d.newName ?? (c ? this.spokenName(c) : null) ?? d.heardName ?? ''
+  }
+  /** "Ramesh 2 ya doodhwala Ramesh?": every option named */
+  askWhichText(cs: SnapCustomer[]): string {
+    const labels = cs.map((c) => this.label(c))
+    return labels.length === 1 ? `${labels[0]}?` : say(this.lang).askWhich(labels.slice(0, -1).join(', '), labels[labels.length - 1])
+  }
+  /** a which question's customers as choose options (tap by cid, nickname, ordinal, "300 wala", name) */
+  whichOptions(cs: SnapCustomer[]): ChooseOption[] {
+    return cs.map((c) => ({ label: this.label(c), name: c.name, rupees: c.balancePaise / 100, id: c.cid, ...(c.tag ? { tag: c.tag } : {}), args: {} }))
   }
 
   /** Walk drafts in order: save the sure ones, stop at the first that needs a question. */
@@ -451,7 +601,7 @@ export class LedgerCore {
         const res = this.resolveName(d)
         if (Array.isArray(res)) {
           this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
-          acc.parts.push(R.askWhich(this.label(res[0]), this.label(res[1])))
+          acc.parts.push(this.askWhichText(res))
           return acc
         }
         this.pending = { kind: 'amount', draft: d, queue: drafts }
@@ -466,7 +616,7 @@ export class LedgerCore {
       const res = this.resolveName(d)
       if (Array.isArray(res)) {
         this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
-        acc.parts.push(R.askWhich(this.label(res[0]), this.label(res[1])))
+        acc.parts.push(this.askWhichText(res))
         return acc
       }
       const name = this.customerName(d)
@@ -480,6 +630,15 @@ export class LedgerCore {
         acc.parts.push(R.confusable(d.paise / 100, d.alt))
         return acc
       }
+      // the heard name only sounds like a customer: that customer, or a new account with this same line
+      if (d.soundAlike && d.cid && !d.readBack && !d.confirmed) {
+        const known = this.snap.customers.find((c) => c.cid === d.cid)
+        if (known) {
+          this.pending = { kind: 'soundalike', draft: d, queue: drafts, known, newName: d.soundAlike }
+          acc.parts.push(sayShop(this.lang).soundAlikeAsk(this.label(known), d.soundAlike, d.paise / 100, d.direction))
+          return acc
+        }
+      }
       if (this.needsConfirm(d)) {
         this.pending = { kind: 'confirm', draft: d, queue: drafts }
         acc.parts.push(this.opensAccount(d) ? R.confirmNew(name, d.paise / 100, d.direction)
@@ -489,6 +648,13 @@ export class LedgerCore {
       this.save(d, acc)
     }
     this.pending = null
+    // a second account with a name we already had: ask once how to tell them apart
+    if (this.twinBorn) {
+      const t = this.twinBorn
+      this.twinBorn = null
+      this.pending = { kind: 'nickname', cid: t.cid, name: t.name }
+      acc.parts.push(sayShop(this.lang).nicknameAsk(t.name))
+    }
     return acc
   }
 
@@ -517,7 +683,9 @@ export class LedgerCore {
     const R = say(this.lang)
     if (d.newName && !d.cid) {
       d.cid = this.newId()
-      const add: LedgerOp = { op: 'add_customer', cid: d.cid, name: d.newName }
+      const twin = this.snap.customers.some((c) => c.name.trim().toLowerCase() === d.newName!.trim().toLowerCase())
+      const add: LedgerOp = { op: 'add_customer', cid: d.cid, name: d.newName, ...(d.supplier ? { kind: 'supplier' as const } : {}) }
+      if (twin) this.twinBorn = { cid: d.cid, name: d.newName }
       acc.ops.push(add)
       this.applyLocal(add) // so a second line about the same new name finds this customer
       acc.parts.push(R.newCustomer(d.newName))
@@ -532,17 +700,22 @@ export class LedgerCore {
       direction: d.direction!,
       dayOffset: d.dayOffset,
       promise: d.promise,
+      ...(d.due && d.direction === 'credit' && !d.promise ? { due: d.due } : {}),
+      ...(d.note ? { note: d.note } : {}),
       source: {
         transcript: d.transcript, confidence: d.confidence, reasons: d.reasons, lang: LOCALE[this.lang],
         snrDb: d.snrDb ?? undefined, path: d.path,
       },
     })
-    if (d.promise) acc.parts.push(R.savedPromise(name, d.paise / 100, d.dayOffset))
+    const supplier = this.snap.customers.find((c) => c.cid === d.cid)?.kind === 'supplier'
+    if (supplier && !d.promise) acc.parts.push(sayShop(this.lang).supplierSaved(name, d.paise / 100, d.direction!, this.balanceAfter(d.cid!, acc.ops) / 100))
+    else if (d.promise) acc.parts.push(R.savedPromise(name, d.paise / 100, d.dayOffset))
     else if (this.sayBalance) acc.parts.push(R.savedWithBalance(name, d.paise / 100, d.direction!, this.balanceAfter(d.cid!, acc.ops) / 100))
     else acc.parts.push(R.saved(name, d.paise / 100, d.direction!))
+    if (d.due && d.direction === 'credit' && !d.promise) acc.parts.push(sayShop(this.lang).dueNoted(Number(d.due.slice(8, 10))))
     acc.saved = (acc.saved ?? 0) + 1
     // the full sentence with the balance is the confirmation: never shortened to an ack
-    if (!this.sayBalance && this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
+    if (!this.sayBalance && !supplier && !d.due && this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
   }
 
   /** The customer's balance (paise) once the not-yet-applied ops of this reply are written. */
@@ -564,8 +737,14 @@ export class LedgerCore {
   }
 
   /** A plain entry: every line names a known customer, says the direction (or is a promise) and was read with full confidence. */
-  isPlainEntry(intent: Extract<Intent, { type: 'entries' }>): boolean {
-    return intent.entries.every((e) => !!e.name && !!this.lookup(e.name) && (!!e.direction || e.promise) && e.confidence === 'high')
+  isPlainEntry(intent: Extract<Intent, { type: 'entries' }>, text?: string): boolean {
+    // a due date, a plan or a new twin in the sentence: the agent reads it (the fast parser would drop it)
+    if (text && AGENT_ONLY.test(text)) return false
+    return intent.entries.every((e) => {
+      const c = e.name ? this.lookup(e.name) : null
+      // a supplier's line has its own read-back and wording: the agent handles it
+      return !!c && c.kind !== 'supplier' && (!!e.direction || e.promise) && e.confidence === 'high'
+    })
   }
 
   /**
@@ -582,6 +761,10 @@ export class LedgerCore {
     const words = text.trim().split(/\s+/).filter(Boolean).length
     const full = intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)
     switch (p.kind) {
+      case 'nickname':
+        return !full && words <= 4 && !mentionsMoney(text)
+      case 'soundalike':
+        return full || (words <= 4 && this.soundAlikePick(p, text, intent) !== null)
       case 'choose':
         return full || LedgerCore.chooseIndex(p.options, text) >= 0
       case 'modify':
@@ -599,12 +782,9 @@ export class LedgerCore {
         return words <= 4 && parseAmounts(text).some((a) => a.value > 0)
       case 'direction':
         return full || (words <= 4 && !!(directionAnswer(text) ?? (intent.type === 'correct' ? intent.direction : null)))
-      case 'which': {
-        if (p.options.some((c) => this.label(c) === text.trim())) return true
-        const n = nameAnswer(text) ?? text
-        const m = matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
-        return words <= 4 && m.length > 0 && m[0].score >= NAME_NEAR && !(m[1] && m[1].score >= m[0].score - 0.01)
-      }
+      case 'which':
+        // a tap (cid or label), a nickname, "pehla / doosra", "300 wala", or a name only one option has
+        return words <= 6 && LedgerCore.chooseIndex(this.whichOptions(p.options), text) >= 0
       case 'confusable': {
         const heard = parseAmounts(text).map((x) => x.value)
         return heard.includes(p.draft.alt!) || heard.includes(p.draft.paise / 100) || (heard.length === 1 && words <= 4)
@@ -619,12 +799,16 @@ export class LedgerCore {
    */
   static chooseIndex(options: ChooseOption[], text: string): number {
     const t = text.trim()
-    const exact = options.findIndex((o) => o.label === t)
+    const exact = options.findIndex((o) => o.label === t || (!!o.id && o.id === t))
     if (exact >= 0) return exact
+    // a nickname picks its option ("doodhwala wale", "Gali 3 wala Ramesh")
+    const byTag = options.map((o, i) => (o.tag && LedgerCore.mentions(t, o.tag) ? i : -1)).filter((i) => i >= 0)
+    if (byTag.length === 1) return byTag[0]
     const ords: [RegExp, number][] = [
       [/\b(pehl|pahl|first|1st)|पहल|ಮೊದಲ|முதல்|మొదట/i, 0],
       [/\b(doosr|dusr|second|2nd)|दूसर|ಎರಡನೇ|இரண்டாவது|రెండో/i, 1],
       [/\b(teesr|tisr|third|3rd)|तीसर|ಮೂರನೇ|மூன்றாவது|మూడో/i, 2],
+      [/\b(chauth|chouth|fourth|4th)|चौथ|ನಾಲ್ಕನೇ|நான்காவது|నాలుగో/i, 3],
     ]
     for (const [re, i] of ords) if (re.test(t) && i < options.length) return i
     const amts = parseAmounts(t).map((a) => a.value)
@@ -633,6 +817,33 @@ export class LedgerCore {
     const m = matchName(nameAnswer(t) ?? t, options.map((o, i) => ({ id: String(i), names: [o.name] })))
     if (m.length && m[0].score >= NAME_NEAR && !(m[1] && m[1].score >= m[0].score - 0.01)) return Number(m[0].id)
     return -1
+  }
+
+  /** Do the words contain this nickname (any window of as many words, sounded alike)? */
+  static mentions(text: string, tag: string): boolean {
+    const words = text.split(/[\s,.;:!?।]+/).filter(Boolean)
+    const n = tag.split(/\s+/).filter(Boolean).length
+    if (!n) return false
+    for (let k = n; k <= n + 1; k++)
+      for (let i = 0; i + k <= words.length; i++) {
+        const w = words.slice(i, i + k).join(' ')
+        // "doodhwale" for "doodhwala": a window that starts like the tag counts too
+        const m = matchName(w, [{ id: 't', names: [tag] }])[0]
+        if (m && m.score >= NAME_SURE) return true
+      }
+    return false
+  }
+
+  /** The sound-alike question's answer: the known customer, a new account, or null when unclear. */
+  soundAlikePick(p: Extract<Pending, { kind: 'soundalike' }>, text: string, intent: Intent): 'known' | 'new' | null {
+    const t = text.trim()
+    if (t === 'new' || t === p.newName) return 'new'
+    if (t === p.known.cid || t === this.label(p.known)) return 'known'
+    if (intent.type === 'yes') return 'known'
+    if (NEW_WORD.test(t)) return 'new'
+    const m = matchName(nameAnswer(t) ?? t, [{ id: 'known', names: [p.known.name, ...p.known.aliases] }, { id: 'new', names: [p.newName] }])
+    if (m.length && m[0].score >= NAME_SURE && !(m[1] && m[1].score >= m[0].score - 0.01)) return m[0].id as 'known' | 'new'
+    return null
   }
 
   answerPending(text: string, intent: Intent, meta: TurnMeta): Reply | null {
@@ -663,6 +874,28 @@ export class LedgerCore {
       this.pending = null
       return this.choose(p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
     }
+    if (p.kind === 'nickname') {
+      const c = this.snap.customers.find((x) => x.cid === p.cid)
+      const S = sayShop(this.lang)
+      if (!c) {
+        this.pending = null
+        return null
+      }
+      // a fresh complete instruction: the nickname can wait (the automatic label stays)
+      if (intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)) {
+        this.pending = null
+        return this.dispatch(intent, text, meta)
+      }
+      if (intent.type === 'no' || intent.type === 'undo' || SKIP_WORD.test(text.trim())) {
+        this.pending = null
+        return { parts: [S.tagSkipped(this.label(c))], ops: [] }
+      }
+      const tag = cleanTag(text)
+      if (intent.type === 'yes' || !tag) return { parts: [S.nicknameAsk(p.name)], ops: [] }
+      this.pending = null
+      this.focusCid = c.cid
+      return { parts: [S.tagSet(c.name, tag)], ops: [{ op: 'set_tag', cid: c.cid, tag }] }
+    }
     if (p.kind === 'delete' && p.requireType) {
       // typed on the phone (answer / text), exactly the word: nothing spoken can do this
       const norm = (x: string) => x.normalize('NFC').trim().toLowerCase()
@@ -687,6 +920,11 @@ export class LedgerCore {
       this.pending = null
       if (intent.type === 'yes') {
         this.focusCid = p.focus
+        // a follow-up question (the nickname of a twin just opened)
+        if (p.then) {
+          this.pending = p.then.pending
+          return { parts: [p.done, p.then.ask], ops: p.ops, ...(p.ready ? { ready: p.ready } : {}) }
+        }
         return p.ready ? { parts: [p.done], ops: p.ops, ready: p.ready } : { parts: [p.done], ops: p.ops }
       }
       // anything else is a new instruction: drop the question and handle it
@@ -737,7 +975,7 @@ export class LedgerCore {
             const res = this.resolveName(d)
             if (Array.isArray(res)) {
               this.pending = { kind: 'which', draft: d, queue: p.queue, options: res }
-              return { parts: [R.askWhich(this.label(res[0]), this.label(res[1]))], ops: [] }
+              return { parts: [this.askWhichText(res)], ops: [] }
             }
             // a name not in the ledger: read back as a new customer first
             if (this.opensAccount(d)) return this.processDrafts([d, ...p.queue], acc)
@@ -785,15 +1023,28 @@ export class LedgerCore {
         return this.processDrafts([d, ...p.queue], acc)
       }
       case 'which': {
-        // a tap sends the option exactly as shown ("Suresh · ₹300"); speech is matched by name
-        const tapped = p.options.find((c) => this.label(c) === text.trim())
-        const n = nameAnswer(text) ?? text
-        const m = tapped ? [{ id: tapped.cid, score: 1 }] : matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
-        if (!m.length || m[0].score < NAME_NEAR || (m[1] && m[1].score >= m[0].score - 0.01))
-          return { parts: [R.askWhich(this.label(p.options[0]), this.label(p.options[1]))], ops: [] }
-        d.cid = m[0].id
+        // a tap sends the cid (or the label as shown); speech: a nickname, "doosra", "300 wala", or a name
+        const i = LedgerCore.chooseIndex(this.whichOptions(p.options), text)
+        if (i < 0) return { parts: [this.askWhichText(p.options)], ops: [] }
+        d.cid = p.options[i].cid
         d.nameSure = true
+        d.soundAlike = undefined
         return this.processDrafts([d, ...p.queue], acc)
+      }
+      case 'soundalike': {
+        const pick = this.soundAlikePick(p, text, intent)
+        if (!pick) return { parts: [sayShop(this.lang).soundAlikeAsk(this.label(p.known), p.newName, d.paise / 100, d.direction ?? 'credit')], ops: [] }
+        d.soundAlike = undefined
+        d.readBack = true
+        d.confirmed = true
+        d.nameSure = true
+        if (pick === 'known') d.cid = p.known.cid
+        else {
+          d.cid = null
+          d.newName = p.newName
+        }
+        this.save(d, acc)
+        return this.processDrafts(p.queue, acc)
       }
       case 'confusable': {
         const heard = parseAmounts(text).map((s) => s.value)
@@ -909,9 +1160,9 @@ export class LedgerCore {
       snrDb: meta.snrDb, noisy: meta.noisy, spoken: this.turnSrc !== 'tap', single: true,
     }
     if (!one) {
-      const options = found.slice(0, 3).map((x) => x.c)
+      const options = found.slice(0, MAX_WHICH).map((x) => x.c)
       this.pending = { kind: 'which', draft: d, queue: [], options }
-      return { parts: [say(this.lang).askWhich(this.label(options[0]), this.label(options[1]))], ops: [] }
+      return { parts: [this.askWhichText(options)], ops: [] }
     }
     return this.processDrafts([d], { parts: [], ops: [] })
   }
@@ -965,7 +1216,20 @@ export class LedgerCore {
     const p = this.pending
     if (!p) return null
     if (p.kind === 'delete') return p.requireType ? { kind: 'delete', requireType: p.requireType } : { kind: 'delete' }
-    if (p.kind === 'choose') return { kind: 'which', options: p.options.map((o) => o.label) }
+    if (p.kind === 'choose') return { kind: 'which', options: p.options.map((o) => o.label), choices: p.options.map((o) => ({ id: o.id ?? o.label, label: o.label })) }
+    if (p.kind === 'nickname') {
+      const key = p.name.trim().toLowerCase()
+      const twins = this.snap.customers.filter((c) => c.name.trim().toLowerCase() === key)
+        .map((c) => ({ cid: c.cid, label: this.label(c), ...(c.tag ? { tag: c.tag } : {}) }))
+      return { kind: 'nickname', name: p.name, cid: p.cid, twins }
+    }
+    if (p.kind === 'soundalike') {
+      const d = p.draft
+      return {
+        kind: 'soundalike', name: this.label(p.known), newName: p.newName, paise: d.paise, direction: d.direction,
+        choices: [{ id: p.known.cid, label: this.label(p.known) }, { id: 'new', label: p.newName }],
+      }
+    }
     if (p.kind === 'modify') return p.view
     if (p.kind === 'batch') {
       const dir = p.drafts.find((d) => d.direction)?.direction ?? null
@@ -980,6 +1244,7 @@ export class LedgerCore {
       newCustomer: p.kind === 'confirm' && this.opensAccount(d) ? true : undefined,
       amounts: p.kind === 'amount' ? this.amountChoices(d.cid) : undefined,
       options: p.kind === 'which' ? p.options.map((c) => this.label(c)) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
+      choices: p.kind === 'which' ? p.options.map((c) => ({ id: c.cid, label: this.label(c) })) : undefined,
     }
   }
 
@@ -989,7 +1254,11 @@ export class LedgerCore {
     switch (op.op) {
       case 'add_customer':
         if (s.customers.some((x) => x.cid === op.cid)) break
-        s.customers.push({ cid: op.cid, name: op.name, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 0, typicalPaise: null })
+        s.customers.push({
+          cid: op.cid, name: op.name, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 0, typicalPaise: null,
+          ...(op.kind === 'supplier' ? { kind: 'supplier' as const } : {}),
+        })
+        this.labelsV++
         this.deps.onCustomerAdded?.()
         break
       case 'entry': {
@@ -997,7 +1266,7 @@ export class LedgerCore {
         s.last = { eid: op.eid, cid: op.cid, paise: op.paise, direction: op.direction, day, promise: op.promise || undefined }
         for (const [eid, t] of this.writtenAt) if (this.now() - t > WRITTEN_KEEP_MS) this.writtenAt.delete(eid)
         this.writtenAt.set(op.eid, this.now())
-        s.entries = [{ ...s.last }, ...(s.entries ?? [])]
+        s.entries = [{ ...s.last, ...(op.due ? { due: op.due } : {}), ...(op.note ? { note: op.note } : {}) }, ...(s.entries ?? [])]
         if (op.promise) break // a promise is remembered, never posted to the balance
         const c = s.customers.find((x) => x.cid === op.cid)
         if (c) c.balancePaise += op.direction === 'credit' ? op.paise : -op.paise
@@ -1051,12 +1320,46 @@ export class LedgerCore {
       case 'rename_customer': {
         const c = s.customers.find((x) => x.cid === op.cid)
         if (c) c.name = op.name
+        this.labelsV++
         this.deps.onCustomerAdded?.() // the recogniser's name hints change
         break
       }
       case 'set_phone': {
         const c = s.customers.find((x) => x.cid === op.cid)
         if (c) c.phone = op.phone
+        this.labelsV++
+        break
+      }
+      case 'set_tag': {
+        const c = s.customers.find((x) => x.cid === op.cid)
+        if (c) {
+          if (op.tag.trim()) c.tag = op.tag.trim()
+          else delete c.tag
+        }
+        this.labelsV++
+        this.deps.onCustomerAdded?.() // the recogniser's hints include nicknames
+        break
+      }
+      case 'cash': {
+        if (op.dayOffset !== 0) break
+        if (op.dir === 'in') s.today.cashIn = (s.today.cashIn ?? 0) + op.paise
+        else s.today.cashOut = (s.today.cashOut ?? 0) + op.paise
+        break
+      }
+      case 'set_plan': {
+        const c = s.customers.find((x) => x.cid === op.cid)
+        if (c) {
+          const part = Math.floor(op.totalPaise / Math.max(1, op.parts))
+          c.plan = {
+            pid: op.pid, totalPaise: op.totalPaise, parts: op.parts, everyDays: op.everyDays, paidParts: 0, behind: false,
+            nextDay: istDay(op.startOffset), nextPaise: op.parts === 1 ? op.totalPaise : part,
+          }
+        }
+        break
+      }
+      case 'cancel_plan': {
+        const c = s.customers.find((x) => x.cid === op.cid)
+        if (c?.plan?.pid === op.pid) delete c.plan
         break
       }
       case 'merge_customers': {
@@ -1068,6 +1371,7 @@ export class LedgerCore {
         into.typicalPaise = null
         for (const e of [s.last, ...(s.entries ?? [])]) if (e && e.cid === op.from) e.cid = op.into
         s.customers = s.customers.filter((x) => x.cid !== op.from)
+        this.labelsV++
         if (this.focusCid === op.from) this.focusCid = op.into
         this.deps.onCustomerAdded?.()
         break
@@ -1109,6 +1413,14 @@ export function newCustomerName(heard: string): string {
 /** YYYY-MM-DD in India, offset by n days (the shop's calendar, not the server's). */
 function istDay(n: number): string {
   return new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** A nickname as said: filler ("wale", "jo", "naam") trimmed, at most 30 characters. Empty when nothing is left. */
+export function cleanTag(text: string): string {
+  const t = text.trim().replace(/[.!?।]+$/u, '').replace(/^(ye|yeh|inko|unko|inhe|this is|call (him|her|them)|bolo|kaho)\s+/i, '')
+    .replace(/\s+(bolo|kaho|likho|naam se|naam|hai|hain)$/i, '').trim()
+  if (!t || t.length > 30 || /\d{5,}/.test(t)) return ''
+  return titleCase(t)
 }
 
 function titleCase(s: string): string {

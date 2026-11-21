@@ -1,14 +1,14 @@
-import { Check, Mic, Pencil, Sparkles, Square, Trash2, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Check, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
 import { cn } from '@/lib/utils'
-import type { VoiceStatus } from '@/lib/contracts'
 import { relDay, rs, time } from './format'
+import { NameTag, inputCls } from './kit'
 import type { UiStrings } from './strings'
 
 export function DirChip({ dir, promise, t }: { dir: 'credit' | 'payment'; promise?: boolean; t: UiStrings }) {
-  if (promise) return <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">{t.promise}</span>
+  if (promise) return <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">{t.promise}</span>
   return (
     <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', dir === 'credit' ? 'bg-credit/12 text-credit' : 'bg-payment/12 text-payment')}>
       {dir === 'credit' ? t.credit : t.payment}
@@ -16,152 +16,178 @@ export function DirChip({ dir, promise, t }: { dir: 'credit' | 'payment'; promis
   )
 }
 
-export function EntryRow({ e, name, t, onClick, fresh }: { e: Entry; name: string; t: UiStrings; onClick?: () => void; fresh?: boolean }) {
+export function EntryRow({ e, name, t, onClick, fresh, chips }: { e: Entry; name: string; t: UiStrings; onClick?: () => void; fresh?: boolean; chips?: ReactNode }) {
   return (
     <button
       onClick={onClick}
-      className={cn('flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-foreground/5 active:bg-muted/60', fresh && 'stamp', e.voided && 'opacity-50')}
+      className={cn('flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-1 ring-1 ring-foreground/6 transition-colors active:bg-muted/60', fresh && (e.direction === 'credit' ? 'flash-credit' : 'flash-payment'), e.voided && 'opacity-50')}
     >
       <div className="min-w-0 flex-1">
-        <div className={cn('truncate text-lg font-semibold leading-snug', e.voided && 'line-through')}>{name}</div>
+        <NameTag label={name} className={cn('text-lg font-semibold leading-snug', e.voided && 'line-through')} />
         <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
           <DirChip dir={e.direction} promise={e.promise} t={t} />
-          {e.promise ? <span className="text-amber-700 dark:text-amber-300">{t.due} {relDay(e.day, t)}</span> : <span className="num">{time(e.ts)}</span>}
+          {e.promise ? <span className="text-warn">{t.due} {relDay(e.day, t)}</span> : <span className="num">{time(e.ts)}</span>}
           {e.amended && !e.voided && <span className="flex items-center gap-0.5 text-xs"><Pencil className="size-3" />{t.edited}</span>}
           {e.voided && <span className="text-xs">{t.removed}</span>}
           {e.source?.path === 'llm' && <Sparkles className="size-3" aria-label={t.aiRead} />}
           {e.status === 'confirmed' && <Check className="size-3.5 text-payment" aria-label={t.confirmed} />}
           {e.status === 'disputed' && <X className="size-3.5 text-destructive" aria-label={t.disputed} />}
         </div>
+        {chips}
       </div>
-      <div className={cn('num text-xl font-semibold', e.voided ? 'line-through' : e.promise ? 'text-amber-700 dark:text-amber-300' : e.direction === 'credit' ? 'text-credit' : 'text-payment')}>
+      <div className={cn('num text-xl font-semibold', e.voided ? 'line-through' : e.promise ? 'text-warn' : e.direction === 'credit' ? 'text-credit' : 'text-payment')}>
         {e.direction === 'payment' && !e.promise ? '−' : ''}{rs(e.paise)}
       </div>
     </button>
   )
 }
 
-/** The agent's open question, with tap answers so a noisy shop never blocks. */
-export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; onAnswer: (a: string) => void }) {
-  const big = p.paise !== undefined && p.kind !== 'delete'
+type Tone = 'yes' | 'no' | 'credit' | 'payment'
+const TONE: Record<Tone, string> = {
+  yes: 'bg-primary text-primary-foreground shadow-1',
+  no: 'bg-secondary text-secondary-foreground ring-1 ring-foreground/10',
+  credit: 'bg-credit text-credit-foreground shadow-1',
+  payment: 'bg-payment text-payment-foreground shadow-1',
+}
+
+/**
+ * The agent's open question, with tap answers so a noisy shop never blocks. One card for every
+ * kind: a head (who / how much / which lines) and a grid of answers.
+ */
+export function PendingCard({ p, t, onAnswer, onTag }: {
+  p: PendingView; t: UiStrings; onAnswer: (a: string) => void
+  /** save a nickname on the phone (the other same-name customers on the nickname card) */
+  onTag?: (cid: string, tag: string) => void
+}) {
   const kind = p.kind as string
+  const A = (tone: Tone, value: string, children: React.ReactNode, className?: string, key = value) =>
+    <Answer key={key} className={cn(TONE[tone], className)} onClick={() => onAnswer(value)}>{children}</Answer>
+  const yes = (n?: number) => A('yes', 'haan', <><Check className="size-5" />{t.yes}{n ? <span className="num">× {n}</span> : null}</>)
+  const no = (className?: string) => A('no', 'nahi', <><X className="size-5" />{t.no}</>, className)
+
+  let head: React.ReactNode
+  let answers: React.ReactNode
+  let cols = 'grid-cols-2'
   if (kind === 'batch' && p.rows) {
     // several complete lines read back together: one yes saves them all
-    return (
-      <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
-        <ul className="max-h-48 space-y-1.5 overflow-y-auto">
-          {p.rows.map((r, i) => (
-            <li key={i} className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-lg font-semibold">{r.name}</span>
-                {r.newCustomer && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{t.newCustomer}</span>}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <DirChip dir={r.direction} t={t} />
-                <span className={cn('num text-xl font-bold', r.direction === 'credit' ? 'text-credit' : 'text-payment')}>{rs(r.paise)}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes} × {p.rows.length}</Answer>
-          <Answer className="bg-secondary text-secondary-foreground ring-1 ring-foreground/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
-        </div>
-      </div>
+    head = (
+      <ul className="max-h-48 space-y-1.5 overflow-y-auto">
+        {p.rows.map((r, i) => (
+          <li key={i} className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-lg font-semibold">{r.name}</span>
+              {r.newCustomer && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{t.newCustomer}</span>}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <DirChip dir={r.direction} t={t} />
+              <span className={cn('num text-xl font-bold', r.direction === 'credit' ? 'text-credit' : 'text-payment')}>{rs(r.paise)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
     )
-  }
-  if (kind === 'batch') {
-    return (
-      <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
+    answers = <>{yes(p.rows.length)}{no()}</>
+  } else if (kind === 'batch') {
+    head = (
+      <>
         <div className="flex items-center gap-2">
           <span className="num text-sm text-muted-foreground">× {p.options?.length ?? 0}</span>
-          <button onClick={() => onAnswer('udhaar')} className={cn('min-h-11 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'credit' ? 'bg-credit text-white ring-credit' : 'ring-foreground/15')}>{t.credit}</button>
-          <button onClick={() => onAnswer('jama')} className={cn('min-h-11 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'payment' ? 'bg-payment text-white ring-payment' : 'ring-foreground/15')}>{t.payment}</button>
+          <button onClick={() => onAnswer('udhaar')} aria-pressed={p.direction === 'credit'} className={cn('min-h-11 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'credit' ? 'bg-credit text-credit-foreground ring-credit' : 'ring-foreground/15')}>{t.credit}</button>
+          <button onClick={() => onAnswer('jama')} aria-pressed={p.direction === 'payment'} className={cn('min-h-11 rounded-full px-3 text-sm font-semibold ring-1', p.direction === 'payment' ? 'bg-payment text-payment-foreground ring-payment' : 'ring-foreground/15')}>{t.payment}</button>
         </div>
         <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-lg font-semibold">
           {(p.options ?? []).map((o, i) => <li key={i} className="num truncate">{o}</li>)}
         </ul>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
-          <Answer className="bg-secondary text-secondary-foreground ring-1 ring-foreground/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
-        </div>
-      </div>
+      </>
     )
-  }
-  if (kind === 'modify') {
-    return (
-      <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <div className={cn('truncate text-lg font-semibold', p.remove && 'line-through')}>{p.name ?? '?'}</div>
-            <div className="flex items-center gap-1.5">
-              {p.direction && <DirChip dir={p.direction} t={t} />}
-              {p.remove && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">{t.removeEntry}</span>}
-            </div>
-          </div>
-          {p.paise !== undefined && <div className={cn('num text-4xl font-semibold', p.remove && 'line-through opacity-60')}>{rs(p.paise)}</div>}
+    answers = <>{yes()}{no()}</>
+  } else if (kind === 'nickname' && p.cid) {
+    // a second customer with this name was just opened: one nickname each tells them apart
+    return <NicknameCard p={p} t={t} onAnswer={onAnswer} onTag={onTag} />
+  } else if (kind === 'soundalike' && p.choices?.length) {
+    // "Rakesh" heard, only "Ramesh" known: that one, or a new account with the same entry
+    const known = p.choices.find((c) => c.id !== 'new')
+    head = (
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-lg font-semibold"><NameTag label={p.name ?? known?.label ?? '?'} /></div>
+          <div className="text-sm text-muted-foreground">{t.orNew}</div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
-          <Answer className="bg-secondary text-secondary-foreground ring-1 ring-foreground/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
-      {p.kind === 'delete' ? (
-        <div>
-          <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
-          {p.requireType && <div className="mt-1 text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{p.requireType}</b></div>}
-        </div>
-      ) : (
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-lg font-semibold">{p.name ?? '?'}</div>
+        {p.paise !== undefined && (
+          <div className="flex flex-col items-end gap-1">
             {p.direction && <DirChip dir={p.direction} t={t} />}
+            <div className="num text-3xl font-semibold tracking-tight">{rs(p.paise)}</div>
           </div>
-          {big && <div className="num text-4xl font-semibold">{rs(p.paise!)}</div>}
-        </div>
-      )}
-      <div className={cn('mt-4 grid gap-2', p.kind === 'direction' ? 'grid-cols-3' : 'grid-cols-2')}>
-        {p.kind === 'direction' ? (
-          <>
-            <Answer className="bg-credit text-white" onClick={() => onAnswer('udhaar')}>{t.credit}</Answer>
-            <Answer className="bg-payment text-white" onClick={() => onAnswer('jama')}>{t.payment}</Answer>
-            <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.wrong}</Answer>
-          </>
-        ) : (p.kind === 'which' || p.kind === 'confusable') && p.options ? (
-          p.options.map((o) => (
-            <Answer key={o} className="bg-secondary text-secondary-foreground ring-1 ring-foreground/10" onClick={() => onAnswer(o)}>
-              {p.kind === 'confusable' ? `₹${o}` : o}
-            </Answer>
-          ))
-        ) : p.kind === 'name' ? (
-          <>
-            <TextAnswer label={t.typeName} send={t.send} onSubmit={onAnswer} />
-            <Answer className="col-span-2 bg-secondary" onClick={() => onAnswer('nahi')}>{t.no}</Answer>
-          </>
-        ) : p.kind === 'amount' ? (
-          <>
-            {(p.amounts ?? []).map((a) => (
-              <Answer key={a} className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer(String(a))}><span className="num">₹{a}</span></Answer>
-            ))}
-            {!p.amounts?.length && <TextAnswer label={t.amount} send={t.send} numeric onSubmit={onAnswer} />}
-            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
-          </>
-        ) : p.kind === 'delete' && p.requireType ? (
-          <>
-            <EraseTyped word={p.requireType} t={t} onErase={onAnswer} />
-            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
-          </>
-        ) : (
-          <>
-            <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
-            <Answer className="bg-secondary text-secondary-foreground ring-1 ring-foreground/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
-          </>
         )}
       </div>
+    )
+    answers = (
+      <>
+        {known && A('yes', known.id, <NameTag label={known.label} />, undefined, `c:${known.id}`)}
+        {A('no', 'new', <span className="truncate">+ {t.newPrefix} {p.newName ?? ''}</span>, 'ring-primary/40 text-primary', 'c:new')}
+        {no('col-span-full h-12 text-base')}
+      </>
+    )
+  } else if (kind === 'which' && p.choices?.length) {
+    // every same-name customer, each button carries its cid: a tap can never hit the wrong twin
+    head = (
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-lg font-semibold">{p.name ?? t.chooseOne}</div>
+          {p.direction && <DirChip dir={p.direction} t={t} />}
+        </div>
+        {p.paise !== undefined && <div className="num text-4xl font-semibold tracking-tight">{rs(p.paise)}</div>}
+      </div>
+    )
+    answers = (
+      <>
+        {p.choices.map((c) => A('no', c.id, <NameTag label={c.label} className="text-base" />, 'justify-start px-3', `c:${c.id}`))}
+        {no('col-span-full h-12 text-base')}
+      </>
+    )
+  } else if (kind === 'delete') {
+    head = (
+      <div>
+        <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
+        {p.requireType && <div className="mt-1 text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{p.requireType}</b></div>}
+      </div>
+    )
+    answers = p.requireType ? <><EraseTyped word={p.requireType} t={t} onErase={onAnswer} />{no('col-span-full')}</> : <>{yes()}{no()}</>
+  } else {
+    const remove = kind === 'modify' && !!p.remove
+    head = (
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className={cn('truncate text-lg font-semibold', remove && 'line-through')}>{p.name ?? '?'}</div>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            {p.direction && <DirChip dir={p.direction} t={t} />}
+            {remove && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">{t.removeEntry}</span>}
+          </div>
+        </div>
+        {p.paise !== undefined && <div className={cn('num text-4xl font-semibold tracking-tight', remove && 'line-through opacity-60')}>{rs(p.paise)}</div>}
+      </div>
+    )
+    if (p.kind === 'direction') {
+      cols = 'grid-cols-3'
+      answers = <>{A('credit', 'udhaar', t.credit)}{A('payment', 'jama', t.payment)}{A('no', 'nahi', <><X className="size-5" />{t.wrong}</>)}</>
+    } else if ((p.kind === 'which' || p.kind === 'confusable') && p.options) {
+      answers = p.options.map((o, i) => A('no', o, p.kind === 'confusable' ? <span className="num">₹{o}</span> : <span className="truncate">{o}</span>, undefined, `${i}:${o}`))
+    } else if (p.kind === 'name') {
+      answers = <><TextAnswer label={t.typeName} send={t.send} onSubmit={onAnswer} />{no('col-span-2')}</>
+    } else if (p.kind === 'amount') {
+      answers = (
+        <>
+          {(p.amounts ?? []).map((a) => A('no', String(a), <span className="num">₹{a}</span>))}
+          {!p.amounts?.length && <TextAnswer label={t.amount} send={t.send} numeric onSubmit={onAnswer} />}
+          {no('col-span-full')}
+        </>
+      )
+    } else answers = <>{yes()}{no()}</>
+  }
+  return (
+    <div className="rounded-3xl bg-card p-4 shadow-3 ring-1 ring-primary/15">
+      {head}
+      <div className={cn('mt-4 grid gap-2', cols)}>{answers}</div>
     </div>
   )
 }
@@ -174,9 +200,9 @@ export function EraseTyped({ word, t, onErase, className }: { word: string; t: U
     <form className={cn('col-span-full flex gap-2', className)} onSubmit={(e) => { e.preventDefault(); if (ok) onErase(word) }}>
       <input
         value={v} onChange={(e) => setV(e.target.value)} aria-label={word} placeholder={word} maxLength={20} autoComplete="off" autoCapitalize="off"
-        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+        className="h-14 min-w-0 flex-1 rounded-xl bg-background px-3 text-lg ring-1 ring-foreground/12 outline-none focus:ring-2 focus:ring-primary"
       />
-      <button type="submit" disabled={!ok} className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-2xl bg-destructive px-4 text-lg font-semibold text-white disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
+      <button type="submit" disabled={!ok} className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-destructive px-4 text-lg font-semibold text-destructive-foreground disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
     </form>
   )
 }
@@ -184,11 +210,11 @@ export function EraseTyped({ word, t, onErase, className }: { word: string; t: U
 /** A tool made something ready: one big button does it (nothing is sent or saved before the tap). */
 export function ReadyCard({ label, text, to, onGo, onDismiss, t }: { label: string; text?: string; to?: string; onGo: () => void; onDismiss: () => void; t: UiStrings }) {
   return (
-    <div className="stamp rounded-3xl border-2 border-payment/40 bg-card p-4 shadow-lg">
+    <div className="rounded-3xl bg-card p-4 shadow-3 ring-1 ring-primary/15">
       {to && <div className="mb-1 text-base font-semibold">{t.toWho}: {to}</div>}
       {text && <pre className="mb-3 max-h-40 overflow-y-auto whitespace-pre-wrap font-sans text-sm text-muted-foreground">{text}</pre>}
-      <button onClick={onGo} className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-payment text-xl font-bold text-white active:scale-[.97]">{label}</button>
-      <button onClick={onDismiss} className="mt-2 min-h-11 w-full rounded-2xl text-base text-muted-foreground">{t.dismiss}</button>
+      <button onClick={onGo} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-lg font-bold text-primary-foreground shadow-2 active:scale-[.98]">{label}</button>
+      <button onClick={onDismiss} className="mt-2 h-11 w-full rounded-2xl text-base text-muted-foreground">{t.dismiss}</button>
     </div>
   )
 }
@@ -202,98 +228,18 @@ function TextAnswer({ label, send, numeric, onSubmit }: { label: string; send: s
       <input
         value={v} onChange={(e) => setV(e.target.value)} aria-label={label} placeholder={label} maxLength={40}
         inputMode={numeric ? 'numeric' : 'text'} enterKeyHint="send"
-        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+        className="h-14 min-w-0 flex-1 rounded-xl bg-background px-3 text-lg ring-1 ring-foreground/12 outline-none focus:ring-2 focus:ring-primary"
       />
-      <button type="submit" disabled={!v.trim()} className="h-14 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground disabled:opacity-50">{send}</button>
+      <button type="submit" disabled={!v.trim()} className="h-14 rounded-xl bg-primary px-5 text-lg font-semibold text-primary-foreground disabled:opacity-50">{send}</button>
     </form>
   )
 }
 
 function Answer({ className, children, onClick }: { className?: string; children: React.ReactNode; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={cn('flex h-14 items-center justify-center gap-2 rounded-2xl text-lg font-semibold active:scale-[.97]', className)}>
+    <button onClick={onClick} className={cn('flex h-14 min-w-0 items-center justify-center gap-2 rounded-xl px-2 text-lg font-semibold active:scale-[.97]', className)}>
       {children}
     </button>
-  )
-}
-
-/**
-/** Press-and-hold longer than this is a hold (wake while held); shorter is a tap. */
-const HOLD_MS = 350
-
-/**
- * Big mic: ONE control. Asleep (dim ring): tap wakes. Awake: tap puts it to sleep; while the app is
- * speaking the tap cuts the reply short instead (square icon). Hold = awake while held.
- * Rings breathe with the input level; colour shows who is talking.
- */
-export function MicButton({ status, levelSource, on, handsFree, t, onTap, onHoldStart, onHoldEnd }: {
-  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; handsFree: boolean; t: UiStrings
-  /** short press: wake / cut the reply short / go to sleep (the caller decides by state) */
-  onTap: () => void
-  /** pressed for a while (or any press in push-to-talk): awake while held */
-  onHoldStart: () => void
-  onHoldEnd: () => void
-}) {
-  // the ~30 Hz mic level lives here, so it re-renders only this button, not the whole screen
-  const [level, setLevel] = useState(0)
-  useEffect(() => {
-    levelSource.add(setLevel)
-    return () => { levelSource.delete(setLevel) }
-  }, [levelSource])
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  /** 'down' = pressed, not yet a hold; 'hold' = hold started; null = not pressed */
-  const press = useRef<'down' | 'hold' | null>(null)
-  const down = () => {
-    if (press.current) return
-    if (!handsFree) { press.current = 'hold'; onHoldStart(); return } // push-to-talk: every press is a hold
-    press.current = 'down'
-    holdTimer.current = setTimeout(() => { holdTimer.current = null; press.current = 'hold'; onHoldStart() }, HOLD_MS)
-  }
-  const up = () => {
-    const p = press.current
-    press.current = null
-    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null }
-    if (p === 'hold') onHoldEnd()
-    else if (p === 'down') onTap()
-  }
-  useEffect(() => () => { if (holdTimer.current) clearTimeout(holdTimer.current) }, [])
-
-  const s = 1 + Math.min(level * 3, 0.6)
-  const live = on && status !== 'offline'
-  const asleep = !on || status === 'asleep'
-  const dim = asleep || status === 'offline' // offline: awake in name only, nothing is heard
-  const interrupt = live && status === 'speaking'
-  const label = asleep ? t.micStart : interrupt ? t.interrupt : t.micStop
-  return (
-    <div className="relative grid size-28 place-items-center">
-      {live && status === 'listening' && (
-        <>
-          <span className="ripple absolute inset-0 rounded-full bg-primary/25" />
-          <span className="absolute inset-0 rounded-full bg-primary/20 transition-transform duration-75" style={{ transform: `scale(${s})` }} />
-        </>
-      )}
-      {live && status === 'speaking' && <span className="absolute inset-0 animate-pulse rounded-full bg-payment/25" />}
-      {live && status === 'thinking' && <span className="absolute -inset-1 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />}
-      <button
-        type="button"
-        aria-label={label}
-        // one toggle: pressed = awake
-        aria-pressed={!dim && !interrupt}
-        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); if (handsFree) onTap(); else down() } }}
-        onKeyUp={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !handsFree) up() }}
-        onPointerDown={(e) => { e.preventDefault(); down() }}
-        onPointerUp={up}
-        onPointerCancel={up}
-        onPointerLeave={up}
-        onContextMenu={(e) => e.preventDefault()}
-        className={cn(
-          'relative grid size-24 touch-none select-none place-items-center rounded-full shadow-xl transition-colors',
-          dim ? 'bg-card text-primary/60 ring-4 ring-primary/20' : status === 'speaking' ? 'bg-payment text-white' : 'bg-primary text-primary-foreground',
-        )}
-      >
-        {interrupt ? <Square className="size-8 fill-current" /> : <Mic className="size-10" />}
-      </button>
-    </div>
   )
 }
 
@@ -307,7 +253,7 @@ export function Waterfall({ m }: { m: TurnMetrics & { clientFirstAudioMs: number
     ['first reply audio', m.firstAudioAt, 'bg-payment'],
   ]
   return (
-    <div className="rounded-2xl bg-card p-3 text-xs shadow-sm ring-1 ring-foreground/5">
+    <div className="rounded-2xl bg-card p-3 text-xs shadow-1 ring-1 ring-foreground/6">
       <div className="mb-2 flex justify-between font-medium">
         <span>after you stopped speaking</span>
         <span className="num">{m.firstAudioAt !== null ? `${Math.round(m.firstAudioAt)} ms` : '—'}{m.earlyCommit ? ' · early' : ''}{m.snrDb !== null ? ` · SNR ${Math.round(m.snrDb)} dB` : ''}</span>
@@ -322,5 +268,41 @@ export function Waterfall({ m }: { m: TurnMetrics & { clientFirstAudioMs: number
         </div>
       ))}
     </div>
+  )
+}
+
+/** The nickname question: the new twin's nickname (sent as the answer), plus the older ones' if they have none. */
+function NicknameCard({ p, t, onAnswer, onTag }: { p: PendingView; t: UiStrings; onAnswer: (a: string) => void; onTag?: (cid: string, tag: string) => void }) {
+  const others = (p.twins ?? []).filter((x) => x.cid !== p.cid && !x.tag).slice(0, 2)
+  const [mine, setMine] = useState('')
+  const [theirs, setTheirs] = useState<Record<string, string>>({})
+  const save = () => {
+    for (const o of others) { const v = theirs[o.cid]?.trim(); if (v) onTag?.(o.cid, v) }
+    onAnswer(mine.trim() || 'nahi')
+  }
+  return (
+    <form className="rounded-3xl bg-card p-4 shadow-3 ring-1 ring-primary/15" onSubmit={(e) => { e.preventDefault(); save() }}>
+      <div className="text-lg font-semibold">{p.name} · {t.nickTitle}</div>
+      <div className="text-sm text-muted-foreground">{t.nickAlready}</div>
+      <div className="mt-3 space-y-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.nickNew}</span>
+          <input autoFocus value={mine} onChange={(e) => setMine(e.target.value)} maxLength={30} placeholder={t.nickEg} aria-label={t.nickNew} className={inputCls} enterKeyHint="done" />
+        </label>
+        {onTag && others.map((o) => (
+          <label key={o.cid} className="block">
+            <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.nickOld} · {o.label}</span>
+            <input value={theirs[o.cid] ?? ''} onChange={(e) => setTheirs((x) => ({ ...x, [o.cid]: e.target.value }))} maxLength={30} placeholder={t.nickEg} aria-label={`${t.nickOld}: ${o.label}`} className={inputCls} />
+          </label>
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Answer className={TONE.no} onClick={() => onAnswer('nahi')}>{t.skip}</Answer>
+        <button type="submit" disabled={!mine.trim() && !Object.values(theirs).some((v) => v.trim())}
+          className={cn('flex h-14 min-w-0 items-center justify-center gap-2 rounded-xl px-2 text-lg font-semibold active:scale-[.97] disabled:opacity-40', TONE.yes)}>
+          <Check className="size-5" />{t.saveNick}
+        </button>
+      </div>
+    </form>
   )
 }

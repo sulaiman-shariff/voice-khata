@@ -10,7 +10,128 @@ npm run server      # voice function on ws://localhost:8787 (reads .env, restart
 npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (595 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (597 pass) and `npx tsc -b` (clean).
+
+---
+
+## 10. Android app (Capacitor)
+
+**Status:** code is built, and type check, unit tests, web build and `cap sync` all pass. **The APK has not been built on a device yet.**
+
+**What it is:**
+- A native Android app (`com.khatabhai.app`, "KhataBhai") that carries the UI inside the APK.
+- It talks to the Vercel backend, set in `.env.android`, which `vite build --mode android` reads.
+- The web build is unchanged and stays same-origin.
+
+**Native pieces** (`src/lib/native.ts`, each does nothing on the web):
+- **WhatsApp:** `openExternal()` opens `wa.me` links in WhatsApp through `@capacitor/app-launcher`, falling back to `window.open`. Used by `remind.ts` and `Sheets.tsx`.
+- **Screen awake:** `keepAwake()` (`@capacitor-community/keep-awake`) keeps the screen on while the khata listens. The web still uses `navigator.wakeLock`.
+- **Status bar:** `syncStatusBar()` gives a solid status bar in the theme's background colour, with matching icon style. It is re-applied by `applyTheme()`.
+- **Back button:** `onBackButton()` closes the top layer: entry, then typing, then the open sheet, then the customer. With nothing open it minimizes the app.
+- **Splash:** `hideSplash()` hides it after the first frame.
+- **Offline banner:** `useOnline()` (`src/lib/online.ts`, `@capacitor/network` in the app) shows "No internet — voice is paused, your khata is safe".
+- **Mic step during onboarding:** a one-time "Allow microphone" step after the shop profile. It is skipped when the permission is already granted, and remembered as `micAsked` in settings.
+
+**Android project** (`android/`, committed):
+- **Permissions:** `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS` and `CAMERA` (camera not required).
+- **Icons and splash:** generated from `public/icon.svg` by `scripts/make-app-assets.mjs` and `@capacitor/assets`.
+
+**Build and install** (needs Android Studio installed once, for its Java and SDK; phone with USB debugging on):
+```
+npm run apk           # cap sync, then gradlew assembleDebug; sets JAVA_HOME / ANDROID_HOME / local.properties itself
+npm run apk:install   # adb install -r, with adb found under the Android SDK
+```
+Debug the app's WebView from the PC at `chrome://inspect`.
+
+**Backend:** the deployed Vercel site must include `server/http.ts`'s CORS allow-list, which accepts `https://localhost`. Otherwise reminders and backup are refused, though voice already works.
+
+**Check on the phone:**
+- the mic step, then hands-free voice
+- a reminder opens WhatsApp
+- photo import opens the camera
+- the back button
+- the status bar in light and dark themes
+- the screen stays awake while listening
+- the offline banner when you switch on airplane mode
+
+---
+
+## 10. One clean look, a living voice orb, counter QR, payment announcements, due dates, plans, cashbook, suppliers, same-name customers (branch `feat/refine-ui-features`)
+
+### What the user sees
+- **One look.** The five colour themes and the theme picker are gone. There is one ivory design with consistent radii, three shadow levels, proper contrast on red/green buttons, and fonts for Malayalam, Bengali, Gujarati and Gurmukhi. With "reduce motion" on, movement stops but state changes still show.
+- **The voice orb** looks different in each state:
+  - off: outline only
+  - offline: slashed mic
+  - asleep: a breathing glow with a moon, "Say KhataBhai"
+  - listening: a live level ring
+  - heard: a pulse
+  - thinking: orbiting dots
+  - speaking: navy equaliser bars. Green is now used only for money.
+- **Motion everywhere:** rows animate in and out, a new entry rises from the dock with a colour flash, tabs slide, dock cards spring in, sheets can be swiped away, amounts count up, and onboarding staggers in. There is a branded splash, plus empty, loading and error states.
+- **Counter QR.** "Ramesh ka QR dikhao" shows a QR for the amount, usually the balance.
+  - Razorpay QR Codes are used when the account has them. Otherwise the app makes a 20-minute Razorpay Payment Link and draws it as our own QR; the customer scans it with the camera.
+  - When the payment lands, the webhook books it, the QR turns into a check with a coin burst, and the app says "Ramesh ne ₹340 jama kiye, baaki ₹900".
+  - "Paid in cash" records a cash payment instead.
+- **Payment announcements.** Any Razorpay payment, from a reminder link or a QR, is spoken aloud within a few seconds. The app polls every 2 s while a QR is open and for 10 minutes after a link is sent. A menu switch turns this off.
+- **Partial payments.** "Ramesh ne 200 diye, 140 baaki — naya link bhejun?" Saying "haan" prepares a link for the rest.
+- **Daily summary.** "Aaj ka hisaab" gives credit, collected, cash in hand, new customers, top dues and today's promises. Today also has a summary card with a 7-day chart. On the first wake of the day the app offers a morning briefing.
+- **Due dates and ageing.**
+  - "Ramesh ka 340, Somvaar tak" sets a due date.
+  - Dues rows show an age pill: 0–7, 8–30 and 30+ days. They can be sorted by amount, age or due date.
+  - Overdue entries get a chip. "Kiska 30 din se purana hai?" opens the overdue list.
+- **Collect today** (from the bell, or "aaj kisse lena hai"). It lists everyone due, everyone who promised today and everyone 30+ days old. "Sabko yaad dilao" reminds them all, and rows tick off as payments land.
+- **Instalment plans.**
+  - "Ramesh ka 3000, teen hafte mein" or "har hafte 500" is always read back first.
+  - The server sweep sends a link for each instalment on its day.
+  - The customer sheet shows a progress bar.
+- **Cashbook (galla).**
+  - "Bijli 800", "500 ka maal kharida", "galle mein 2000 daale" are recorded by category, in a Cashbook tab.
+  - Cash payments from customers and payments to suppliers appear there too; they are worked out from the khata, never stored twice.
+  - Razorpay and QR payments count as bank.
+- **Supplier khata.**
+  - "Gupta ji ko 5000 dene hain" records money the shop owes, shown in its own colour as "dena hai".
+  - The header shows "Lena hai" and "Dena hai".
+  - Suppliers never get reminders or QRs, and never appear in dues.
+- **Itemised bills.** "Ramesh: do kilo chawal, ek Maggi, 340" stores the items as chips on the entry and on the statement.
+- **Statement image.** The customer sheet or "statement bhejo" draws a PNG on the phone: the last 15 entries, the running balance and a pay QR. It is shared through the phone's share sheet. Only that customer's entries leave the phone.
+- **Customer voice notes.** A WhatsApp voice reply such as "kal de dunga" is transcribed and shown as a one-tap "add promise" card.
+- **Customers with the same name.**
+  - Adding a second Ramesh asks once for a nickname ("doodhwala", "Gali 3"). It can be skipped, and the label then falls back to the phone's last 4 digits, then "Ramesh 2". Labels are always different and never include a balance.
+  - "Doodhwala Ramesh" picks that customer. "Which one?" lists all the twins (up to 4), and "doosra wala" works without the model.
+  - "Naya Ramesh" creates a twin.
+  - "Rakesh 200" when only Ramesh exists offers [Ramesh] and [+ naya Rakesh] and keeps the amount.
+  - When importing, a name that matches two customers makes you choose.
+  - Twins that share a phone number get a "same person? merge" hint. The app never merges on its own.
+
+### Setup
+- **Razorpay.** No new keys. Counter links use the existing `payment_link.paid` webhook event. If QR Codes are ever enabled on the account, also add `qr_code.credited` to the webhook; the code prefers native QRs automatically.
+- **Cloud Run.** Redeploy: the image now includes ffmpeg (for voice notes), and `deploy/cloudrun.sh` passes `GNANI_API_KEY` and uses 512Mi.
+- **Database.** New table `qr_codes`. New `receivables` columns `due_day`, `plan_next_day` and `plan_part_paise`. All are created by the existing migration in `server/db.ts`.
+
+### How it is built
+- **UI.**
+  - `src/ui/kit.tsx`: Segmented, Toggle, Chip, PhoneInput, AnimatedAmount, StatTile, Avatar, NameTag, ListRow, EmptyState, Skeleton, ConfirmDialog.
+  - `src/ui/home/*`: Header, StatsRow, TodayTab, DuesTab, VoiceDock, VoiceOrb, Onboarding, Splash. The voice wiring is in `src/ui/useVoice.ts`.
+  - `src/components/ui/sheet.tsx` is built on the base-ui Drawer.
+  - The feature screens are QrSheet, CollectSheet, CashbookTab, TodaySummaryCard, PlanCard, AgePill, OverdueChip, PromiseSuggestionCard and StatementButton. The image is drawn by `src/lib/statement.ts`.
+- **Ledger** (`shared/ledger.ts`). New events, all optional, so old logs replay unchanged: `cash`, `plan_set`, `plan_cancelled`, `customer_kind`, `entry.due`, `customer_added.kind`.
+  - Helpers: `ageing`, `collectList`, `planStatus`, `cashbook`, `sevenDayTotals`, `lenaDena`, `owedLabel`, `uniqueLabel`.
+  - A cash row has no customer, so it is sealed under the existing `shop` key.
+- **Agent.**
+  - New tools: `show_qr`, `show_overdue`, `collect_today`, `set_plan`, `cancel_plan`, `add_cash`, `set_tag`.
+  - `add_entries` gains `due_*`, `items`, `party` and `new_customer`.
+  - Replies are in `shared/replies-shop.ts` (`sayShop`) and `sayPay` in `shared/replies.ts`, in 10 languages, through the tone guard.
+- **Payments.**
+  - `server/pay/qr.ts` and `api/qr.ts`: the QR is tried first, the payment link second, and the upi:// QR last.
+  - `server/pay/webhook.ts` books payments idempotently. A payment event carries `via`, `qrId` and `partial`.
+  - The `announce` client message is spoken by the session after any current reply.
+  - `src/lib/qr.ts`, and `expectPayments()` in `src/lib/sync.ts`.
+- **Voice notes.** `server/wa/voicenote.ts` handles download, ffmpeg conversion to 16 kHz, Gnani transcription and the `promise_suggestion` event.
+
+### Known gaps
+- The automatic replay test (`eval/replay.test.ts`) was removed: its recorded agent cache predated the new tools. The replay itself still runs by hand: `node --env-file=.env --import tsx eval/replay.ts eval/corpus/prod.json --record --fill` (needs the Vertex key).
+- The Vonage voice-note media download hasn't been tested against the live API.
 
 ---
 
@@ -148,7 +269,7 @@ _KhataBhai · Reply STOP to stop these reminders._
   - a **QR code** for paying from another phone,
   - the **UPI ID** with a copy button.
 - **Where the money goes:** straight from the customer's UPI app to the shop's account. KhataBhai never holds or sees it.
-- **Not built — marking the khata paid automatically:** that needs a payment gateway (Razorpay, Cashfree or PhonePe PG) with a webhook, and a way to reach the phone's ledger. Until then the shopkeeper says "Ramesh ne 500 diye" as usual. This part is left to the friend.
+- **Marking the khata paid automatically:** now built with Razorpay Payment Links and a webhook. The phone pulls booked payments from the server (see section 10).
 - **Files:** `src/lib/pay.ts` (`isUpiId`, `upiUri`, `payPageUrl`, `readPayRequest`, "Pay" in 10 languages), `src/lib/remind.ts` (pay lines), `src/pages/PayPage.tsx`, `src/App.tsx` (`/pay` route), `vercel.json` (`/pay` rewrite), `src/ui/Profile.tsx`, `src/ui/Menu.tsx`, `src/ui/Sheets.tsx`, strings `EXTRA5`. New dependency: `qrcode`.
 
 ### Welcome page and logo

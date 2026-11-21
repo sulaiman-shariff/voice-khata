@@ -1,12 +1,31 @@
 import { Link2, Pencil } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState } from 'react'
-import type { Entry } from '../../shared/ledger.js'
+import type { Entry, LedgerState } from '../../shared/ledger.js'
+import type { Lang } from '../../shared/replies.js'
+import { itemsOf } from '@/lib/statement'
 import { cn } from '@/lib/utils'
 import { entryDay, relDay, rs, shiftDay, time } from './format'
+import { OverdueChip } from './OverdueChip'
 import { EntryRow } from './parts'
 import type { UiStrings } from './strings'
 
 const live = (e: Entry) => !e.voided && !e.promise
+
+/** "Overdue · 3 din" and the items said ("doodh, bread"), under an entry. Nothing when there is neither. */
+export function EntryChips({ e, state, lang, className }: { e: Entry; state?: LedgerState; lang?: Lang | null; className?: string }) {
+  const items = itemsOf(e.note)
+  const overdue = state && !e.voided ? <OverdueChip state={state} eid={e.eid} lang={lang} /> : null
+  if (!items.length && !overdue) return null
+  return (
+    <div className={cn('mt-1 flex flex-wrap items-center gap-1', className)}>
+      {overdue}
+      {items.slice(0, 6).map((it, i) => (
+        <span key={`${it}-${i}`} className="inline-flex h-6 max-w-40 items-center truncate rounded-full bg-muted px-2 text-xs font-medium text-muted-foreground">{it}</span>
+      ))}
+    </div>
+  )
+}
 const byTsDesc = (a: Entry, b: Entry) => b.ts - a.ts
 
 function group(entries: Entry[]) {
@@ -39,8 +58,9 @@ function DayHeader({ day, t, es, className }: { day: string; t: UiStrings; es: E
 }
 
 /** Day-grouped history: last 14 days, "older" reveals 14 more; removed entries hidden unless asked. */
-export function DayFeed({ entries, t, name, fresh, onEntry }: {
+export function DayFeed({ entries, t, name, fresh, onEntry, state, lang }: {
   entries: Entry[]; t: UiStrings; name: (cid: string) => string; fresh: string | null; onEntry: (eid: string) => void
+  state?: LedgerState; lang?: Lang | null
 }) {
   const [days, setDays] = useState(14)
   const [showRemoved, setShowRemoved] = useState(false)
@@ -56,15 +76,28 @@ export function DayFeed({ entries, t, name, fresh, onEntry }: {
   return (
     <div>
       {groups.map(([day, es]) => (
-        <section key={day} className="pb-2">
+        <motion.section key={day} layout="position" className="pb-2">
           <DayHeader day={day} t={t} es={es} />
           <div className="space-y-2 pt-1">
-            {es.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} fresh={e.eid === fresh} onClick={() => onEntry(e.eid)} />)}
+            <AnimatePresence initial={false} mode="popLayout">
+              {es.map((e) => (
+                <motion.div
+                  key={e.eid} layout
+                  // a new entry rises from the dock below; edits and removals settle in place
+                  initial={{ opacity: 0, y: e.eid === fresh ? 48 : 8, scale: e.eid === fresh ? 0.96 : 1 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.16 } }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                >
+                  <EntryRow e={e} name={name(e.cid)} t={t} fresh={e.eid === fresh} onClick={() => onEntry(e.eid)} chips={<EntryChips e={e} state={state} lang={lang} />} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-        </section>
+        </motion.section>
       ))}
       {older > 0 && (
-        <button onClick={() => setDays((d) => d + 14)} className="mt-2 h-12 w-full rounded-2xl text-base font-semibold text-primary ring-1 ring-primary/30">
+        <button onClick={() => setDays((d) => d + 14)} className="mt-2 h-12 w-full rounded-2xl text-base font-semibold text-primary ring-1 ring-primary/25 active:scale-[.98]">
           {t.older} · {older}
         </button>
       )}
@@ -80,8 +113,9 @@ export function DayFeed({ entries, t, name, fresh, onEntry }: {
 const sign = (n: number) => (n < 0 ? '−' : '') + rs(n)
 
 /** Passbook: date, time, credit, payment, running balance. Newest first. */
-export function Passbook({ entries, t, onEntry, onConfirm }: {
+export function Passbook({ entries, t, onEntry, onConfirm, state, lang }: {
   entries: Entry[]; t: UiStrings; onEntry: (eid: string) => void; onConfirm: (eid: string) => void
+  state?: LedgerState; lang?: Lang | null
 }) {
   const [showRemoved, setShowRemoved] = useState(false)
   const { running, groups, removed } = useMemo(() => {
@@ -106,11 +140,11 @@ export function Passbook({ entries, t, onEntry, onConfirm }: {
       </div>
       {groups.map(([day, es]) => (
         <section key={day}>
-          <div className="sticky top-0 z-10 -mx-4 bg-muted px-4 py-1 text-sm font-bold">{relDay(day, t)}</div>
+          <div className="sticky top-0 z-10 -mx-4 bg-muted/95 px-4 py-1.5 text-sm font-bold backdrop-blur">{relDay(day, t)}</div>
           {es.map((e) => {
             const bal = running.get(e.eid)
             return (
-              <div key={e.eid} className="border-b border-foreground/5">
+              <motion.div key={e.eid} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b border-foreground/5">
                 <button onClick={() => onEntry(e.eid)} className={cn(col, 'min-h-14 w-full py-2 text-left active:bg-muted/60', e.voided && 'opacity-50')}>
                   <span className="num text-sm leading-tight text-muted-foreground">
                     {e.promise ? t.promise : time(e.ts)}
@@ -118,7 +152,7 @@ export function Passbook({ entries, t, onEntry, onConfirm }: {
                     {e.voided && <span className="block text-[11px]">{t.removed}</span>}
                   </span>
                   {(['credit', 'payment'] as const).map((d) => (
-                    <span key={d} className={cn('num text-right text-lg font-bold', d === 'credit' ? 'text-credit' : 'text-payment', e.promise && 'font-medium text-amber-700 dark:text-amber-300', e.voided && 'line-through')}>
+                    <span key={d} className={cn('num text-right text-lg font-bold', d === 'credit' ? 'text-credit' : 'text-payment', e.promise && 'font-medium text-warn', e.voided && 'line-through')}>
                       {e.direction === d ? rs(e.paise) : ''}
                     </span>
                   ))}
@@ -126,12 +160,13 @@ export function Passbook({ entries, t, onEntry, onConfirm }: {
                     {bal === undefined ? '' : sign(bal)}
                   </span>
                 </button>
+                <EntryChips e={e} state={state} lang={lang} className="mt-0 mb-2" />
                 {live(e) && e.status === 'unconfirmed' && (
                   <button onClick={() => onConfirm(e.eid)} className="mb-1 flex min-h-11 items-center gap-1 text-sm text-primary">
                     <Link2 className="size-4" />{t.confirmLink}
                   </button>
                 )}
-              </div>
+              </motion.div>
             )
           })}
         </section>

@@ -17,6 +17,7 @@ const routes: Routes = {
   '/api/shop/register': fn(() => import('../api/shop/register.js')),
   '/api/receivables': fn(() => import('../api/receivables.js')),
   '/api/pending': fn(() => import('../api/pending.js')),
+  '/api/qr': fn(() => import('../api/qr.js')),
   // what Cloud Run serves in production (server/cloudrun.ts), here too for local tests through a tunnel
   '/webhooks/razorpay': async () => (await import('../server/pay/webhook.js')).handleRazorpayWebhook,
   '/webhooks/vonage/inbound': async () => (await import('../server/wa/inbound.js')).handleVonageInbound,

@@ -37,6 +37,11 @@ export function validMsg(m: unknown): m is ClientMsg {
       return x.t === undefined || typeof x.t === 'number'
     case 'wake':
       return x.source === 'tap' || x.source === 'hold' || x.source === 'phone'
+    case 'announce':
+      return x.kind === 'payment' && typeof x.cid === 'string' && x.cid.length > 0 && x.cid.length <= 64 &&
+        Number.isInteger(x.paise) && (x.paise as number) > 0 && (x.paise as number) < 1e11 &&
+        (x.balancePaise === undefined || (Number.isInteger(x.balancePaise) && Math.abs(x.balancePaise as number) < 1e11)) &&
+        (x.partial === undefined || typeof x.partial === 'boolean')
     case 'hold_end':
     case 'sleep':
     case 'ptt_start':

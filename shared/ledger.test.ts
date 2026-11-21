@@ -98,6 +98,7 @@ describe('displayName', () => {
     ])
     expect(displayName(s, 'a1')).toBe('Ramesh · Gali 3')
     expect(displayName(s, 'b2')).toBe('ramesh · …3210')
-    expect(displayName(two(), 'b2')).toBe('ramesh · b2')
+    expect(displayName(two(), 'a1')).toBe('Ramesh 1')
+    expect(displayName(two(), 'b2')).toBe('ramesh 2')
   })
 })

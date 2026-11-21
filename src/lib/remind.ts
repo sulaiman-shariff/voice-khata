@@ -17,6 +17,7 @@
 import { balance, type LedgerState } from '../../shared/ledger.js'
 import { PAY_LINK, buildReminder } from '../../shared/reminder.js'
 import { api } from './api'
+import { openExternal } from './native'
 import { isUpiId, payPageUrl } from './pay'
 import type { KhataStore, Settings } from './contracts'
 import { ensureShop, forgetShop, shopAuth, shopCred } from './shop'
@@ -117,7 +118,7 @@ export function reminderMessage(state: LedgerState, settings: Settings, cid: str
 function share(text: string, phone?: string) {
   const digits = phone?.replace(/\D/g, '') ?? ''
   const to = digits.length === 10 ? `91${digits}` : digits
-  window.open(`https://wa.me/${to}?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
+  openExternal(`https://wa.me/${to}?text=${encodeURIComponent(text)}`)
 }
 
 /**

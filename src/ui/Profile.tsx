@@ -2,6 +2,7 @@ import { Check } from 'lucide-react'
 import { useState } from 'react'
 import type { Settings } from '@/lib/contracts'
 import { isUpiId } from '@/lib/pay'
+import { inputCls } from './kit'
 import type { UiStrings } from './strings'
 
 export type Profile = Pick<Settings, 'shopName' | 'ownerName' | 'shopAddress' | 'shopPhone' | 'shopUpi'>
@@ -41,14 +42,14 @@ export function ProfileForm({ t, initial, submit, onSave }: { t: UiStrings; init
         <span className={`mt-1 block text-xs ${upiOk ? 'text-muted-foreground' : 'text-destructive'}`}>{t.upiHint}</span>
       </Field>
       <p className="text-xs text-muted-foreground">{t.signupNote}</p>
-      <button type="submit" disabled={!ok} className="flex h-13 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-bold text-primary-foreground shadow-md disabled:opacity-40">
+      <button type="submit" disabled={!ok} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-2 active:scale-[.98] disabled:opacity-40">
         <Check className="size-5" />{submit}
       </button>
     </form>
   )
 }
 
-const INPUT = 'h-12 w-full rounded-lg bg-card px-3 text-base ring-1 ring-foreground/15 outline-none placeholder:text-muted-foreground/50 focus:ring-2 focus:ring-primary'
+const INPUT = inputCls
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

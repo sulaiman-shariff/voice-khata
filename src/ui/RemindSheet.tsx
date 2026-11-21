@@ -1,4 +1,4 @@
-import { BellRing, Loader2, Send } from 'lucide-react'
+import { BellRing, Loader2, PartyPopper, Send } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { balance, displayName } from '../../shared/ledger.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -7,7 +7,8 @@ import type { KhataStore } from '@/lib/contracts'
 import { sendReminder, twilioReady } from '@/lib/remind'
 import { cn } from '@/lib/utils'
 import { rs } from './format'
-import { toastRemind } from './Sheets'
+import { Avatar, EmptyState, NameTag, PhoneInput, Segmented } from './kit'
+import { toastRemind } from './share'
 import type { UiStrings } from './strings'
 
 /**
@@ -43,18 +44,16 @@ export function RemindSheet({ store, open, t, onClose, onChanged }: {
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-3xl pb-6">
+      <SheetContent closeLabel={t.dismiss}>
         <SheetHeader className="pb-0">
           <SheetTitle className="flex items-center gap-2 pr-10 text-2xl font-semibold tracking-tight"><BellRing className="size-6 text-primary" />{t.remindersNav}</SheetTitle>
-          <div className={cn('text-sm', twilio ? 'text-payment' : 'text-muted-foreground')}>{twilio === null ? '…' : twilio ? `✓ ${t.twilioOn}` : t.twilioOff}</div>
+          <div className={cn('text-sm', twilio ? 'text-primary' : 'text-muted-foreground')}>{twilio === null ? '…' : twilio ? `✓ ${t.twilioOn}` : t.twilioOff}</div>
         </SheetHeader>
         <div className="space-y-3 px-4">
-          <div role="tablist" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm font-semibold">
-            <button role="tab" aria-selected={!all} onClick={() => setAll(false)} className={cn('min-h-10 rounded-md', !all && 'bg-card shadow-sm')}>{t.dues}</button>
-            <button role="tab" aria-selected={all} onClick={() => setAll(true)} className={cn('min-h-10 rounded-md', all && 'bg-card shadow-sm')}>{t.everyone}</button>
-          </div>
+          <Segmented size="sm" label={t.remindersNav} value={all ? 'all' : 'dues'} onChange={(v) => setAll(v === 'all')}
+            items={[{ value: 'dues', label: t.dues }, { value: 'all', label: t.everyone }]} />
 
-          {rows.length === 0 && <div className="py-8 text-center text-muted-foreground">{t.noneDue}</div>}
+          {rows.length === 0 && <EmptyState icon={PartyPopper} title={t.allClear} hint={t.noneDue} />}
           <ul className="space-y-2">
             {rows.map(({ c, owed }) => (
               <Row key={c.cid} store={store} t={t} cid={c.cid} owed={owed} busy={busy === c.cid || busy === '*'} onSend={() => void send(c.cid)} onChanged={onChanged} name={displayName(s, c.cid)} />
@@ -63,7 +62,7 @@ export function RemindSheet({ store, open, t, onClose, onChanged }: {
 
           {ready.length > 1 && (
             <button onClick={() => void sendAll()} disabled={!!busy || !twilio}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-md disabled:opacity-40">
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground shadow-2 active:scale-[.98] disabled:opacity-40">
               {busy === '*' ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}{t.sendTo} ({ready.length})
             </button>
           )}
@@ -90,29 +89,23 @@ function Row({ store, t, cid, name, owed, busy, onSend, onChanged }: {
   const canSend = owed > 0 && !!phone.trim() && phoneOk && consent
 
   return (
-    <li className="space-y-2 rounded-lg bg-card p-3 ring-1 ring-foreground/10">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate text-base font-semibold">{name}</span>
+    <li className="space-y-2 rounded-2xl bg-card p-3.5 shadow-1 ring-1 ring-foreground/6">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2.5"><Avatar name={name} id={cid} className="size-8 text-sm" /><NameTag label={name} className="text-base font-semibold" /></span>
         <span className={cn('num shrink-0 text-lg font-semibold', owed > 0 ? 'text-credit' : 'text-muted-foreground')}>{rs(Math.max(0, owed))}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className={cn('flex h-11 min-w-0 flex-1 items-center rounded-lg bg-background ring-1 ring-foreground/15 focus-within:ring-2 focus-within:ring-primary', !phoneOk && 'ring-destructive')}>
-          <span className="num border-r border-border px-2.5 text-sm text-muted-foreground">+91</span>
-          <input
-            inputMode="tel" autoComplete="tel" value={phone} placeholder={t.addNumber} aria-label={`${t.phone}: ${name}`} aria-invalid={!phoneOk}
-            onChange={(e) => setPhone(e.target.value)} onBlur={() => phone.trim() !== (c.phone ?? '') && phoneOk && void save({})}
-            className="num h-full min-w-0 flex-1 bg-transparent px-2.5 text-base outline-none focus-visible:outline-none"
-          />
-        </span>
+        <PhoneInput size="sm" className="min-w-0 flex-1" value={phone} onChange={setPhone} placeholder={t.addNumber} label={`${t.phone}: ${name}`} invalid={!phoneOk}
+          onBlur={() => { if (phone.trim() !== (c.phone ?? '') && phoneOk) void save({}) }} />
         <button
           aria-label={`${t.remindNow}: ${name}`} disabled={!canSend || busy}
           onClick={() => void (phone.trim() !== (c.phone ?? '') ? save({}) : Promise.resolve()).then(onSend)}
-          className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-payment px-3 text-sm font-semibold text-white disabled:opacity-35"
+          className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-1 active:scale-[.98] disabled:opacity-35"
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : <BellRing className="size-4" />}{t.remindNow}
         </button>
       </div>
-      <label className="flex min-h-9 items-center justify-between gap-3 text-sm">
+      <label className="flex min-h-11 items-center justify-between gap-3 text-sm">
         <span className="text-muted-foreground">{t.consentBoth}</span>
         <Switch checked={consent} onCheckedChange={(v) => void save({ consent: v })} />
       </label>

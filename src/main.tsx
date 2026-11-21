@@ -1,9 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { applySavedTheme } from './ui/theme'
+import { hideSplash, syncStatusBar } from './lib/native'
 
-applySavedTheme() // themed from the first paint, before the encrypted settings load
+syncStatusBar() // one ivory look: status bar matches it from the start
 
 // caches the wake-word model and its runtime (production builds only)
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
@@ -35,4 +35,5 @@ void resetIfAsked().then(async (resetting) => {
       <App />
     </StrictMode>,
   )
+  requestAnimationFrame(hideSplash) // splash goes after the first frame
 })

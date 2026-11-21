@@ -11,7 +11,7 @@
 import { type Intent, mentionsSettle, mentionsMoney, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, ServerMsg, SettingMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, eraseWord, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
+import { type Lang, LOCALE, eraseWord, guardReply, langFromLocale, say, sayPay, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { isSleepWord, spotWake } from '../shared/wake.js'
 import { Attention } from './attention.js'
@@ -313,12 +313,57 @@ export class Session {
       case 'ack':
         this.unacked.delete(msg.seq)
         break
+      case 'announce':
+        this.log.info('announce', { kind: msg.kind, paise: msg.paise, partial: !!msg.partial })
+        this.enqueue(() => this.announcePayment(msg))
+        break
       case 'playback_done':
         this.log.debug('playback_done')
         if (this.speaking?.ducked) this.deps.send({ type: 'unduck' })
         this.speaking = null
         break
     }
+  }
+
+  /**
+   * The soundbox: a payment that landed off the phone (counter QR, Razorpay link) is now in the
+   * phone's ledger; say it aloud with the new balance. A link paid only in part also asks "a new
+   * link for the rest?": a yes prepares the same one-tap WhatsApp card send_reminder does (opted-in
+   * adults only). Queued after any turn in progress, and spoken once our own reply has played out.
+   */
+  private async announcePayment(m: Extract<ClientMsg, { type: 'announce' }>) {
+    const c = this.snap.customers.find((x) => x.cid === m.cid)
+    if (!c) {
+      this.log.info('announce_unknown_customer')
+      return
+    }
+    if (m.balancePaise !== undefined) c.balancePaise = m.balancePaise
+    const balance = c.balancePaise
+    const P = sayPay(this.lang)
+    const R = say(this.lang)
+    const said = P.paymentReceived(c.name, m.paise / 100, balance / 100)
+    let ask: string | null = null
+    if (m.partial && balance > 0 && c.remindersOptIn && c.adult && !this.pending) {
+      const text = guardReply(R.reminderText(c.name, balance / 100, this.snap.shopName))
+      if (text) {
+        ask = P.partialPaid(balance / 100)
+        this.pending = {
+          kind: 'modify', ops: [], done: R.remindReady(c.name), focus: c.cid,
+          view: { kind: 'modify', name: this.ledger.label(c), paise: balance }, ready: { kind: 'whatsapp', cid: c.cid, text },
+        }
+        this.ledger.pendingAt = this.now()
+        this.ledger.focusCid = c.cid
+      }
+    }
+    // never talk over a reply still playing on the phone
+    for (let waited = 0; this.isSpeaking() && waited < 8000; waited += 200) await new Promise((ok) => setTimeout(ok, 200).unref?.())
+    if (ask) {
+      this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
+      this.attention.wake('tap') // the answer is spoken next: listen for it
+    }
+    this.remember(`Agent: ${said}${ask ? ` ${ask}` : ''}`)
+    await this.speak(ask ? `${said} ${ask}` : said)
+    if (ask) this.deps.send({ type: 'turn_done', resume: this.ledger.exportState() })
   }
 
   /** The phrases that are spoken often and never change, ready in memory for this language and speed. */
@@ -333,7 +378,7 @@ export class Session {
    * "udhaar clear", and a name lost in chatter came back.
    */
   private keyterms(): string[] {
-    const names = this.snap.customers.flatMap((c) => [c.name, ...c.aliases])
+    const names = this.snap.customers.flatMap((c) => [c.name, ...c.aliases, ...(c.tag ? [c.tag] : [])])
     return [...names, ...(LEDGER_TERMS[this.lang] ?? []), ...LEDGER_TERMS.en].filter((x, i, a) => a.indexOf(x) === i).slice(0, 200)
   }
 
@@ -630,7 +675,7 @@ export class Session {
         if (this.ledger.canAnswerFast(text, intent)) reply = this.ledger.answerPending(text, intent, meta)
         else ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
       } else if (forced) ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
-      else if (intent.type === 'entries' && this.isInstant(intent)) reply = this.dispatch(intent, text, meta)
+      else if (intent.type === 'entries' && this.isInstant(intent, text)) reply = this.dispatch(intent, text, meta)
       // "Suresh wali entry hata do" names an older entry: only the agent can pick it
       else if (intent.type === 'undo' && !this.ledger.candidates(text).length) reply = this.dispatch(intent, text, meta)
       else if (intent.type === 'yes' || intent.type === 'no') reply = null // nothing pending: a stray haan/nahi
@@ -730,8 +775,8 @@ export class Session {
   }
 
   /** Instant path: every line names a known customer, says the direction and was read with full confidence. */
-  private isInstant(intent: Extract<Intent, { type: 'entries' }>): boolean {
-    return this.ledger.isPlainEntry(intent)
+  private isInstant(intent: Extract<Intent, { type: 'entries' }>, text?: string): boolean {
+    return this.ledger.isPlainEntry(intent, text)
   }
 
   /** The one amount each language stream heard (streams with several amounts are left out). */
@@ -758,7 +803,7 @@ export class Session {
       heard,
       history: this.ledger.history.slice(-6),
       screen: 'home',
-      customers: this.snap.customers.flatMap((c) => [c.name, ...c.aliases]),
+      customers: this.ledger.customerList(),
       recent,
       pending: this.ledger.pendingView(),
     }

@@ -1,6 +1,7 @@
 /**
  * Vonage webhooks.
- *   POST /webhooks/vonage/inbound  a customer wrote back: 1 pay, 2 balance, 3 wrong, STOP
+ *   POST /webhooks/vonage/inbound  a customer wrote back: 1 pay, 2 balance, 3 wrong, STOP, or a
+ *                                  promise ("kal de dunga") — typed or as a voice note (≤ 30 s, transcribed)
  *   POST /webhooks/vonage/status   delivery receipts for what we sent
  * Signed JWTs when VONAGE_SIGNATURE_SECRET is set; otherwise the URL must carry ?k=VONAGE_WEBHOOK_TOKEN
  * (the Vonage sandbox does not sign).
@@ -8,9 +9,11 @@
 import { json, sql, ensureSchema } from '../db.js'
 import { log } from '../log.js'
 import { readText, errorResponse } from '../request.js'
-import { waIntent } from './intent.js'
+import { waIntent, waPromise } from './intent.js'
+import { istDay } from './policy.js'
 import { ensureLink, sendLogged, type ReminderRow } from './reminders.js'
-import { waTexts } from './texts.js'
+import { promiseNoted, waTexts } from './texts.js'
+import { voiceNoteText } from './voicenote.js'
 import { parseInbound, verifyVonageJwt } from '../remind/vonage.js'
 
 function authorized(req: Request, raw: string, env = process.env): boolean {
@@ -57,10 +60,20 @@ export async function handleVonageInbound(req: Request): Promise<Response> {
       ON CONFLICT (id) DO NOTHING RETURNING id`) as unknown[]
     if (!fresh.length) return json({ ok: true, duplicate: true })
 
-    const intent = waIntent(m.text, m.payload)
     const ctx = await contextFor(m.from)
     await sql`UPDATE wa_messages SET shop_id = ${ctx?.shop_id ?? null}, cid = ${ctx?.cid ?? null} WHERE id = ${m.messageId}`
-    log.info('wa_inbound', { fn: 'wa', intent, known: !!ctx })
+    // a voice note from a known customer: its words, then the same reading as typed text
+    let text = m.text
+    let voice: string | null = null
+    if (m.audioUrl && ctx) {
+      const v = await voiceNoteText(m.audioUrl, ctx.lang)
+      if ('text' in v) text = v.text
+      voice = 'text' in v ? 'transcribed' : v.skipped
+    }
+    const intent = waIntent(text, m.payload)
+    // "kal de dunga" / "will pay tomorrow": a promise, before 'pay' (which would send a link)
+    const promise = ctx && intent !== 'stop' && intent !== 'dispute' ? waPromise(text, new Date(Date.now() + 5.5 * 3600_000).getUTCDay()) : null
+    log.info('wa_inbound', { fn: 'wa', intent: promise ? 'promise' : intent, known: !!ctx, voice })
     const reply = (text: string) => sendLogged(m.from, text, 'reply', ctx?.shop_id ?? null, ctx?.cid ?? null)
 
     if (intent === 'stop') {
@@ -76,9 +89,16 @@ export async function handleVonageInbound(req: Request): Promise<Response> {
     const t = waTexts(ctx.lang)
     const owed = Number(ctx.balance_paise)
     const shop = ctx.shop_name || 'Khata'
+    if (promise) {
+      const day = istDay(new Date(Date.now() + promise.dayOffset * 86_400_000))
+      await sql`INSERT INTO pending_events (shop_id, kind, body) VALUES (${ctx.shop_id}, 'promise_suggestion',
+        ${JSON.stringify({ cid: ctx.cid, day, ...(promise.paise ? { paise: promise.paise } : {}), text: text.slice(0, 300), voice: !!m.audioUrl })}::jsonb)`
+      await reply(promiseNoted(ctx.lang, shop))
+      return json({ ok: true })
+    }
     if (intent === 'dispute') {
       await sql`INSERT INTO pending_events (shop_id, kind, body) VALUES (${ctx.shop_id}, 'dispute',
-        ${JSON.stringify({ cid: ctx.cid, text: m.text.slice(0, 500) })}::jsonb)`
+        ${JSON.stringify({ cid: ctx.cid, text: text.slice(0, 500) })}::jsonb)`
       await reply(t.dispute(shop))
       return json({ ok: true })
     }

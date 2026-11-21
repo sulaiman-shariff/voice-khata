@@ -1,6 +1,7 @@
+import { Check, CircleAlert, Clock, RotateCw, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
+import { PageLoading, PageMessage, PageShell } from './PageShell'
 
 interface LinkData {
   shop: string
@@ -88,7 +89,7 @@ const T: Record<string, Strings> = {
   },
 }
 
-export function formatRupees(paise: number): string {
+function formatRupees(paise: number): string {
   return '₹' + (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })
 }
 
@@ -135,37 +136,37 @@ export default function ConfirmPage({ token }: { token: string }) {
     }
   }
 
-  const msg = (s: string) => <p className="text-center text-lg text-muted-foreground">{s}</p>
+  const fmtDay = (d: LinkData) => new Date(d.day + 'T00:00:00').toLocaleDateString(lang === 'en' ? 'en-IN' : `${T[lang] ? lang : 'en'}-IN`, { day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-5 py-8">
-      {view.k === 'loading' && msg(t.loading)}
-      {view.k === 'expired' && msg(t.expired)}
-      {view.k === 'error' && msg(t.error)}
+    <PageShell>
+      {view.k === 'loading' && <PageLoading label={t.loading} />}
+      {view.k === 'expired' && <PageMessage icon={Clock} title={t.expired} />}
+      {view.k === 'error' && (
+        <PageMessage icon={CircleAlert} tone="error" title={t.error}
+          action={<button onClick={() => location.reload()} aria-label={t.error} className="grid h-12 w-full place-items-center rounded-xl bg-card shadow-1 ring-1 ring-foreground/10"><RotateCw className="size-5" /></button>} />
+      )}
       {(view.k === 'ready' || view.k === 'answered') && (
-        <>
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="text-2xl font-semibold">{view.d.shop}</h1>
-            <p className="text-5xl font-bold tracking-tight">{formatRupees(view.d.paise)}</p>
-            <p className="text-lg">{view.d.direction === 'credit' ? t.credit : t.payment}</p>
-            <p className="text-sm text-muted-foreground">
-              {new Date(view.d.day + 'T00:00:00').toLocaleDateString(lang === 'en' ? 'en-IN' : `${T[lang] ? lang : 'en'}-IN`, { day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
+        <div className="flex flex-1 flex-col justify-center gap-6">
+          <div className="rounded-3xl bg-card p-6 text-center shadow-2 ring-1 ring-foreground/6">
+            <h1 className="text-lg font-semibold text-muted-foreground">{view.d.shop}</h1>
+            <p className={`num mt-2 text-5xl font-bold tracking-tight ${view.d.direction === 'credit' ? 'text-credit' : 'text-payment'}`}>{formatRupees(view.d.paise)}</p>
+            <p className="mt-1 text-lg font-medium">{view.d.direction === 'credit' ? t.credit : t.payment}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{fmtDay(view.d)}</p>
           </div>
           {view.k === 'ready' ? (
             <div className="flex flex-col gap-3">
               <p className="text-center text-xl font-medium">{t.question}</p>
-              <Button size="lg" className="h-16 text-lg" disabled={busy} onClick={() => answer(view.d, 'confirmed')}>{t.yes}</Button>
-              <Button size="lg" variant="outline" className="h-16 text-lg" disabled={busy} onClick={() => answer(view.d, 'disputed')}>{t.no}</Button>
-              {err && <p className="text-center text-sm text-destructive">{t.error}</p>}
+              <button disabled={busy} onClick={() => void answer(view.d, 'confirmed')} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-primary text-lg font-semibold text-primary-foreground shadow-2 active:scale-[.98] disabled:opacity-50"><Check className="size-5" />{t.yes}</button>
+              <button disabled={busy} onClick={() => void answer(view.d, 'disputed')} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-card text-lg font-semibold shadow-1 ring-1 ring-foreground/12 active:scale-[.98] disabled:opacity-50"><X className="size-5" />{t.no}</button>
+              {err && <p role="alert" className="text-center text-sm text-destructive">{t.error}</p>}
             </div>
           ) : (
-            <p className="rounded-xl bg-muted p-4 text-center text-lg">
-              {view.fresh ? (view.ans === 'confirmed' ? t.thanksYes : t.thanksNo) : t.done}
-            </p>
+            <PageMessage icon={view.ans === 'confirmed' ? Check : X} tone={view.fresh && view.ans === 'confirmed' ? 'ok' : 'muted'}
+              title={view.fresh ? (view.ans === 'confirmed' ? t.thanksYes : t.thanksNo) : t.done} />
           )}
-        </>
+        </div>
       )}
-    </main>
+    </PageShell>
   )
 }

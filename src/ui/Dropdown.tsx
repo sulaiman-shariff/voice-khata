@@ -31,11 +31,29 @@ export function Dropdown<T extends string>({ value, options, onChange, label, al
   const root = useRef<HTMLDivElement>(null)
   const id = useId()
   const current = options.find((o) => o.value === value)
+  const btn = useRef<HTMLButtonElement>(null)
+  const items = useRef<(HTMLButtonElement | null)[]>([])
+  const close = (refocus = false) => { setOpen(false); if (refocus) btn.current?.focus() }
+
+  // opening moves focus to the current option; arrows / Home / End move between options
+  useEffect(() => {
+    if (!open) return
+    const i = Math.max(0, options.findIndex((o) => o.value === value))
+    items.current[i]?.focus()
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const onListKey = (e: React.KeyboardEvent) => {
+    const i = items.current.findIndex((el) => el === document.activeElement)
+    const n = options.length
+    const next = e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : null
+    if (next === null) return
+    e.preventDefault()
+    items.current[(next + n) % n]?.focus()
+  }
 
   useEffect(() => {
     if (!open) return
     const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false) }
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(true) }
     document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', esc)
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
@@ -44,9 +62,10 @@ export function Dropdown<T extends string>({ value, options, onChange, label, al
   return (
     <div ref={root} className={cn('relative', className)}>
       <button
-        type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={id}
+        ref={btn} type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className={cn('flex h-11 w-full items-center justify-between gap-2 rounded-lg bg-card text-sm font-semibold ring-1 ring-foreground/15 active:scale-[.98]', compact ? 'px-2.5' : 'px-3')}
+        onKeyDown={(e) => { if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !open) { e.preventDefault(); setOpen(true) } }}
+        className={cn('flex h-11 w-full items-center justify-between gap-2 rounded-xl bg-card text-sm font-semibold shadow-1 ring-1 ring-foreground/10 active:scale-[.98]', compact ? 'px-2.5' : 'px-3')}
       >
         {button ?? (
           <span className="flex min-w-0 items-center gap-2">
@@ -58,17 +77,18 @@ export function Dropdown<T extends string>({ value, options, onChange, label, al
       </button>
       {open && (
         <ul
-          id={id} role="listbox" aria-label={label}
+          id={id} role="listbox" aria-label={label} onKeyDown={onListKey}
           className={cn(
-            'absolute top-full z-50 mt-1.5 max-h-[60dvh] min-w-full overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-xl ring-1 ring-foreground/10',
+            'absolute top-full z-50 mt-1.5 max-h-[60dvh] min-w-full origin-top overflow-y-auto rounded-xl bg-popover p-1 text-popover-foreground shadow-3 ring-1 ring-foreground/10 animate-in fade-in zoom-in-95 duration-150',
             align === 'right' ? 'right-0' : 'left-0', panelClassName,
           )}
         >
-          {options.map((o) => (
+          {options.map((o, i) => (
             <li key={o.value} role="option" aria-selected={o.value === value}>
               <button
-                type="button" onClick={() => { onChange(o.value); setOpen(false) }}
-                className={cn('flex min-h-11 w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm hover:bg-muted', o.value === value && 'bg-muted font-semibold')}
+                ref={(el) => { items.current[i] = el }}
+                type="button" onClick={() => { onChange(o.value); close(true) }}
+                className={cn('flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted focus-visible:bg-muted', o.value === value && 'bg-muted font-semibold')}
               >
                 {o.swatch && <Swatch colors={o.swatch} />}
                 <span className="min-w-0 flex-1">
