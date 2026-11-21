@@ -17,7 +17,7 @@ import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
 import { CustomerSheet, PrivacySheet, SettingsSheet, remindLink } from '@/ui/Sheets'
-import { ui } from '@/ui/strings'
+import { AUTO_LANG, ui } from '@/ui/strings'
 
 const ConfirmPage = lazy(() => import('@/pages/ConfirmPage'))
 const backup = createBackupClient()
@@ -121,7 +121,7 @@ function Home({ store }: { store: KhataStore }) {
     voice.current = v
     setOn(true)
     try {
-      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll })
+      await v.start({ lang, auto: store.settings.autoLang !== false, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll })
       if (!store.settings.firstRunDone) void store.updateSettings({ firstRunDone: true })
     } catch {
       voice.current = null
@@ -161,7 +161,7 @@ function Home({ store }: { store: KhataStore }) {
     return () => void lock?.release()
   }, [on])
 
-  if (!settings.lang) return <Onboarding onPick={(l) => void store.updateSettings({ lang: l }).then(() => start(l))} />
+  if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto }).then(() => start(l))} />
 
   const day = daySummary(state, today())
   const all = state.order.map((id) => state.entries.get(id)!)
@@ -185,7 +185,7 @@ function Home({ store }: { store: KhataStore }) {
           <div className="truncate font-bold leading-tight">{settings.shopName}</div>
           <div className="text-xs text-muted-foreground">KhataBhai · AI</div>
         </div>
-        <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-11 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{LANG_NAME[settings.lang]}</button>
+        <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-11 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{settings.autoLang !== false ? `${AUTO_LANG[settings.lang]} · ${LANG_NAME[settings.lang]}` : LANG_NAME[settings.lang]}</button>
         <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
         <button aria-label={t.settings} onClick={() => setSheet('settings')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
       </header>
@@ -333,7 +333,17 @@ function Stat({ label, value, className, tint }: { label: string; value: string;
   )
 }
 
-function Onboarding({ onPick }: { onPick: (l: Lang) => void }) {
+/** Starting language for auto mode: the phone's own language when we speak it, else Hindi. */
+function phoneLang(): Lang {
+  try {
+    const l = (navigator.languages ?? [navigator.language]).map((x) => x.slice(0, 2)).find((x) => (LANGS as readonly string[]).includes(x) && x !== 'en')
+    return (l as Lang | undefined) ?? 'hi'
+  } catch {
+    return 'hi'
+  }
+}
+
+function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => void }) {
   const sample = useMemo(() => ['रमेश का 340 उधार', 'ರಮೇಶ್ 340 ಸಾಲ', 'ரமேஷ் 340 கடன்', 'రమేష్ 340 అప్పు'], [])
   const [i, setI] = useState(0)
   useEffect(() => { const id = setInterval(() => setI((x) => (x + 1) % sample.length), 1800); return () => clearInterval(id) }, [sample])
@@ -345,9 +355,14 @@ function Onboarding({ onPick }: { onPick: (l: Lang) => void }) {
         <div key={i} className="stamp">“{sample[i]}”</div>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">Bolo, khata likh jaayega. An AI assistant · data stays on your phone.</p>
-      <div className="mt-8 grid flex-1 grid-cols-2 content-start gap-2.5">
+      <button onClick={() => onPick(phoneLang(), true)}
+        className="mt-8 rounded-2xl bg-primary px-4 py-5 text-left text-primary-foreground shadow-sm active:scale-[.98]">
+        <div className="text-xl font-bold">Auto · कोई भी भाषा</div>
+        <div className="mt-0.5 text-sm opacity-90">Speak any language — replies in the same one</div>
+      </button>
+      <div className="mt-3 grid flex-1 grid-cols-2 content-start gap-2.5">
         {LANGS.map((l) => (
-          <button key={l} onClick={() => onPick(l)}
+          <button key={l} onClick={() => onPick(l, false)}
             className={cn('rounded-2xl bg-card py-5 text-xl font-semibold shadow-sm ring-1 ring-black/10 active:scale-[.97]', ['hi', 'kn', 'ta', 'te'].includes(l) && 'ring-primary/40')}>
             {LANG_NAME[l]}
           </button>

@@ -24,7 +24,7 @@ export interface Persistence {
 }
 
 export const defaultSettings = (): Settings => ({
-  lang: null, shopName: 'Meri Dukaan', firstRunDone: false, handsFree: true, showLatency: false, fastSpeech: false, readBackAll: false,
+  lang: null, autoLang: true, shopName: 'Meri Dukaan', firstRunDone: false, handsFree: true, showLatency: false, fastSpeech: false, readBackAll: false,
 })
 
 // ------------------------------------------------------------------ memory persistence (tests)

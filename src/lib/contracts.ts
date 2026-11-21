@@ -8,7 +8,9 @@ import type { Lang } from '../../shared/replies.js'
 
 // ------------------------------------------------------------------ store (src/lib/store.ts)
 export interface Settings {
-  lang: Lang | null // null until the language tile is picked
+  lang: Lang | null // null until the language tile is picked; with autoLang, the language last spoken
+  /** auto language (default): listen for any supported language, reply in the one just spoken */
+  autoLang?: boolean
   shopName: string
   firstRunDone: boolean // AI disclosure already spoken
   handsFree: boolean // true: open mic with server end-of-turn; false: push-to-talk only
@@ -86,7 +88,7 @@ export interface VoiceEvents {
 
 export interface VoiceClient {
   /** Ask mic permission + open the socket. Must be called from a user gesture (audio unlock). */
-  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean; readBackAll?: boolean }): Promise<void>
+  start(opts: { lang: Lang; auto?: boolean; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean; readBackAll?: boolean }): Promise<void>
   stop(): void
   /** Push-to-talk (works in both modes). */
   pttDown(): void

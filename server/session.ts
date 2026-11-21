@@ -11,7 +11,7 @@ import { type Direction, type EntryIntent, type Intent, dangling, directionAnswe
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, guardReply, langFromLocale, say, sayMore, stripTags } from '../shared/replies.js'
+import { type Lang, LANGS, LOCALE, guardReply, langFromLocale, say, sayMore, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { type Logger, nullLogger } from './log.js'
 import type { LlmContext, LlmReading } from './parse/llm.js'
@@ -76,6 +76,9 @@ const UTT_AUDIO_MAX = 20 * 16000 * 2
 const STT_REFRESH_MS = 14 * 60_000
 /** How long an unreadable turn waits for Prisma REST to hear it in another language. */
 const RESCUE_WAIT_MS = 1500
+/** Words Marathi uses and Hindi does not: indic-auto tags Marathi speech hi-IN (same script). */
+const MARATHI_ONLY = new Set(['आहे', 'आहेत', 'नाही', 'दिले', 'दिला', 'घेतले', 'घेतला', 'केले', 'केला', 'झाले', 'झाला', 'होय', 'बरोबर', 'नको', 'उद्या', 'काल', 'परवा', 'शंभर', 'पाचशे', 'रुपयांची', 'सगळे', 'द्या', 'लिहा'])
+export const looksMarathi = (text: string): boolean => text.split(/[\s,.;:!?।]+/).some((w) => MARATHI_ONLY.has(w))
 /** How long a noisy turn waits for the second reading before going on without it. */
 export const SECOND_READ_WAIT_MS = 1200
 const minSnr = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b))
@@ -140,6 +143,9 @@ export class Session {
   }
   private ptt = false
   private speed: 0.8 | 1 | 1.2 = 1
+  /** auto language: the stream listens with indic-auto, replies follow each turn's language */
+  private auto = false
+  private warmedAll = false
   /** read every saved entry back in full instead of a short ack (Settings) */
   private readBackAll = false
   /** when the "heard you" cue went out for the current utterance */
@@ -201,10 +207,11 @@ export class Session {
     switch (msg.type) {
       case 'hello':
         this.log.info('hello', {
-          lang: msg.lang, ptt: msg.ptt, speed: msg.speed ?? 1, readBack: !!msg.readBack, firstRun: msg.firstRun,
+          lang: msg.lang, auto: !!msg.auto, ptt: msg.ptt, speed: msg.speed ?? 1, readBack: !!msg.readBack, firstRun: msg.firstRun,
           customers: msg.snapshot.customers.length, todayEntries: msg.snapshot.today.entries,
         })
         this.lang = msg.lang
+        this.auto = msg.auto === true
         this.snap = msg.snapshot
         this.snap.recent ??= []
         this.ptt = msg.ptt
@@ -229,7 +236,7 @@ export class Session {
         this.log.debug('snapshot', { customers: msg.snapshot.customers.length, todayEntries: msg.snapshot.today.entries })
         this.snap = msg.snapshot
         this.snap.recent ??= []
-        this.stt?.setKeyterms(this.keyterms())
+        this.stt?.setKeyterms(this.sttKeyterms())
         break
       case 'ptt_start':
         this.log.debug('ptt_start')
@@ -283,20 +290,46 @@ export class Session {
   private warmPhrases() {
     const R = say(this.lang)
     this.deps.warm?.([R.ack(), R.didNotCatch()], LOCALE[this.lang], this.speed)
+    // auto language: the first reply after a switch is usually the short ack; have it ready in every
+    // language (the phrase cache is per server instance, so only the first session pays), a little
+    // later so it never competes with this session's first reply
+    if (this.auto && !this.warmedAll) {
+      this.warmedAll = true
+      const t = setTimeout(() => {
+        for (const l of LANGS) if (l !== this.lang && !this.closed) this.deps.warm?.([say(l).ack(), say(l).didNotCatch()], LOCALE[l], this.speed)
+      }, 2500)
+      t.unref?.()
+    }
   }
 
   private keyterms(): string[] {
     return this.snap.customers.flatMap((c) => [c.name, ...c.aliases]).slice(0, 200)
   }
 
+  /**
+   * Names biasing the realtime stream. With indic-auto, a name in an Indic script pulls detection
+   * to that script's language (Kannada, Tamil and Telugu speech came back as Hindi with Devanagari
+   * names as keyterms: eval/probe_gnani6.ts --headers), so only Latin-script names are sent; our
+   * own cross-script name matching still finds रमेश from "Ramesh" or ರಮೇಶ್.
+   */
+  private sttKeyterms(): string[] {
+    const all = this.keyterms()
+    return this.auto ? all.filter((k) => /^[ -~]+$/.test(k)) : all
+  }
+
+  /** Prisma realtime takes one locale, or indic-auto (detects per utterance, same latency: eval/probe_gnani6.ts). */
+  private sttLocale(): string {
+    return this.auto ? 'indic-auto' : LOCALE[this.lang]
+  }
+
   private openStt(reason = 'hello') {
-    this.log.info('stt_open', { reason, locale: LOCALE[this.lang], keyterms: this.keyterms().length })
+    this.log.info('stt_open', { reason, locale: this.sttLocale(), keyterms: this.sttKeyterms().length })
     const old = this.stt
     this.stt = null
     old?.close()
     this.sttOpenedAt = this.now()
     const t0 = this.now()
-    const stream: SttLike = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
+    const stream: SttLike = this.deps.openStt(this.sttLocale(), this.sttKeyterms(), {
       onOpen: () => this.log.info('stt_ready', { reason, ms: this.now() - t0 }),
       onSpeechStart: () => {
         if (this.isSpeaking() && this.speaking && !this.speaking.ducked) {
@@ -551,12 +584,13 @@ export class Session {
     const r = await read
     if (!r?.lang || !r.text.trim()) return null
     const lang = langFromLocale(r.lang)
-    if (lang === this.lang || LOCALE[lang] !== r.lang) return null
+    // a locked stream already heard this language; an auto stream may have used the wrong script
+    if ((lang === this.lang && !this.auto) || LOCALE[lang] !== r.lang) return null
     const intent = parseFast(r.text)
     if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return null
     if (intent.type === 'entries' && intent.entries.some((e) => !e.direction && !e.promise)) return null // no better than what we had
     this.log.info('language_rescue', { from: this.lang, to: lang, text: r.text })
-    this.switchLang(lang)
+    if (lang !== this.lang) this.switchLang(lang)
     this.deps.send({ type: 'final', text: r.text })
     return { text: r.text, intent }
   }
@@ -565,7 +599,7 @@ export class Session {
   private switchLang(lang: Lang) {
     this.log.info('language_switch', { from: this.lang, to: lang })
     this.lang = lang
-    this.stt?.setLanguage?.(LOCALE[lang])
+    if (!this.auto) this.stt?.setLanguage?.(LOCALE[lang]) // an indic-auto stream keeps listening for every language
     this.deps.send({ type: 'lang', lang })
     this.warmPhrases()
   }
@@ -575,13 +609,28 @@ export class Session {
    * Never on English (Hinglish code-mixing is normal) and never Hindi <-> Marathi (same script;
    * the docs warn short clips are tagged hi-IN).
    */
-  private followDetectedLang(detected: string | undefined, intent: Intent) {
+  private followDetectedLang(detected: string | undefined, intent: Intent, text = '') {
     if (!detected) return
+    if (this.auto) return this.followAuto(detected, intent, text)
     const lang = langFromLocale(detected)
     if (LOCALE[lang] !== detected || lang === this.lang || lang === 'en') return
     if ((lang === 'hi' && this.lang === 'mr') || (lang === 'mr' && this.lang === 'hi')) return
     if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return
     this.switchLang(lang)
+  }
+
+  /**
+   * Auto language: reply in the language of what was just said, in this same turn (no extra
+   * latency). English counts here (indic-auto writes Hinglish in Devanagari tagged hi-IN, so an
+   * en-IN tag means English). Not on a bare yes/no or an unreadable turn, and Marathi tagged
+   * hi-IN (same script; indic-auto does this) stays Marathi.
+   */
+  private followAuto(detected: string, intent: Intent, text: string) {
+    let lang = langFromLocale(detected)
+    if (LOCALE[lang] !== detected) return
+    if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return
+    if (lang === 'hi' && (this.lang === 'mr' || looksMarathi(text))) lang = 'mr'
+    if (lang !== this.lang) this.switchLang(lang)
   }
 
   private dispatchFinal(text: string, t: TurnTiming) {
@@ -680,7 +729,7 @@ export class Session {
     if (rescue && !this.pending && Session.rescuable(intent, text)) {
       const rescued = await this.languageRescue(rescue)
       if (rescued) ({ text, intent } = rescued)
-    } else if (!this.pending) this.followDetectedLang(t?.lang, intent)
+    } else if (!this.pending) this.followDetectedLang(t?.lang, intent, text)
     const parseMs = this.now() - t0
     this.secondAmounts = second ? await second : null
 
@@ -1606,7 +1655,7 @@ export class Session {
       case 'add_customer':
         if (s.customers.some((x) => x.cid === op.cid)) break
         s.customers.push({ cid: op.cid, name: op.name, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 0, typicalPaise: null })
-        this.stt?.setKeyterms(this.keyterms())
+        this.stt?.setKeyterms(this.sttKeyterms())
         break
       case 'entry': {
         const day = istDay(op.dayOffset)

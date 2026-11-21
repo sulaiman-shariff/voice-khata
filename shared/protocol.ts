@@ -57,6 +57,9 @@ export type LedgerOp =
 export type ClientMsg =
   | {
     type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2; readBack?: boolean
+    /** auto language: Prisma listens with indic-auto and replies follow the language just spoken
+     *  (`lang` is then only the starting/last language) */
+    auto?: boolean
     /** the previous session's state (open question, conversation), from its last turn_done */
     resume?: string
     /** a turn whose result never arrived because the connection dropped: handle it again */

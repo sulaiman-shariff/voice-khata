@@ -14,7 +14,8 @@ function snap(customers: SnapCustomer[] = []): Snapshot {
   }
 }
 
-function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Partial<LlmReading>; llmMs?: number; speakMs?: number; transcribe2?: (pcm: Buffer) => Promise<{ text: string; lang?: string }>; readBack?: boolean } = {}) {
+function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Partial<LlmReading>; llmMs?: number; speakMs?: number; transcribe2?: (pcm: Buffer) => Promise<{ text: string; lang?: string }>; readBack?: boolean; auto?: boolean; lang?: 'hi' | 'kn' | 'mr' } = {}) {
+  const locales: string[] = []
   const warmed: string[][] = []
   const out: ServerMsg[] = []
   const said: string[] = []
@@ -25,9 +26,10 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
   let ids = 0
   const aborted: boolean[] = []
   const s = new Session({
-    openStt: (_l, _k, c) => {
+    openStt: (l, _k, c) => {
       cb = c
-      return { send: () => {}, commit: () => commits++, setKeyterms: () => {}, close: () => {} }
+      locales.push(l)
+      return { send: () => {}, commit: () => commits++, setKeyterms: () => {}, close: () => {}, setLanguage: (x: string) => locales.push(`set:${x}`) }
     },
     speak: async (text, _l, onAudio, signal) => {
       said.push(text)
@@ -50,16 +52,16 @@ function harness(customers: SnapCustomer[] = [], opts: { llm?: (t: string) => Pa
     now: () => clock,
     newId: () => `id${++ids}`,
   })
-  s.onClient({ type: 'hello', lang: 'hi', snapshot: snap(customers), firstRun: false, ptt: false, readBack: opts.readBack })
-  const turn = async (text: string, noisy = false) => {
+  s.onClient({ type: 'hello', lang: opts.lang ?? 'hi', snapshot: snap(customers), firstRun: false, ptt: false, readBack: opts.readBack, auto: opts.auto })
+  const turn = async (text: string, noisy = false, lang?: string) => {
     said.length = 0
-    await s.handleText(text, { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: noisy ? 3 : 25, noisy, pcm: Buffer.alloc(32000) }, 'voice')
+    await s.handleText(text, { speechEnd: 0, commitAt: null, finalAt: 0, early: false, snrDb: noisy ? 3 : 25, noisy, pcm: Buffer.alloc(32000), lang }, 'voice')
     await s.idle()
   }
   const ops = () => out.filter((m): m is Extract<ServerMsg, { type: 'ops' }> => m.type === 'ops').flatMap((m) => m.ops)
   const entries = () => ops().filter((o): o is Extract<LedgerOp, { op: 'entry' }> => o.op === 'entry')
   return {
-    s, out, said, ops, entries, turn, aborted, warmed,
+    s, out, said, ops, entries, turn, aborted, warmed, locales,
     get commits() { return commits }, get audio() { return audio }, get cb() { return cb },
     tick: (ms: number) => (clock += ms),
   }
@@ -333,6 +335,41 @@ function feed(h: ReturnType<typeof harness>, buf: Buffer) {
     h.tick(32)
   }
 }
+
+describe('auto language', () => {
+  it('listens with indic-auto and replies in the language just spoken, same turn', async () => {
+    const h = harness([cust('r', 'Ramesh')], { auto: true })
+    expect(h.locales).toEqual(['indic-auto'])
+    await h.turn('ರಮೇಶ್‌ಗೆ 500 ರೂಪಾಯಿ ಸಾಲ ಕೊಟ್ಟೆ', false, 'kn-IN')
+    expect(h.entries()[0]).toMatchObject({ cid: 'r', paise: 50000, direction: 'credit' })
+    expect(h.out.some((m) => m.type === 'lang' && m.lang === 'kn')).toBe(true)
+    expect(h.said.join(' ')).toMatch(/[ಀ-೿]/) // the reply is in Kannada
+    expect(h.locales).toEqual(['indic-auto']) // the stream is not re-locked to one language
+    await h.turn('I gave 200 to Ramesh', false, 'en-IN')
+    expect(h.out.filter((m) => m.type === 'lang').at(-1)).toMatchObject({ lang: 'en' })
+  })
+
+  it('a bare yes, or unreadable talk, never switches the language', async () => {
+    const h = harness([], { auto: true })
+    await h.turn('Pinky ka 200 udhaar', false, 'hi-IN')
+    await h.turn('yes', false, 'en-IN')
+    expect(h.entries()).toHaveLength(1)
+    expect(h.out.some((m) => m.type === 'lang')).toBe(false)
+  })
+
+  it('Marathi tagged hi-IN by indic-auto stays Marathi', async () => {
+    const h = harness([cust('r', 'Ramesh')], { auto: true })
+    await h.turn('रमेशला 500 रुपये उधार दिले', false, 'hi-IN')
+    expect(h.out.filter((m) => m.type === 'lang').at(-1)).toMatchObject({ lang: 'mr' })
+  })
+
+  it('a locked language keeps the old rules: no switch on English', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    expect(h.locales).toEqual(['hi-IN'])
+    await h.turn('I gave 200 to Ramesh', false, 'en-IN')
+    expect(h.out.some((m) => m.type === 'lang')).toBe(false)
+  })
+})
 
 describe('end of turn', () => {
   it('commits early when the words are complete and the speaker pauses', () => {

@@ -45,7 +45,7 @@ const S = (...w: string[]): Set<string> => new Set(w.map((x) => fold(x)))
 const CREDIT = S('udhaar', 'udhar', 'udhari', 'उधार', 'उधारी', 'baaki', 'baki', 'बाकी', 'बाक़ी', 'bakaya', 'बकाया',
   'khate', 'खाते', 'khata', 'खाता', 'chadha', 'चढ़ा', 'चढ़ाओ', 'credit', 'owes', 'owe', 'due', 'loan',
   'put', 'write', 'note', 'record', 'enter', 'tab', 'account', 'lent', 'lend', 'sold', 'borrowed', 'borrow', 'bought', 'buy', 'purchased', 'spent', 'tab', 'outstanding', 'unpaid', 'dues', 'add', 'added',
-  'ಸಾಲ', 'ಉದ್ರಿ', 'ಬಾಕಿ', 'saala', 'sala', 'udri', 'கடன்', 'கடனுக்கு', 'பாக்கி', 'kadan', 'అప్పు', 'బాకీ', 'ఉద్దెర', 'appu',
+  'ಸಾಲ', 'ಉದ್ರಿ', 'ಬಾಕಿ', 'saala', 'sala', 'udri', 'கடன்', 'கடனுக்கு', 'பாக்கி', 'kadan', 'అప్పు', 'బాకీ', 'ఉద్దెర', 'appu', 'అప్పిచ్చాను', 'అప్పిచ్చా', 'అప్పుగా',
   'उधारी', 'ধার', 'বাকি', 'ઉધાર', 'બાકી', 'ਉਧਾਰ', 'ਬਾਕੀ', 'കടം', 'ബാക്കി', 'उधार')
 const PAYMENT = S('jama', 'जमा', 'chuka', 'चुका', 'chukaya', 'चुकाया', 'chukta', 'चुकता', 'wapas', 'वापस', 'vapas',
   'paid', 'pay', 'payment', 'returned', 'repaid', 'cleared', 'nakad', 'नकद', 'cash', 'bhar', 'भर', 'bhara', 'भरा',

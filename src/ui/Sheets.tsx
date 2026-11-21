@@ -9,7 +9,7 @@ import { clientLog } from '@/lib/log'
 import { cn } from '@/lib/utils'
 import { dayLabel, rs } from './format'
 import { Passbook } from './Ledger'
-import type { UiStrings } from './strings'
+import { AUTO_LANG, type UiStrings } from './strings'
 
 const NOTES_EN = [
   'Your khata is stored only on this phone, encrypted (AES-256). Each customer has their own key.',
@@ -164,9 +164,13 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
             <Switch checked={st.showLatency} onCheckedChange={(v) => void store.updateSettings({ showLatency: v })} />
           </label>
           <div role="group" aria-label={t.language} className="grid grid-cols-5 gap-1.5">
+            <button aria-pressed={st.autoLang !== false} onClick={() => void store.updateSettings({ autoLang: true }).then(() => onChanged({ lang: st.lang ?? 'hi' }))}
+              className={cn('col-span-5 min-h-11 rounded-xl py-2 text-sm font-semibold ring-1 ring-black/10', st.autoLang !== false && 'bg-primary text-primary-foreground')}>
+              {AUTO_LANG[st.lang ?? 'hi']} · Auto
+            </button>
             {LANGS.map((l) => (
-              <button key={l} aria-pressed={st.lang === l} onClick={() => void store.updateSettings({ lang: l }).then(() => onChanged({ lang: l }))}
-                className={cn('min-h-11 rounded-xl py-2 text-sm ring-1 ring-black/10', st.lang === l && 'bg-primary text-primary-foreground')}>
+              <button key={l} aria-pressed={st.autoLang === false && st.lang === l} onClick={() => void store.updateSettings({ lang: l, autoLang: false }).then(() => onChanged({ lang: l }))}
+                className={cn('min-h-11 rounded-xl py-2 text-sm ring-1 ring-black/10', st.autoLang === false && st.lang === l && 'bg-primary text-primary-foreground')}>
                 {LANG_NAME[l]}
               </button>
             ))}

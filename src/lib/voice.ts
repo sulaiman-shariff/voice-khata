@@ -25,6 +25,7 @@ const RESUME_TIMEOUT_MS = 1000
 
 interface StartOpts {
   lang: Lang
+  auto?: boolean
   snapshot: () => Snapshot
   firstRun: boolean
   handsFree: boolean
@@ -117,7 +118,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const again = resend
     resend = null
     sendTo(sock, {
-      type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree,
+      type: 'hello', lang: opts.lang, auto: !!opts.auto, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree,
       speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll, resume, ...(again ? { resend: again } : {}),
     })
     opts.firstRun = false // the disclosure plays once, not on every reconnect

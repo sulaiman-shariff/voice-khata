@@ -40,6 +40,8 @@ const CASES: [string, Exp[]][] = [
   ['We sold 250 to Geeta', [{ name: 'geeta', amount: 250, dir: 'credit' }]],
   ['Ramesh gave me 200', [{ name: 'ramesh', amount: 200, dir: 'payment' }]],
   ['Maine Ramesh ko 200 diye', [{ name: 'Ramesh', amount: 200, dir: 'credit' }]],
+  // Telugu "appu + ichchaanu" heard as one word (indic-auto)
+  ['రమేష్ కి 150 రూపాయలు అప్పిచ్చాను.', [{ name: 'రమేష్', amount: 150, dir: 'credit' }]],
   // multi-clause
   ['Ramesh ka 340 udhaar, kal 200 diya tha', [
     { name: 'Ramesh', amount: 340, dir: 'credit', day: 0 },

@@ -27,3 +27,8 @@ const T = Object.fromEntries(
 ) as { [K in keyof typeof BASE]: (typeof BASE)[K] & (typeof EXTRA)[K] & (typeof EXTRA2)[K] }
 export type UiStrings = (typeof T)['en']
 export const ui = (l: Lang | null): UiStrings => (l && l in T ? T[l as keyof typeof T] : T.hi)
+
+/** The auto-language choice: listens for any language, replies in the one just spoken. */
+export const AUTO_LANG: Record<Lang, string> = {
+  hi: 'ऑटो', en: 'Auto', kn: 'ಆಟೋ', ta: 'ஆட்டோ', te: 'ఆటో', ml: 'ഓട്ടോ', mr: 'ऑटो', bn: 'অটো', gu: 'ઓટો', pa: 'ਆਟੋ',
+}
