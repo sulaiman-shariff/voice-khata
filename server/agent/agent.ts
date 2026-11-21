@@ -48,7 +48,7 @@ Rules:
 - Pick tools only from the list given.`
 
 /** Build the user turn: every transcript, then the app state, as plain labelled lines. */
-function userTurn(ctx: AgentContext): string {
+export function userTurn(ctx: AgentContext): string {
   return [
     `lang: ${ctx.lang}`,
     'heard:',
