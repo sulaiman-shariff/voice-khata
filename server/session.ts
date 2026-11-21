@@ -10,7 +10,7 @@
 import { type Intent, mentionsSettle, mentionsMoney, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, ServerMsg, SettingMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
+import { type Lang, LOCALE, eraseWord, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { isSleepWord, spotWake } from '../shared/wake.js'
 import { Attention } from './attention.js'
@@ -286,6 +286,11 @@ export class Session {
       case 'answer':
         this.log.info('input', { kind: 'answer', text: msg.text })
         if (msg.text.length <= 60) this.enqueue(() => this.typedTurn(msg.text))
+        break
+      case 'force':
+        // "Save anyway" on a not-an-entry line: addressed to the app, never dropped as talk to someone else
+        this.log.info('input', { kind: 'force', text: msg.text })
+        if (msg.text.trim() && msg.text.length <= 2000) this.enqueue(() => this.handleText(msg.text.trim(), null, 'tap', true))
         break
       case 'barge':
         this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
@@ -577,10 +582,14 @@ export class Session {
     text: string,
     t: TurnTiming | null,
     _src: 'voice' | 'tap' | 'resend',
+    /** "Save anyway": handled as addressed to the app; the model may not answer not_for_me */
+    forced = false,
   ): Promise<void> {
     const t0 = this.now()
     this.ledger.turnSrc = _src
     const heard = t?.heard?.length ? t.heard : [{ locale: LOCALE[this.lang], text }]
+    // "Save anyway" is a new instruction to the app, never the answer to a question left open
+    if (forced) this.pending = null
     // a question left hanging (shopkeeper turned to a customer) expires instead of catching a later "haan"
     if (this.pending && this.now() - this.ledger.pendingAt > PENDING_TTL_MS) {
       this.log.info('pending_expired', { kind: this.pending.kind, ageMs: this.now() - this.ledger.pendingAt })
@@ -603,7 +612,8 @@ export class Session {
       if (this.pending) {
         if (this.ledger.canAnswerFast(text, intent)) reply = this.ledger.answerPending(text, intent, meta)
         else ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
-      } else if (intent.type === 'entries' && this.isInstant(intent)) reply = this.dispatch(intent, text, meta)
+      } else if (forced) ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
+      else if (intent.type === 'entries' && this.isInstant(intent)) reply = this.dispatch(intent, text, meta)
       // "Suresh wali entry hata do" names an older entry: only the agent can pick it
       else if (intent.type === 'undo' && !this.ledger.candidates(text).length) reply = this.dispatch(intent, text, meta)
       else if (intent.type === 'yes' || intent.type === 'no') reply = null // nothing pending: a stray haan/nahi
@@ -612,6 +622,8 @@ export class Session {
     } finally {
       this.ledger.heardAmounts = []
     }
+    // forced: the shopkeeper said this is for the app, so it is never answered with silence
+    if (forced && (notForMe || !reply)) { notForMe = false; reply = { parts: [say(this.lang).didNotCatch()], ops: [] } }
     if (!this.pending) this.followDetectedLang(t?.lang, intent)
     const parseMs = this.now() - t0
     // a turn lost to a dropped connection, handled again: say so, then the full read-back
@@ -633,6 +645,7 @@ export class Session {
       extra.push(reply.setting)
     }
     if (reply?.ready?.kind === 'whatsapp' && reply.ready.cid && reply.ready.text) extra.push({ type: 'remind', cid: reply.ready.cid, text: reply.ready.text })
+    else if (reply?.ready) extra.push({ type: 'ready', ...reply.ready })
     for (const m of extra) this.deps.send(m)
     this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
 
@@ -690,6 +703,7 @@ export class Session {
     if (_src === 'voice' && (notForMe || (!reply && !this.pending))) this.deps.send({ type: 'not_entry', text })
     this.deps.send({ type: 'turn_done', resume: this.ledger.exportState() })
   }
+
 
   // ------------------------------------------------------------------ continuity across reconnects
   private remember(line: string) {
@@ -851,8 +865,8 @@ export class Session {
         this.deps.send({ type: 'show', view: 'privacy' })
         return { parts: [R.privacy()], ops: [] }
       case 'delete_all':
-        this.pending = { kind: 'delete' }
-        return { parts: [R.deleteAsk()], ops: [] }
+        this.pending = { kind: 'delete', requireType: eraseWord(this.lang) }
+        return { parts: [R.eraseType(eraseWord(this.lang))], ops: [] }
       case 'unknown':
         return null // the agent reads anything the fast parse cannot
     }

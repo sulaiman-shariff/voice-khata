@@ -44,7 +44,7 @@ describe('agent tool replies', () => {
   const KEYS = [
     'savedWithBalance', 'showCustomer', 'showDues', 'showHistory', 'showToday', 'searchResult', 'topDebtors', 'closed',
     'customerAdded', 'renamed', 'mergeAsk', 'merged', 'phoneSet', 'reminderReady', 'statementReady', 'noConsent',
-    'languageSet', 'readBackSet', 'speedSet', 'shopNameSet', 'privacyOpen', 'backupReady', 'eraseAsk', 'eraseTap',
+    'languageSet', 'readBackSet', 'speedSet', 'shopNameSet', 'privacyOpen', 'backupReady', 'eraseAsk', 'eraseType',
     'awakeHello', 'sleeping',
   ]
 
@@ -75,7 +75,7 @@ describe('agent tool replies', () => {
       S.mergeAsk('Ramesh', 'Rakesh'), S.merged('Ramesh', 'Rakesh'), S.phoneSet('Ramesh'), S.reminderReady('Ramesh'),
       S.statementReady('Ramesh'), S.noConsent('Ramesh'), S.languageSet('Tamil'), S.readBackSet(true), S.readBackSet(false),
       S.speedSet(true), S.speedSet(false), S.shopNameSet('Sharma Store'), S.privacyOpen(), S.backupReady(), S.eraseAsk(),
-      S.eraseTap(), S.awakeHello(), S.sleeping(),
+      S.eraseType('DELETE'), S.awakeHello(), S.sleeping(),
     ]
     for (const t of out) {
       expect(t).not.toMatch(/undefined|NaN|\$\{/)
