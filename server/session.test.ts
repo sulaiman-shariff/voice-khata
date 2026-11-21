@@ -87,12 +87,33 @@ describe('session dialogue', () => {
     expect(h.entries()[0]).toMatchObject({ cid: 'r', paise: 20000, direction: 'payment' })
   })
 
-  it('new customer is created and announced', async () => {
+  it('a heard new name is read back as a new customer before any account is opened', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.turn('Pinky ka 200 udhaar')
+    expect(h.ops()).toHaveLength(0)
+    expect(h.s.pending?.kind).toBe('confirm')
+    expect(h.said.join(' ')).toMatch(/नया ग्राहक Pinky/)
+    const view = h.out.filter((m) => m.type === 'pending').at(-1) as { pending: { newCustomer?: boolean } }
+    expect(view.pending.newCustomer).toBe(true)
+    await h.turn('haan')
     expect(h.ops()[0]).toEqual({ op: 'add_customer', cid: 'id1', name: 'Pinky' })
     expect(h.entries()[0]).toMatchObject({ cid: 'id1', paise: 20000 })
-    expect(h.said[0]).toMatch(/खाता खोला/)
+    expect(h.said.join(' ')).toMatch(/खाता खोला/)
+  })
+
+  it('"no" to a new customer opens nothing and writes nothing', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.turn('Pinky ka 200 udhaar')
+    await h.turn('nahi')
+    expect(h.ops()).toHaveLength(0)
+    expect(h.s.pending).toBeNull()
+  })
+
+  it('a typed new name is taken as written', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'text', text: 'Pinky ka 200 udhaar' })
+    await h.s.idle()
+    expect(h.ops()[0]).toMatchObject({ op: 'add_customer', name: 'Pinky' })
   })
 
   it('missing direction is asked, then saved from a one-word answer', async () => {
@@ -662,6 +683,8 @@ describe('name guard (cases from the 21 Nov production logs)', () => {
       llm: () => ({ intent: 'entries', sure: true, entries: [{ name: 'ಸುರೇಶ್ದು', amount: 300, direction: 'credit', day_offset: 0, promise: false }] }),
     })
     await h.turn('Sureshdu 300 rupees sala aite.')
+    expect(h.said.join(' ')).toMatch(/(नया ग्राहक|New customer) Suresh/)
+    await h.turn('yes')
     expect(h.ops().find((o) => o.op === 'add_customer')).toMatchObject({ name: 'Suresh' })
   })
 
@@ -697,6 +720,7 @@ describe('name guard (cases from the 21 Nov production logs)', () => {
   it('a new name that contains no known customer still opens an account', async () => {
     const h = harness([cust('s', 'Suresh')])
     await h.turn('Pinky ka 200 udhaar')
+    await h.turn('haan')
     expect(h.ops()[0]).toMatchObject({ op: 'add_customer', name: 'Pinky' })
   })
 
@@ -719,5 +743,92 @@ describe('new account names', () => {
     expect(newCustomerName('Indu')).toBe('Indu')
     expect(newCustomerName('Pandu')).toBe('Pandu')
     expect(newCustomerName('Pinky')).toBe('Pinky')
+  })
+})
+
+describe('one entry built across turns (21 Nov evening production logs)', () => {
+  const said = (h: ReturnType<typeof harness>) => h.said.join(' ')
+
+  it('"300 ಬರೀ" (write 300) never opens an account called ಬರೀ without a yes', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'kn'
+    await h.turn('300 ಬರೀ.')
+    await h.turn('ಸಾಲ')
+    expect(said(h)).toMatch(/ಹೊಸ ಗ್ರಾಹಕ ಬರೀ/)
+    await h.turn('ಇಲ್ಲ')
+    expect(h.ops()).toHaveLength(0)
+  })
+
+  it('"ಮಾಹಿ ಹೆಸರಿಂದ" asks how much; "300 ಬರೀ" fills the amount, not the name', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'kn'
+    await h.turn('ಮಾಹಿ ಹೆಸರಿಂದ.')
+    expect(h.s.pending?.kind).toBe('amount')
+    expect(said(h)).toMatch(/ಮಾಹಿ, ಎಷ್ಟು/)
+    await h.turn('300 ಬರೀ.')
+    expect(h.s.pending?.kind).toBe('direction')
+    expect(said(h)).toMatch(/^ಮಾಹಿ, 300/)
+    await h.turn('ಸಾಲ')
+    expect(said(h)).toMatch(/ಹೊಸ ಗ್ರಾಹಕ ಮಾಹಿ/)
+    await h.turn('ಹೌದು')
+    expect(h.ops().find((o) => o.op === 'add_customer')).toMatchObject({ name: 'ಮಾಹಿ' })
+    expect(h.entries()).toEqual([expect.objectContaining({ paise: 30000, direction: 'credit' })])
+  })
+
+  it('a known name alone asks how much, and the answer can carry credit/paid too', async () => {
+    const h = harness([cust('m', 'Mahi')])
+    h.s.lang = 'en'
+    await h.turn('Mahe')
+    expect(said(h)).toMatch(/Mahi, how much\?/)
+    await h.turn('300 credit')
+    await h.turn('yes') // "Mahe" was only close to Mahi: read back once
+    expect(h.entries()).toEqual([expect.objectContaining({ cid: 'm', paise: 30000, direction: 'credit' })])
+  })
+
+  it('an amount alone asks whose; a number word alone in chatter does not', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('One.')
+    expect(h.s.pending).toBeNull()
+    await h.turn('300')
+    expect(h.s.pending?.kind).toBe('name')
+  })
+
+  it('talk to someone else while a question is open keeps the question and says nothing', async () => {
+    const h = harness([cust('s', 'Suleiman')])
+    h.s.lang = 'en'
+    await h.turn('Suleiman 400.')
+    expect(h.s.pending?.kind).toBe('direction')
+    await h.turn('Should you take it upstairs for testing?')
+    await h.turn('Your')
+    expect(h.said).toHaveLength(0)
+    expect(h.s.pending?.kind).toBe('direction')
+    await h.turn('udhaar')
+    expect(h.entries()).toEqual([expect.objectContaining({ cid: 's', paise: 40000, direction: 'credit' })])
+  })
+
+  it('"Mahe Talk 300" is read back as the existing Mahi, never opened as "Mahe Talk"', async () => {
+    const h = harness([cust('m', 'Mahi')])
+    h.s.lang = 'en'
+    await h.turn('Mahe Talk 300.')
+    await h.turn('udhaar')
+    expect(said(h)).toMatch(/Mahi, 300 rupees on credit, correct\?/)
+    await h.turn('yes')
+    expect(h.ops().some((o) => o.op === 'add_customer')).toBe(false)
+    expect(h.entries()).toEqual([expect.objectContaining({ cid: 'm', paise: 30000 })])
+  })
+
+  it('the same line said twice in one turn is one entry', async () => {
+    const h = harness([cust('s', 'Suleiman')])
+    h.s.lang = 'en'
+    await h.turn('Suleiman 200 credit, Suleiman 200 credit.')
+    expect(h.entries()).toHaveLength(1)
+  })
+
+  it('chatter is marked as not an entry so the phone can show it was heard', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('This network issue, bro.')
+    expect(h.out.some((m) => m.type === 'not_entry')).toBe(true)
   })
 })

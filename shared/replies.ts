@@ -34,6 +34,10 @@ export interface Replies {
   savedPromise: (name: string, amt: number, dayOffset: number) => string
   newCustomer: (name: string) => string
   confirm: (name: string, amt: number, dir: Dir) => string
+  /** read-back before opening an account: a name not in the ledger is never written without a yes */
+  confirmNew: (name: string, amt: number, dir: Dir) => string
+  /** only a name was said: ask for the amount */
+  askAmount: (name: string) => string
   noisyConfirm: (name: string, amt: number, dir: Dir) => string
   confusable: (amt: number, alt: number) => string
   askName: (amt: number) => string
@@ -67,6 +71,8 @@ const HI: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'आज' : o === 1 ? 'कल' : o === 2 ? 'परसों' : `${o} दिन में`} ${r(a)} रुपये देंगे, याद रखूँगी।`,
   newCustomer: (n) => `${n} का नया खाता खोला।`,
   confirm: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}, सही है?`,
+  confirmNew: (n, a, d) => `नया ग्राहक ${n}: ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}, सही है?`,
+  askAmount: (n) => `${n}, कितने रुपये?`,
   noisyConfirm: (n, a, d) => `शोर ज़्यादा है। ${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}, सही है?`,
   confusable: (a, b) => `${r(a)} रुपये या ${r(b)} रुपये?`,
   askName: (a) => `${r(a)} रुपये किसके नाम पर लिखूँ?`,
@@ -100,6 +106,8 @@ const EN: Replies = {
   savedPromise: (n, a, o) => `${n} will pay ${r(a)} rupees ${o <= 0 ? 'today' : o === 1 ? 'tomorrow' : `in ${o} days`}. I will remember.`,
   newCustomer: (n) => `Opened a new account for ${n}.`,
   confirm: (n, a, d) => `${n}, ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}, correct?`,
+  confirmNew: (n, a, d) => `New customer ${n}: ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}, correct?`,
+  askAmount: (n) => `${n}, how much?`,
   noisyConfirm: (n, a, d) => `It is noisy. ${n}, ${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}, correct?`,
   confusable: (a, b) => `${r(a)} rupees or ${r(b)} rupees?`,
   askName: (a) => `Whose name should I write ${r(a)} rupees under?`,
@@ -133,6 +141,8 @@ const KN: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ಇವತ್ತು' : o === 1 ? 'ನಾಳೆ' : `${o} ದಿನದಲ್ಲಿ`} ${r(a)} ರೂಪಾಯಿ ಕೊಡುತ್ತಾರೆ, ನೆನಪಿಟ್ಟುಕೊಳ್ಳುತ್ತೇನೆ.`,
   newCustomer: (n) => `${n} ಅವರ ಹೊಸ ಖಾತೆ ತೆರೆದಿದ್ದೇನೆ.`,
   confirm: (n, a, d) => `${n}, ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}, ಸರಿನಾ?`,
+  confirmNew: (n, a, d) => `ಹೊಸ ಗ್ರಾಹಕ ${n}: ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}, ಸರಿನಾ?`,
+  askAmount: (n) => `${n}, ಎಷ್ಟು ರೂಪಾಯಿ?`,
   noisyConfirm: (n, a, d) => `ತುಂಬಾ ಗಲಾಟೆ ಇದೆ. ${n}, ${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}, ಸರಿನಾ?`,
   confusable: (a, b) => `${r(a)} ರೂಪಾಯಿನಾ ಅಥವಾ ${r(b)} ರೂಪಾಯಿನಾ?`,
   askName: (a) => `${r(a)} ರೂಪಾಯಿ ಯಾರ ಹೆಸರಿಗೆ ಬರೆಯಲಿ?`,
@@ -166,6 +176,8 @@ const TA: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'இன்று' : o === 1 ? 'நாளை' : `${o} நாளில்`} ${r(a)} ரூபாய் தருவார், நினைவில் வைக்கிறேன்.`,
   newCustomer: (n) => `${n} அவர்களுக்குப் புதிய கணக்கு திறந்தேன்.`,
   confirm: (n, a, d) => `${n}, ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'}, சரியா?`,
+  confirmNew: (n, a, d) => `புதிய வாடிக்கையாளர் ${n}: ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'}, சரியா?`,
+  askAmount: (n) => `${n}, எவ்வளவு ரூபாய்?`,
   noisyConfirm: (n, a, d) => `சத்தம் அதிகம். ${n}, ${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'}, சரியா?`,
   confusable: (a, b) => `${r(a)} ரூபாயா, ${r(b)} ரூபாயா?`,
   askName: (a) => `${r(a)} ரூபாய் யார் பெயரில் எழுதட்டும்?`,
@@ -199,6 +211,8 @@ const TE: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ఈరోజు' : o === 1 ? 'రేపు' : `${o} రోజుల్లో`} ${r(a)} రూపాయలు ఇస్తారు, గుర్తుంచుకుంటాను.`,
   newCustomer: (n) => `${n} గారికి కొత్త ఖాతా తెరిచాను.`,
   confirm: (n, a, d) => `${n}, ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'}, సరేనా?`,
+  confirmNew: (n, a, d) => `కొత్త కస్టమర్ ${n}: ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'}, సరేనా?`,
+  askAmount: (n) => `${n}, ఎన్ని రూపాయలు?`,
   noisyConfirm: (n, a, d) => `శబ్దం ఎక్కువగా ఉంది. ${n}, ${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'}, సరేనా?`,
   confusable: (a, b) => `${r(a)} రూపాయలా, ${r(b)} రూపాయలా?`,
   askName: (a) => `${r(a)} రూపాయలు ఎవరి పేరు మీద రాయాలి?`,
@@ -232,6 +246,8 @@ const ML: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ഇന്ന്' : o === 1 ? 'നാളെ' : `${o} ദിവസത്തിനുള്ളിൽ`} ${r(a)} രൂപ തരും, ഓർത്തുവെക്കാം.`,
   newCustomer: (n) => `${n} എന്നയാൾക്ക് പുതിയ കണക്ക് തുറന്നു.`,
   confirm: (n, a, d) => `${n}, ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'}, ശരിയാണോ?`,
+  confirmNew: (n, a, d) => `പുതിയ ഉപഭോക്താവ് ${n}: ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'}, ശരിയാണോ?`,
+  askAmount: (n) => `${n}, എത്ര രൂപ?`,
   noisyConfirm: (n, a, d) => `ശബ്ദം കൂടുതലാണ്. ${n}, ${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'}, ശരിയാണോ?`,
   confusable: (a, b) => `${r(a)} രൂപയോ ${r(b)} രൂപയോ?`,
   askName: (a) => `${r(a)} രൂപ ആരുടെ പേരിൽ എഴുതണം?`,
@@ -265,6 +281,8 @@ const MR: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'आज' : o === 1 ? 'उद्या' : `${o} दिवसांत`} ${r(a)} रुपये देतील, लक्षात ठेवते.`,
   newCustomer: (n) => `${n} यांचे नवीन खाते उघडले.`,
   confirm: (n, a, d) => `${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}, बरोबर?`,
+  confirmNew: (n, a, d) => `नवीन ग्राहक ${n}: ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}, बरोबर?`,
+  askAmount: (n) => `${n}, किती रुपये?`,
   noisyConfirm: (n, a, d) => `खूप गोंगाट आहे. ${n}, ${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}, बरोबर?`,
   confusable: (a, b) => `${r(a)} रुपये की ${r(b)} रुपये?`,
   askName: (a) => `${r(a)} रुपये कोणाच्या नावावर लिहू?`,
@@ -298,6 +316,8 @@ const BN: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'আজ' : o === 1 ? 'কাল' : `${o} দিনের মধ্যে`} ${r(a)} টাকা দেবেন, মনে রাখব।`,
   newCustomer: (n) => `${n}-এর নতুন খাতা খুললাম।`,
   confirm: (n, a, d) => `${n}, ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'}, ঠিক তো?`,
+  confirmNew: (n, a, d) => `নতুন খদ্দের ${n}: ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'}, ঠিক তো?`,
+  askAmount: (n) => `${n}, কত টাকা?`,
   noisyConfirm: (n, a, d) => `খুব আওয়াজ। ${n}, ${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'}, ঠিক তো?`,
   confusable: (a, b) => `${r(a)} টাকা না ${r(b)} টাকা?`,
   askName: (a) => `${r(a)} টাকা কার নামে লিখব?`,
@@ -331,6 +351,8 @@ const GU: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'આજે' : o === 1 ? 'કાલે' : `${o} દિવસમાં`} ${r(a)} રૂપિયા આપશે, યાદ રાખીશ.`,
   newCustomer: (n) => `${n}નું નવું ખાતું ખોલ્યું.`,
   confirm: (n, a, d) => `${n}, ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'}, બરાબર?`,
+  confirmNew: (n, a, d) => `નવા ગ્રાહક ${n}: ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'}, બરાબર?`,
+  askAmount: (n) => `${n}, કેટલા રૂપિયા?`,
   noisyConfirm: (n, a, d) => `ઘોંઘાટ વધારે છે. ${n}, ${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'}, બરાબર?`,
   confusable: (a, b) => `${r(a)} રૂપિયા કે ${r(b)} રૂપિયા?`,
   askName: (a) => `${r(a)} રૂપિયા કોના નામે લખું?`,
@@ -364,6 +386,8 @@ const PA: Replies = {
   savedPromise: (n, a, o) => `${n} ${o <= 0 ? 'ਅੱਜ' : o === 1 ? 'ਕੱਲ੍ਹ' : `${o} ਦਿਨਾਂ ਵਿੱਚ`} ${r(a)} ਰੁਪਏ ਦੇਣਗੇ, ਯਾਦ ਰੱਖਾਂਗੀ।`,
   newCustomer: (n) => `${n} ਦਾ ਨਵਾਂ ਖਾਤਾ ਖੋਲ੍ਹਿਆ।`,
   confirm: (n, a, d) => `${n}, ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}, ਠੀਕ ਹੈ?`,
+  confirmNew: (n, a, d) => `ਨਵਾਂ ਗਾਹਕ ${n}: ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}, ਠੀਕ ਹੈ?`,
+  askAmount: (n) => `${n}, ਕਿੰਨੇ ਰੁਪਏ?`,
   noisyConfirm: (n, a, d) => `ਰੌਲਾ ਬਹੁਤ ਹੈ। ${n}, ${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}, ਠੀਕ ਹੈ?`,
   confusable: (a, b) => `${r(a)} ਰੁਪਏ ਜਾਂ ${r(b)} ਰੁਪਏ?`,
   askName: (a) => `${r(a)} ਰੁਪਏ ਕਿਸਦੇ ਨਾਮ ਲਿਖਾਂ?`,

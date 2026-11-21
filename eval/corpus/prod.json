@@ -1,0 +1,1687 @@
+[
+ {
+  "sid": "j4x7jtii",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "सुरेश ने 100 रुपए दिए।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    100,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "cp9e1xi1",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ರಮೇಶ್ ಅವರ 340 ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Ramesh",
+    340,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "0z6vzk2q",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "मोहन ने 500 रुपये वापस किए।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mohan",
+    500,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "30t2wv6n",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "रमेश का 340 रुपये उधार लिख दो।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Ramesh",
+    340,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "0t1ovdlh",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಸುರೇಶ್ 100 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    100,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "wzptvris",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಮೋಹನ್ 500 ರೂಪಾಯಿ ಕಟ್ಟಿದರು."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mohan",
+    500,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "9nvvae4m",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Suleman gave me 300. Mahi gave me 400."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suleiman",
+    300,
+    "payment"
+   ],
+   [
+    "Mahi",
+    400,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ],
+   "Suleiman": [
+    "Suleiman",
+    "Suleman",
+    "Sulaiman",
+    "ಸುಲೇಮಾನ್"
+   ]
+  }
+ },
+ {
+  "sid": "9ar6jfi7",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "This network issue, bro. Your..."
+   },
+   {
+    "say": "One."
+   },
+   {
+    "say": "Should you take it upstairs for testing?"
+   },
+   {
+    "say": "Network and noises, little noises."
+   },
+   {
+    "say": "Sari, naividu."
+   },
+   {
+    "say": "photo pin lagli."
+   },
+   {
+    "say": "Exact English, English, Hindi, Kannada, Malayalam, Gujarati, Telugu, Tamil."
+   },
+   {
+    "say": "marathi, gujarati, marathi. That's all. See, that's all. Whatever comes in your mind, tell. Whatever you want to use. Whatever."
+   },
+   {
+    "say": "Yeah."
+   },
+   {
+    "say": "Give an question that much about languages."
+   },
+   {
+    "say": "If you able to speak."
+   },
+   {
+    "say": "Siri"
+   },
+   {
+    "say": "Andi."
+   },
+   {
+    "say": "If you know Marathi, then try."
+   },
+   {
+    "say": "marappadi marathi etta, I can, I can maybe push it to."
+   }
+  ],
+  "llm": {
+   "This network issue, bro. Your...": {
+    "intent": "chitchat",
+    "sure": true
+   },
+   "marathi, gujarati, marathi. That's all. See, that's all. Whatever comes in your mind, tell. Whatever you want to use. Whatever.": {
+    "intent": "chitchat",
+    "sure": true
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "52fvkgk7",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "रमेश का 340 रुपये उधार लिख दो।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Ramesh",
+    340,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "ukk23ylv",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "सुरेश ने 100 रुपए दिए।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    100,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "zhzsswb6",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "मोहन ने 500 रुपये वापस किए।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mohan",
+    500,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "3r60qqqj",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "I don't need to send."
+   },
+   {
+    "say": "ha ha."
+   },
+   {
+    "say": "Sureshdu 300 rupees sala aite."
+   },
+   {
+    "say": "Suresh."
+   },
+   {
+    "say": "300 rupees kottu."
+   },
+   {
+    "answer": "jama"
+   }
+  ],
+  "llm": {
+   "Sureshdu 300 rupees sala aite.": {
+    "intent": "entries",
+    "sure": true,
+    "entries": [
+     {
+      "name": "ಸುರೇಶ್ದು",
+      "amount": 300,
+      "direction": "credit"
+     }
+    ]
+   },
+   "Suresh.": {
+    "intent": "chitchat",
+    "sure": true
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    300,
+    "credit"
+   ]
+  ],
+  "allow": [
+   [
+    "Suresh",
+    300,
+    "payment"
+   ]
+  ],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "qqlfvsdq",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಸುರೇಶ್ 300 rupees ಕೊಟ್ಟ."
+   },
+   {
+    "say": "Just noted, no?"
+   },
+   {
+    "say": "It doesn't see that ಸುರೇಶ್ ಗೆ ಖಾತಾ ಖೋಲಾದಿಸ್ that."
+   },
+   {
+    "say": "ಸುರೇಶ್"
+   },
+   {
+    "say": "300 rupees ಸಾಲ."
+   },
+   {
+    "say": "ಸುರೇಶ್."
+   },
+   {
+    "tap": "yes"
+   },
+   {
+    "say": "It says, \"1 second before you finish saying no.\""
+   }
+  ],
+  "llm": {
+   "It doesn't see that ಸುರೇಶ್ ಗೆ ಖಾತಾ ಖೋಲಾದಿಸ್ that.": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Garbled speech; no amount candidates; unclear request"
+   },
+   "ಸುರೇಶ್": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Only a name spoken, no amount or action",
+    "query_name": "ಸುರೇಶ್"
+   },
+   "It says, \"1 second before you finish saying no.\"": {
+    "intent": "chitchat",
+    "sure": true
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    300,
+    "credit"
+   ]
+  ],
+  "allow": [
+   [
+    "Suresh",
+    300,
+    "payment"
+   ]
+  ],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "0p6186uz",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಸುರೇಶ್"
+   },
+   {
+    "say": "300 rupees ಸಾಲ."
+   },
+   {
+    "say": "ಸುರೇಶ್ ಹೆಸರಿಂದ."
+   },
+   {
+    "tap": "yes"
+   },
+   {
+    "say": "ಸುರೇಶ್ ಹೆಸರು, ಹೆಸರಿಂದ means in ಸುರೇಶ್ name. It is taking that also as a name in the name of ಸುರೇಶ್. It is taking that also as input."
+   },
+   {
+    "say": "ಹೇಳೋಣ."
+   },
+   {
+    "say": "ಮಾಡ್ತೀನಿ, but ಅದರಲ್ಲಿ."
+   }
+  ],
+  "llm": {
+   "ಸುರೇಶ್": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Only a name was spoken, no amount or direction"
+   },
+   "ಸುರೇಶ್ ಹೆಸರು, ಹೆಸರಿಂದ means in ಸುರೇಶ್ name. It is taking that also as a name in the name of ಸುರೇಶ್. It is taking that also as input.": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "No amount candidates; utterance is a meta-comment about the name, not a ledger entry"
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    300,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "atgkth5i",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "रमेश का 340 रुपये उधार लिख दो।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Ramesh",
+    340,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "myte9dnr",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ರಮೇಶ್ ಅವರ 340 ರೂಪಾಯಿ ಸಾಲ ಬರೆಯಿರಿ."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Ramesh",
+    340,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "yk2gcwjq",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "मोहन ने 500 रुपये वापस किए।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mohan",
+    500,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "561ou4gc",
+  "lang": "hi",
+  "steps": [
+   {
+    "say": "सुरेश ने 100 रुपए दिए।"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    100,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "t894zw7r",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಸುರೇಶ್ 100 ರೂಪಾಯಿ ಕೊಟ್ಟರು."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Suresh",
+    100,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "4rwr87yl",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಮೋಹನ್ 500 ರೂಪಾಯಿ ಕಟ್ಟಿದರು."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mohan",
+    500,
+    "payment"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "9l8xtcf6",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "ಮಾಹಿ ಹೆಸರಿಂದ."
+   },
+   {
+    "say": "300 ಬರೀ."
+   },
+   {
+    "answer": "udhaar"
+   },
+   {
+    "say": "ಸುಲೇಮಾನ್"
+   },
+   {
+    "say": "ಖಾತೆಯಿಂದ"
+   },
+   {
+    "say": "300 ಬರಿ."
+   },
+   {
+    "say": "ಸಾಲ"
+   },
+   {
+    "say": "ಸುಲೇಮಾನ್ another thing."
+   },
+   {
+    "say": "When I tell it to write?"
+   },
+   {
+    "say": "Is taking right as a name?"
+   }
+  ],
+  "llm": {
+   "ಸುಲೇಮಾನ್ another thing.": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Name only with \"another thing\"; no amount or direction given"
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mahi",
+    300,
+    "credit"
+   ],
+   [
+    "Suleiman",
+    300,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ],
+   "Suleiman": [
+    "Suleiman",
+    "Suleman",
+    "Sulaiman",
+    "ಸುಲೇಮಾನ್"
+   ]
+  }
+ },
+ {
+  "sid": "keoyd742",
+  "lang": "kn",
+  "steps": [
+   {
+    "say": "I cannot. I again tap it back to close it."
+   }
+  ],
+  "llm": {
+   "I cannot. I again tap it back to close it.": {
+    "intent": "chitchat",
+    "sure": false,
+    "unsure_reason": "Background speech, no ledger content and no amount"
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ]
+  }
+ },
+ {
+  "sid": "y49qpwl8",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Your Mahe took 300."
+   },
+   {
+    "say": "Your"
+   },
+   {
+    "say": "Mahe."
+   },
+   {
+    "tap": "no"
+   },
+   {
+    "tap": "no"
+   },
+   {
+    "tap": "no"
+   },
+   {
+    "tap": "no"
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [],
+  "allow": [
+   [
+    "Mahi",
+    300,
+    "credit"
+   ]
+  ],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ]
+  }
+ },
+ {
+  "sid": "usovg3e1",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Mahe talk 300."
+   },
+   {
+    "answer": "jama"
+   },
+   {
+    "say": "Mahi took 300."
+   },
+   {
+    "tap": "yes"
+   },
+   {
+    "say": "My talk gave 300."
+   },
+   {
+    "say": "bro, internet issue ade."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta"
+  ],
+  "saves": [
+   [
+    "Mahi",
+    300,
+    "credit"
+   ]
+  ],
+  "allow": [
+   [
+    "Mahi",
+    300,
+    "payment"
+   ]
+  ],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ]
+  }
+ },
+ {
+  "sid": "txrvbzxy",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Mahe Talk Mahe Talk"
+   }
+  ],
+  "llm": {
+   "Mahe Talk Mahe Talk": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "No amount given; utterance is only a repeated name"
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta",
+   "Mahi"
+  ],
+  "saves": [],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ]
+  }
+ },
+ {
+  "sid": "6r4fgcd4",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Mahe Talk"
+   },
+   {
+    "say": "No bro, it's not taking input, only now."
+   },
+   {
+    "say": "300, 300."
+   },
+   {
+    "say": "Hmm."
+   }
+  ],
+  "llm": {
+   "Mahe Talk": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Only a name was spoken, no amount or direction"
+   },
+   "300, 300.": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Bare amounts with no customer or direction"
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta",
+   "Mahi"
+  ],
+  "saves": [],
+  "allow": [
+   [
+    "Mahi",
+    300,
+    "credit"
+   ]
+  ],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ]
+  }
+ },
+ {
+  "sid": "35er5y2z",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Mahe Talk Mahe Talk"
+   },
+   {
+    "say": "300"
+   },
+   {
+    "say": "Mahe Talk 300."
+   },
+   {
+    "say": "Your"
+   },
+   {
+    "answer": "udhaar"
+   },
+   {
+    "say": "Your Your"
+   },
+   {
+    "say": "Your"
+   },
+   {
+    "say": "This is last because problems."
+   },
+   {
+    "say": "Very good, very."
+   },
+   {
+    "say": "Your Business ka nahi hoy, or teke teke."
+   },
+   {
+    "say": "Suleiman 400."
+   },
+   {
+    "say": "That's cost."
+   },
+   {
+    "answer": "udhaar"
+   }
+  ],
+  "llm": {
+   "Mahe Talk Mahe Talk": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "No amount given; utterance is only a name repeated"
+   },
+   "300": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Bare amount with no customer or direction"
+   },
+   "Your Your": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "Utterance is a name-like fragment with no amount or direction"
+   },
+   "Your": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "No amount candidates; \"Your\" looks like a garbled word, not an entry"
+   },
+   "Your Business ka nahi hoy, or teke teke.": {
+    "intent": "unclear",
+    "sure": false,
+    "unsure_reason": "No amount candidates; speech is garbled and not clearly a ledger entry"
+   }
+  },
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta",
+   "Mahi"
+  ],
+  "saves": [
+   [
+    "Mahi",
+    300,
+    "credit"
+   ],
+   [
+    "Suleiman",
+    400,
+    "credit"
+   ]
+  ],
+  "allow": [],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ],
+   "Suleiman": [
+    "Suleiman",
+    "Suleman",
+    "Sulaiman",
+    "ಸುಲೇಮಾನ್"
+   ]
+  }
+ },
+ {
+  "sid": "fzhgj2jc",
+  "lang": "en",
+  "steps": [
+   {
+    "say": "Suleiman Talk 300."
+   },
+   {
+    "answer": "udhaar"
+   },
+   {
+    "say": "Suleiman paid 300."
+   },
+   {
+    "say": "Suleiman paid 300 again."
+   },
+   {
+    "say": "Suleiman Talk to 100 no."
+   },
+   {
+    "answer": "udhaar"
+   },
+   {
+    "say": "Suleiman Talk 200."
+   },
+   {
+    "say": "Credit."
+   },
+   {
+    "say": "Suleiman Talk 200, Suleiman Talk 200."
+   },
+   {
+    "answer": "udhaar"
+   },
+   {
+    "say": "Suleiman gave 300."
+   }
+  ],
+  "llm": {},
+  "customers": [
+   "Ramesh",
+   "Suresh",
+   "Mohan",
+   "Geeta",
+   "Mahi",
+   "Suleiman"
+  ],
+  "saves": [
+   [
+    "Suleiman",
+    300,
+    "credit"
+   ],
+   [
+    "Suleiman",
+    300,
+    "payment"
+   ],
+   [
+    "Suleiman",
+    300,
+    "payment"
+   ],
+   [
+    "Suleiman",
+    200,
+    "credit"
+   ],
+   [
+    "Suleiman",
+    300,
+    "payment"
+   ]
+  ],
+  "allow": [
+   [
+    "Suleiman",
+    100,
+    "credit"
+   ],
+   [
+    "Suleiman",
+    200,
+    "credit"
+   ]
+  ],
+  "names": {
+   "Ramesh": [
+    "Ramesh",
+    "रमेश",
+    "ರಮೇಶ್"
+   ],
+   "Suresh": [
+    "Suresh",
+    "सुरेश",
+    "ಸುರೇಶ್"
+   ],
+   "Mohan": [
+    "Mohan",
+    "मोहन",
+    "ಮೋಹನ್"
+   ],
+   "Geeta": [
+    "Geeta"
+   ],
+   "Mahi": [
+    "Mahi",
+    "Mahe",
+    "ಮಾಹಿ"
+   ],
+   "Suleiman": [
+    "Suleiman",
+    "Suleman",
+    "Sulaiman",
+    "ಸುಲೇಮಾನ್"
+   ]
+  }
+ }
+]

@@ -282,6 +282,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         net.onPong(m.t, performance.now())
         probeDeadline = null
         break
+      case 'not_entry':
+        ev.notEntry?.(m.text)
+        break
       case 'final':
         turns.onFinal(m.text, performance.now())
         partialAt = null

@@ -79,7 +79,9 @@ export type ClientMsg =
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
-  kind: 'confirm' | 'name' | 'direction' | 'which' | 'confusable' | 'delete' | 'batch' | 'modify'
+  kind: 'confirm' | 'name' | 'amount' | 'direction' | 'which' | 'confusable' | 'delete' | 'batch' | 'modify'
+  /** confirm: saying yes also opens an account for this name (it is not in the ledger yet) */
+  newCustomer?: boolean
   /** batch: one line per entry ("Ramesh ₹200"); modify: true when the change removes the entry */
   remove?: boolean
   name?: string
@@ -128,3 +130,5 @@ export type ServerMsg =
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */
   | { type: 'turn_done'; resume?: string }
+  /** heard, and taken as talk to someone else: nothing written, nothing asked (the phone shows it dimmed) */
+  | { type: 'not_entry'; text: string }

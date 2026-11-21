@@ -7,7 +7,7 @@
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */
-import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, dangling, directionAnswer, hasNameWord, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
@@ -89,6 +89,8 @@ interface Draft {
   confirmed?: boolean
   /** this line was read back on its own and the shopkeeper said yes */
   readBack?: boolean
+  /** heard, not typed: a name in it may be a mishearing, so a new account is read back first */
+  spoken: boolean
   paise: number
   alt: number | null // confusable alternative, rupees
   direction: Direction | null
@@ -103,7 +105,7 @@ interface Draft {
 }
 
 type Pending =
-  | { kind: 'confirm' | 'name' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
+  | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
   | { kind: 'which'; draft: Draft; queue: Draft[]; options: SnapCustomer[] }
   | { kind: 'delete' }
   /** one question for a list that shared a single direction word */
@@ -164,6 +166,8 @@ export class Session {
   private history: string[] = []
   /** the customer the conversation is about right now */
   private focusCid: string | null = null
+  /** where the turn being handled came from (taps and typed text arrive as 'tap') */
+  private turnSrc: 'voice' | 'tap' | 'resend' = 'voice'
   /** when the open question was asked: stale questions expire */
   private pendingAt = 0
   /** what we said last and until when it may echo back through the mic */
@@ -623,6 +627,7 @@ export class Session {
     _src: 'voice' | 'tap' | 'resend',
   ): Promise<void> {
     const t0 = this.now()
+    this.turnSrc = _src
     // started now so it runs alongside parsing; only noisy money turns ask for it
     let intent: Intent = parseFast(text)
     let path: 'fast' | 'llm' | 'none' = 'fast'
@@ -745,6 +750,8 @@ export class Session {
         : {}),
       parseMs, llmMs, replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0, cached: spoken?.cached ?? false,
     })
+    // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
+    if (_src === 'voice' && !reply && !this.pending) this.deps.send({ type: 'not_entry', text })
     this.deps.send({ type: 'turn_done', resume: this.exportState() })
   }
 
@@ -935,10 +942,15 @@ export class Session {
       case 'delete_all':
         this.pending = { kind: 'delete' }
         return { parts: [R.deleteAsk()], ops: [] }
-      case 'unknown':
+      case 'unknown': {
+        // Part of an entry, said on its own: start the entry and ask for what is missing.
+        // Only a name ("ಮಾಹಿ ಹೆಸರಿಂದ"): ask how much. Only an amount ("300"): ask whose.
+        const part = this.partialDraft(text, snrDb, noisy, path)
+        if (part) return this.processDrafts([part], { parts: [], ops: [] })
         // background talk to a customer is ignored; only speak up if it sounded like ledger talk
         if (mentionsMoney(text)) return { parts: [noisy ? R.noisyRepeat() : R.didNotCatch()], ops: [] }
         return null
+      }
     }
   }
 
@@ -1030,6 +1042,7 @@ export class Session {
       transcript,
       snrDb,
       noisy,
+      spoken: this.turnSrc !== 'tap',
     }
   }
 
@@ -1066,6 +1079,7 @@ export class Session {
   }
 
   /**
+   * (Close is enough: the caller reads the line back with the customer's real name.)
    * The one known customer whose name is contained in `heard`: a word of it, two adjacent words,
    * or a word without a possessive ending (Kannada -ದು/-ದ/-ರ, Latin -du/-da/-ra, Hindi -ka/-ki/-ke
    * glued on). Null when none or more than one customer fits.
@@ -1084,7 +1098,7 @@ export class Session {
     const hits = new Set<string>()
     for (const t of tries) {
       const best = matchName(t, people)[0]
-      if (best && best.score >= NAME_SURE) hits.add(best.id)
+      if (best && best.score >= NAME_NEAR) hits.add(best.id)
     }
     if (hits.size !== 1) return null
     return this.snap.customers.find((c) => c.cid === [...hits][0]) ?? null
@@ -1092,9 +1106,13 @@ export class Session {
 
   /** A turn that is only a known customer's name ("ಸುರೇಶ್", then a pause, then "300 ರೂಪಾಯಿ ಸಾಲ"). */
   private loneName(text: string): boolean {
+    if (text.trim().split(/\s+/).length > 4) return false // a name said on its own is short
     if (parseFast(text).type !== 'unknown') return false
     const n = nameAnswer(text)
     if (!n || n.split(' ').length > 3) return false
+    // "ಮಾಹಿ ಹೆಸರಿಂದ" / "Mahi ke naam se": said as a name, even one not in the ledger yet
+    if (hasNameWord(text)) return true
+    if (this.knownWithin(n)) return true
     const best = matchName(n, this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))[0]
     return !!best && best.score >= NAME_SURE
   }
@@ -1109,8 +1127,20 @@ export class Session {
     while (drafts.length) {
       const d = drafts.shift()!
       if (d.paise <= 0) {
-        acc.parts.push(R.didNotCatch())
-        continue
+        if (!d.heardName && !d.cid) {
+          acc.parts.push(R.didNotCatch())
+          continue
+        }
+        // a name without an amount: ask for it, keeping the name
+        const res = this.resolveName(d)
+        if (Array.isArray(res)) {
+          this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
+          acc.parts.push(R.askWhich(res[0].name, res[1].name))
+          return acc
+        }
+        this.pending = { kind: 'amount', draft: d, queue: drafts }
+        acc.parts.push(R.askAmount(this.customerName(d)))
+        return acc
       }
       if (!d.heardName && !d.cid && !d.newName) {
         this.pending = { kind: 'name', draft: d, queue: drafts }
@@ -1136,7 +1166,8 @@ export class Session {
       }
       if (this.needsConfirm(d)) {
         this.pending = { kind: 'confirm', draft: d, queue: drafts }
-        acc.parts.push(d.noisy ? R.noisyConfirm(name, d.paise / 100, d.direction) : R.confirm(name, d.paise / 100, d.direction))
+        acc.parts.push(this.opensAccount(d) ? R.confirmNew(name, d.paise / 100, d.direction)
+          : d.noisy ? R.noisyConfirm(name, d.paise / 100, d.direction) : R.confirm(name, d.paise / 100, d.direction))
         return acc
       }
       this.save(d, acc)
@@ -1145,7 +1176,17 @@ export class Session {
     return acc
   }
 
+  /**
+   * Would saving this line open an account under a name we only heard? Every junk account in the
+   * production logs ("ಬರೀ" = "write", "Talk" from "took", "Your") came this way, so a heard name
+   * that is not in the ledger is always read back first. Typed names are taken as written.
+   */
+  private opensAccount(d: Draft): boolean {
+    return !!d.newName && !d.cid && d.spoken && !d.readBack && !d.confirmed
+  }
+
   private needsConfirm(d: Draft): boolean {
+    if (this.opensAccount(d)) return true
     if (d.confirmed && d.nameSure) return false
     if (d.noisy || !d.nameSure) return true
     const hard = d.reasons.filter((r) => r !== 'name-inherited' && r !== 'llm' && r !== 'confusable-resolved' && r !== 'from-context' && r !== 'dir-all')
@@ -1272,14 +1313,31 @@ export class Session {
         return this.quietUnlessShort(text)
       case 'name': {
         const n = nameAnswer(text)
-        if (!n) return { parts: [R.didNotCatch()], ops: [] }
+        if (Session.offTopic(text)) return null
+        if (!n) return { parts: [R.askName(d.paise / 100)], ops: [] }
         d.heardName = n
+        this.fillDirection(d, text)
+        return this.processDrafts([d, ...p.queue], acc)
+      }
+      case 'amount': {
+        // the amount blank: read only the number (and a credit/paid word), whatever else was said
+        // ("300 ಬರೀ" = "write 300": ಬರೀ is not a name here, the name is already known)
+        const amounts = parseAmounts(text).filter((a) => a.value > 0)
+        if (!amounts.length) return Session.offTopic(text) ? null : { parts: [R.askAmount(this.customerName(d))], ops: [] }
+        d.paise = Math.round(amounts[0].value * 100)
+        d.reasons = d.reasons.filter((r) => r !== 'no-amount')
+        if (amounts.some((a) => a.value !== amounts[0].value)) d.reasons.push('amounts-differ')
+        this.fillDirection(d, text)
         return this.processDrafts([d, ...p.queue], acc)
       }
       case 'direction': {
         const dir = directionAnswer(text) ?? (intent.type === 'correct' ? intent.direction ?? null : null)
         // "yes"/"correct" does not say which: ask the same short question again
-        if (!dir) return { parts: [intent.type === 'yes' ? R.askDirection(this.customerName(d), d.paise / 100) : R.didNotCatch()], ops: [] }
+        if (!dir) {
+          // a stray word while the question is on screen: keep it, say nothing; otherwise ask it again
+          if (intent.type !== 'yes' && Session.offTopic(text)) return null
+          return { parts: [R.askDirection(this.customerName(d), d.paise / 100)], ops: [] }
+        }
         d.direction = dir
         // the shopkeeper just stated the direction: only doubts about the amount itself remain
         d.reasons = d.reasons.filter((r) => AMOUNT_FLAGS.has(r))
@@ -1362,9 +1420,55 @@ export class Session {
     return { parts: [first ? sayMore(this.lang).batchAsk(this.batchItems(drafts), first.direction!) : R.didNotCatch()], ops: [] }
   }
 
+  /** One word that answers nothing and has no money in it: recogniser noise, or a word to someone else. */
+  static strayWord(text: string): boolean {
+    return text.trim().split(/\s+/).filter(Boolean).length <= 1 && !mentionsMoney(text)
+  }
+
+  /**
+   * Not an answer to the open question: one stray word, or longer talk with no money in it (the
+   * shopkeeper turned to a customer). The question stays on screen; nothing is said.
+   */
+  static offTopic(text: string): boolean {
+    return Session.strayWord(text) || (text.trim().split(/\s+/).length > 4 && !mentionsMoney(text))
+  }
+
+  /** A credit/paid word in an answer to another question fills that blank too ("Mahi, udhaar"). */
+  private fillDirection(d: Draft, text: string) {
+    if (d.direction) return
+    const dir = directionAnswer(text)
+    if (dir) {
+      d.direction = dir
+      d.reasons = d.reasons.filter((r) => r !== 'no-direction-cue')
+    }
+  }
+
+  /**
+   * One part of an entry said on its own, as the start of an entry: a name alone (a customer we
+   * know, or said as a name: "ಮಾಹಿ ಹೆಸರಿಂದ"), or an amount alone ("300", "300 rupees"). Anything
+   * else is not ledger talk.
+   */
+  private partialDraft(text: string, snrDb: number | null, noisy: boolean, path: 'fast' | 'llm'): Draft | null {
+    const amounts = parseAmounts(text).filter((a) => a.value > 0)
+    const blank = (name: string | null, rupees: number, reasons: string[]): Draft => ({
+      heardName: name, cid: null, newName: null, nameSure: false, paise: Math.round(rupees * 100), alt: null,
+      direction: directionAnswer(text), dayOffset: 0, promise: false, confidence: 'low', reasons, path, transcript: text,
+      snrDb, noisy, spoken: this.turnSrc !== 'tap',
+    })
+    if (!amounts.length) {
+      if (!this.loneName(text)) return null
+      return blank(nameAnswer(text), 0, ['no-amount'])
+    }
+    // only the amount: every word is a number, currency or filler ("300", "300, 300", "300 rupees")
+    const same = amounts.every((a) => a.value === amounts[0].value)
+    if (same && mentionsMoney(text) && !hasUnplacedWords(text, [])) return blank(null, amounts[0].value, ['no-name'])
+    return null
+  }
+
   /** Long talk with no answer in it is the shopkeeper talking to someone else: keep the question, stay quiet. */
   private quietUnlessShort(text: string): Reply | null {
     if (text.trim().split(/\s+/).length > 4 && !mentionsMoney(text)) return null
+    if (Session.strayWord(text)) return null
     return { parts: [say(this.lang).didNotCatch()], ops: [] }
   }
 
@@ -1409,6 +1513,7 @@ export class Session {
       name: this.customerName(d) || undefined,
       paise: d.paise,
       direction: d.direction,
+      newCustomer: p.kind === 'confirm' && this.opensAccount(d) ? true : undefined,
       options: p.kind === 'which' ? p.options.map((c) => c.name) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
     }
   }

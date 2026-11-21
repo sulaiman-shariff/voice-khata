@@ -437,7 +437,11 @@ export function parseFast(text: string): Intent {
     }
   }
   // no name AND no direction cue: too weak to be a ledger line (usually talk to a customer)
-  const real = entries.filter((e) => e.name || e.direction)
+  // The same line said twice in a row ("Suleiman took 200, Suleiman took 200": a repeat after a
+  // pause, joined into one turn) is one entry, not two.
+  const real = entries
+    .filter((e) => e.name || e.direction)
+    .filter((e, i, a) => i === 0 || !(e.name && e.name === a[i - 1].name && e.amount.value === a[i - 1].amount.value && e.direction === a[i - 1].direction))
   if (!real.length) return { type: 'unknown' }
   // A list with one direction word ("Ramesh 200, Suresh 300, Geeta 150 udhaar", "sab udhaar: ..."):
   // the word covers the whole list. With an explicit "all" it is certain; without, the agent asks once.
@@ -558,6 +562,11 @@ export function nameAnswer(text: string): string | null {
   const words = tokenize(text).filter((t) => !stopWord(t) || t === 'ji' || t === 'जी')
   const name = words.filter((w, i) => !(i === 0 && (w === 'ji' || w === 'जी'))).slice(0, 3).join(' ')
   return name || null
+}
+
+/** "ಮಾಹಿ ಹೆಸರಿಂದ", "Suresh ke naam se": the turn says whose name or account it is about. */
+export function hasNameWord(text: string): boolean {
+  return tokenize(text).some((t) => NAME_WORDS.has(t))
 }
 
 /** Does the text mention an amount of money (not "do kilo", not a bare number word in chatter)? */

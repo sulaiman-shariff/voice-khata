@@ -46,6 +46,8 @@ function Home({ store }: { store: KhataStore }) {
   /** ledger writes in order; feedback no longer waits for them */
   const writes = useRef<Promise<unknown>>(Promise.resolve())
   const [heard, setHeard] = useState('')
+  /** the heard line was taken as talk to someone else (shown dimmed, marked "not an entry") */
+  const [heardIgnored, setHeardIgnored] = useState(false)
   const [said, setSaid] = useState('')
   const [pending, setPending] = useState<PendingView | null>(null)
   const [metrics, setMetrics] = useState<(TurnMetrics & { clientFirstAudioMs: number | null }) | null>(null)
@@ -93,8 +95,9 @@ function Home({ store }: { store: KhataStore }) {
       status: (st) => { setStatus(st); if (st === 'offline' || (st as string) === 'reconnecting') setPending(null) },
       level: (v) => { for (const f of levelSource) f(v) },
       heard: heardFeedback,
-      partial: (x) => setHeard(x),
-      final: (x) => setHeard(x),
+      partial: (x) => { setHeard(x); setHeardIgnored(false) },
+      final: (x) => { setHeard(x); setHeardIgnored(false) },
+      notEntry: () => setHeardIgnored(true),
       say: (x) => setSaid(x),
       ops: (ops) => onOps(ops),
       network: (s) => setNet(s),
@@ -276,7 +279,11 @@ function Home({ store }: { store: KhataStore }) {
           )}
           {(heard || said) && on && (
             <div className="space-y-1 text-center">
-              {heard && <div className="truncate text-sm text-muted-foreground">“{heard}”</div>}
+              {heard && (
+                <div className={cn('truncate text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
+                  “{heard}”{heardIgnored && <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
+                </div>
+              )}
               {said && <div className="text-base font-medium">{said}</div>}
             </div>
           )}

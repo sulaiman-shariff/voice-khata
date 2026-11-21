@@ -80,6 +80,8 @@ export interface VoiceEvents {
   network?(state: 'good' | 'slow' | 'offline'): void
   /** A turn lost to a dropped connection is being handled again in the new session. */
   resent?(text: string): void
+  /** The last thing heard was taken as talk to someone else: nothing written, nothing asked. */
+  notEntry?(text: string): void
 }
 
 export interface VoiceClient {

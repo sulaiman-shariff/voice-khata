@@ -1,0 +1,382 @@
+{
+ "file": "eval/corpus/prod.json",
+ "total": {
+  "wrong": 0,
+  "junk": 0,
+  "missed": 1,
+  "silent": 2,
+  "questions": 31,
+  "oracle": 9,
+  "llmMissing": 3
+ },
+ "rows": [
+  {
+   "sid": "j4x7jtii",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "cp9e1xi1",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "0z6vzk2q",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "30t2wv6n",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "0t1ovdlh",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "wzptvris",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "9nvvae4m",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 2,
+    "oracle": 2,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "9ar6jfi7",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "52fvkgk7",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "ukk23ylv",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "zhzsswb6",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "3r60qqqj",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 1,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "qqlfvsdq",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 3,
+    "oracle": 0,
+    "llmMissing": 1
+   },
+   "notes": []
+  },
+  {
+   "sid": "0p6186uz",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 2,
+    "oracle": 0,
+    "llmMissing": 1
+   },
+   "notes": []
+  },
+  {
+   "sid": "atgkth5i",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "myte9dnr",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "yk2gcwjq",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "561ou4gc",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "t894zw7r",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "4rwr87yl",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "9l8xtcf6",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 1,
+    "silent": 2,
+    "questions": 5,
+    "oracle": 2,
+    "llmMissing": 0
+   },
+   "notes": [
+    "silent: \"ಸುಲೇಮಾನ್\"",
+    "silent: \"ಸುಲೇಮಾನ್ another thing.\"",
+    "missed: Suleiman ₹300 credit"
+   ]
+  },
+  {
+   "sid": "keoyd742",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 0,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "y49qpwl8",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 2,
+    "oracle": 1,
+    "llmMissing": 1
+   },
+   "notes": []
+  },
+  {
+   "sid": "usovg3e1",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 4,
+    "oracle": 2,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "txrvbzxy",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 1,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "6r4fgcd4",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 2,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "35er5y2z",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 5,
+    "oracle": 2,
+    "llmMissing": 0
+   },
+   "notes": []
+  },
+  {
+   "sid": "fzhgj2jc",
+   "score": {
+    "wrong": 0,
+    "junk": 0,
+    "missed": 0,
+    "silent": 0,
+    "questions": 4,
+    "oracle": 0,
+    "llmMissing": 0
+   },
+   "notes": []
+  }
+ ]
+}

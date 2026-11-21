@@ -153,6 +153,37 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
 | Unit tests | 540 passing |
 
+### Replaying real conversations
+
+Every production session in the logs becomes a replayable conversation: `eval/logs_to_corpus.py` turns `vercel logs --json` dumps into steps (what was said, tapped or typed, plus the model readings logged for each text), and `eval/corpus/label_prod.py` adds what the shopkeeper meant. `npx tsx eval/replay.ts` runs every conversation through the Session with no audio and no network (the model's answers are the logged ones) and counts:
+
+- wrong entries;
+- accounts opened under a name that is not a customer;
+- entries meant but not written;
+- turns with a name or an amount that got no reply;
+- questions asked.
+
+A read-back the logged user never got to answer is answered from the labels (yes only for an entry they meant).
+
+28 sessions from 21 Nov (105 steps, 30 entries meant):
+
+| | Before (277e8b0) | After |
+|---|---|---|
+| Wrong entries | 3 | 0 |
+| Junk accounts ("ಬರೀ" = "write", "Talk" from "took") | 2 | 0 |
+| Entries missed | 2 | 1 |
+| Silent on a name or an amount | 10 | 2 |
+| Questions asked | 15 | 31 |
+
+What changed is how a conversation becomes entries, not a list of words:
+
+- **A heard name that is not in the ledger is always read back before an account is opened.** "New customer Mahi: 300 rupees on credit, correct?" Typed names are taken as written.
+- **One entry can be built over several turns.** A name said on its own (a known customer, or said as a name: "ಮಾಹಿ ಹೆಸರಿಂದ") asks "how much?". An amount on its own asks "whose name?". Each answer fills only the blank that was asked, so "300 ಬರೀ" ("write 300") fills the amount and is not read as a name. A credit/paid word in any answer fills that blank too.
+- **An answer is short.** A stray word or longer talk with no money in it keeps the open question on screen without speaking.
+- **Talk to someone else is shown dimmed on the phone, marked "not an entry"**, so it is clear it was heard.
+
+A name close to one customer ("Mahe" for Mahi) is read back under the customer's name. The same line said twice in one turn is one entry. The cost is more questions; every extra question is a read-back where a guess used to be written.
+
 ### STT noise benchmark (exact amount)
 
 12 synthetic Timbre-voice utterances (mostly Hindi, one English, one Kannada; includes 7, 17, 60 and 70) mixed with noise at a fixed SNR. Each cell is amounts correct out of utterances. Source: `eval/results/noise_*.json`.
