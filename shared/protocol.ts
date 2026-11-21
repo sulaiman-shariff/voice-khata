@@ -157,7 +157,6 @@ export type ServerMsg =
   | SettingMsg
   /** one big button on the phone: open WhatsApp with `text` (to `cid`'s number) or start the backup */
   | { type: 'ready'; kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
-  | { type: 'remind'; cid: string; text: string }
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */

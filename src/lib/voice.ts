@@ -262,9 +262,6 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         case 'show':
           ev.show(m)
           break
-        case 'remind':
-          ev.remind(m.cid, m.text)
-          break
         case 'error':
           ev.error(m.message)
           settleIfSilent()
@@ -357,9 +354,6 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         break
       case 'show':
         ev.show(m)
-        break
-      case 'remind':
-        ev.remind(m.cid, m.text)
         break
       case 'metrics':
         if (!turnSaid) settleIfSilent()

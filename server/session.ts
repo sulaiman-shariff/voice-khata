@@ -644,8 +644,7 @@ export class Session {
       this.applySetting(reply.setting)
       extra.push(reply.setting)
     }
-    if (reply?.ready?.kind === 'whatsapp' && reply.ready.cid && reply.ready.text) extra.push({ type: 'remind', cid: reply.ready.cid, text: reply.ready.text })
-    else if (reply?.ready) extra.push({ type: 'ready', ...reply.ready })
+    if (reply?.ready) extra.push({ type: 'ready', ...reply.ready })
     for (const m of extra) this.deps.send(m)
     this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
 
@@ -858,8 +857,7 @@ export class Session {
         if (!c.remindersOptIn || !c.adult) return { parts: [R.remindNotAllowed(c.name)], ops: [] }
         const msg = guardReply(R.reminderText(c.name, c.balancePaise / 100, this.snap.shopName))
         if (!msg) return { parts: [R.didNotCatch()], ops: [] }
-        this.deps.send({ type: 'remind', cid: c.cid, text: msg })
-        return { parts: [R.remindReady(c.name)], ops: [] }
+        return { parts: [R.remindReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text: msg } }
       }
       case 'privacy':
         this.deps.send({ type: 'show', view: 'privacy' })

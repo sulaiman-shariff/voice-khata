@@ -166,7 +166,6 @@ function Home({ store }: { store: KhataStore }) {
         else if (m.key === 'shopName' && typeof m.value === 'string') void store.updateSettings({ shopName: m.value })
       },
       ready: (m) => setReady({ kind: m.kind, cid: m.cid, text: m.text }),
-      remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { clientLog.warn('remind_failed', { error: String(e) }) } },
       metrics: setMetrics,
       error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),

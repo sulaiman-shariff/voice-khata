@@ -70,7 +70,6 @@ export interface VoiceEvents {
   ops(ops: LedgerOp[]): void | Promise<void>
   pending(p: PendingView | null): void
   show(m: Extract<ServerMsg, { type: 'show' }>): void
-  remind(cid: string, text: string): void
   /** The agent changed a setting by voice (readBack, fastSpeech, shopName; the language goes through lang). */
   setting?(m: SettingMsg): void
   /** One-tap card from a tool: a WhatsApp message to send, or the backup. */

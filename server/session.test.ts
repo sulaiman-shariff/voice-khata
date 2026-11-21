@@ -611,10 +611,10 @@ describe('answers about the ledger', () => {
   it('reminders go only to opted-in adults, with the right customer, amount and shop', async () => {
     const h = harness([cust('r', 'Ramesh', 500), cust('g', 'Geeta', 300, { remindersOptIn: true, adult: true })])
     await h.turn('Ramesh ko yaad dilao')
-    expect(h.out.some((m) => m.type === 'remind')).toBe(false)
+    expect(h.out.some((m) => m.type === 'ready')).toBe(false)
     await h.turn('Geeta ko yaad dilao')
     await h.turn('haan') // each send is confirmed
-    expect(h.out.find((m) => m.type === 'remind')).toMatchObject({ cid: 'g', text: expect.stringMatching(/300[\s\S]*Sharma Kirana|Sharma Kirana[\s\S]*300/) })
+    expect(h.out.find((m) => m.type === 'ready')).toMatchObject({ kind: 'whatsapp', cid: 'g', text: expect.stringMatching(/300[\s\S]*Sharma Kirana|Sharma Kirana[\s\S]*300/) })
   })
 
   it('the first run discloses that this is an AI', async () => {
