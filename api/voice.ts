@@ -97,7 +97,7 @@ wss.on('connection', (ws, req) => {
   if (!warmed) {
     warmed = true
     // fetch the model's token and open TLS for this instance (the first call after a cold start is slow)
-    void decide({ lang: 'en', heard: [{ locale: 'en-IN', text: 'hello' }], history: [], screen: 'home', customers: [], recent: [], pending: null }, GEMINI_TOOLS, undefined, { timeoutMs: WARM_TIMEOUT_MS }).catch(() => {})
+    void decide({ lang: 'en', heard: [{ locale: 'en-IN', text: 'hello' }], history: [], screen: 'home', customers: [], recent: [], pending: null }, GEMINI_TOOLS, undefined, { timeoutMs: WARM_TIMEOUT_MS, haiku: false }).catch(() => {}) // Gemini only: a raced warm-up would cancel the Gemini leg it is meant to warm
   }
   const tts = new TtsPool(key, 2, L.child({ part: 'tts' }))
   const send = (m: ServerMsg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
@@ -122,7 +122,7 @@ wss.on('connection', (ws, req) => {
     warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
     agent: async (ctx, audio, signal) => {
       const r = await decide(ctx, GEMINI_TOOLS, audio, { signal })
-      L.info('agent_call', { ms: r.ms, calls: r.calls.length })
+      L.info('agent_call', { model: r.model, ms: r.ms, calls: r.calls.length, ...(r.cacheRead !== undefined ? { cacheRead: r.cacheRead } : {}) })
       return r
     },
     send,

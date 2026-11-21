@@ -2,11 +2,14 @@
  * The agent on hard sentences plus control sentences (show / settings / customers), through the app's own
  * call (decide) with the real tool list. Scores: correct tool, and SILENT WRONG = the calls, run through the app's own
  * tools (runTool on a fresh ledger), wrote or changed an entry at once with no question, and that was not what the case wanted.
- *   npx tsx --env-file=.env eval/agent_eval.ts [passes]
- * Needs GOOGLE_VERTEX_KEY + VERTEX_PROJECT.
+ *   npx tsx --env-file=.env eval/agent_eval.ts [passes] [--model gemini|haiku|race]
+ * gemini (default): the Gemini race alone; haiku: Claude Haiku 5.5 alone; race: both, as in the app
+ * (the summary then says how often each model's answer won).
+ * Needs GOOGLE_VERTEX_KEY + VERTEX_PROJECT (gemini, race) and ANTHROPIC_API_KEY (haiku, race).
  */
-import { decide, type AgentContext, type ToolCall } from '../server/agent/agent.js'
-import { GEMINI_TOOLS, runTool } from '../server/agent/tools.js'
+import { AGENT_SYSTEM, decide, userTurn, type AgentContext, type Decision, type ToolCall } from '../server/agent/agent.js'
+import { haikuAgentCall } from '../server/parse/haiku.js'
+import { GEMINI_TOOLS, isToolName, runTool } from '../server/agent/tools.js'
 import { LedgerCore } from '../server/ledger/core.js'
 import { nullLogger } from '../server/log.js'
 import type { SnapCustomer } from '../shared/protocol.js'
@@ -104,7 +107,22 @@ function score(calls: ToolCall[], exp: Exp, text: string): { ok: boolean; silent
   return { ok, silent }
 }
 
-const passes = Number(process.argv[2] ?? 2)
+const argv = process.argv.slice(2)
+const model = argv.includes('--model') ? argv[argv.indexOf('--model') + 1] : 'gemini'
+if (!['gemini', 'haiku', 'race'].includes(model)) throw new Error(`--model gemini|haiku|race, not ${model}`)
+const passes = Number(argv.find((a) => /^\d+$/.test(a)) ?? 2)
+const wins: Record<string, number> = {}
+async function ask(ctx: AgentContext): Promise<Decision> {
+  if (model === 'gemini') return decide(ctx, GEMINI_TOOLS, undefined, { timeoutMs: 15000, haiku: false })
+  if (model === 'race') {
+    // the app's own deadline (3 s), so the win share is the one production sees
+    process.env.AGENT_HAIKU = 'on'
+    return decide(ctx, GEMINI_TOOLS)
+  }
+  const t0 = performance.now()
+  const r = await haikuAgentCall(AGENT_SYSTEM, userTurn(ctx), GEMINI_TOOLS, { timeoutMs: 15000 })
+  return { calls: r.calls.filter((c): c is ToolCall => isToolName(c.name)), ms: performance.now() - t0, model: 'haiku', cacheRead: r.cacheRead }
+}
 const ms: number[] = []
 let correct = 0, silentWrong = 0, failed = 0, total = 0
 const wrong: string[] = []
@@ -112,8 +130,9 @@ for (let p = 0; p < passes; p++)
   for (const [text, exp] of [...HARD, ...CONTROL]) {
     total++
     try {
-      const r = await decide(h(text), GEMINI_TOOLS, undefined, { timeoutMs: 15000 })
+      const r = await ask(h(text))
       ms.push(r.ms)
+      wins[r.model] = (wins[r.model] ?? 0) + 1
       const s = score(r.calls, exp, text)
       if (s.ok) correct++
       else {
@@ -127,5 +146,5 @@ for (let p = 0; p < passes; p++)
       console.log(`  failed: "${text}" ${String(e).slice(0, 100)}`)
     }
   }
-console.log(`agent (${HARD.length} hard + ${CONTROL.length} control, ${passes} passes): ${correct}/${total} correct, silent wrong ${silentWrong}, failed ${failed}, p50 ${Math.round(pct(ms, 0.5))} ms, p90 ${Math.round(pct(ms, 0.9))} ms`)
+console.log(`agent --model ${model} (${HARD.length} hard + ${CONTROL.length} control, ${passes} passes): ${correct}/${total} correct, silent wrong ${silentWrong}, failed ${failed}, p50 ${Math.round(pct(ms, 0.5))} ms, p90 ${Math.round(pct(ms, 0.9))} ms${model === 'race' ? `, won: ${Object.entries(wins).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`)
 process.exit(silentWrong ? 1 : 0)

@@ -1,8 +1,10 @@
 /**
- * The agent: one Gemini call per turn that reads everything heard (all STT transcripts, and the
+ * The agent: one model call per turn that reads everything heard (all STT transcripts, and the
  * audio itself when given) plus the app state, and answers with one or more tool calls.
+ * Text turns race the Gemini race against Claude Haiku 5.5; audio turns are Gemini only.
  */
-import { geminiAgentCall, type GeminiTool } from '../parse/gemini.js'
+import { geminiAgentCall, TIMEOUT_MS, type GeminiTool } from '../parse/gemini.js'
+import { haikuAgentCall, haikuEnabled } from '../parse/haiku.js'
 import type { PendingView } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
 import { type ToolCall, isToolName } from './tools.js'
@@ -64,8 +66,57 @@ export function userTurn(ctx: AgentContext): string {
 /** The model that hears audio: the measured winner of eval/audio_latency.ts unless AGENT_AUDIO_MODEL says otherwise. */
 const AUDIO_MODEL = () => process.env.AGENT_AUDIO_MODEL || 'gemini-3.5-flash-lite'
 
-export async function decide(ctx: AgentContext, tools: GeminiTool[], audio?: Buffer, opts: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<{ calls: ToolCall[]; ms: number }> {
-  const r = await geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio, { ...(audio ? { model: AUDIO_MODEL() } : {}), ...opts })
-  // a tool we do not have is never run
-  return { calls: r.calls.filter((c): c is ToolCall => isToolName(c.name)), ms: r.ms }
+export type AgentModel = 'gemini' | 'haiku'
+export interface Decision {
+  calls: ToolCall[]
+  /** wall-clock time of the whole call (the race, when raced) */
+  ms: number
+  /** which model's answer this is */
+  model: AgentModel
+  /** Haiku prompt-cache hits, when Haiku answered */
+  cacheRead?: number
+}
+
+/** a tool we do not have is never run */
+const known = (calls: { name: string; args: Record<string, unknown> }[]): ToolCall[] => calls.filter((c): c is ToolCall => isToolName(c.name))
+
+/**
+ * Text turns: the Gemini race (Mumbai + 2x global) and Haiku start together; the first answer with a
+ * tool we have wins and the other leg is aborted. One deadline (LLM_TIMEOUT_MS, 3 s, or opts.timeoutMs)
+ * plus the caller's signal covers both; if one side fails the other keeps the rest of it, and if
+ * both fail this throws (the session then says didNotCatch). Haiku is skipped for audio turns, with
+ * AGENT_HAIKU=off, with no ANTHROPIC_API_KEY, or with opts.haiku false.
+ */
+export async function decide(
+  ctx: AgentContext, tools: GeminiTool[], audio?: Buffer,
+  opts: { timeoutMs?: number; signal?: AbortSignal; haiku?: boolean } = {},
+): Promise<Decision> {
+  const user = userTurn(ctx)
+  const t0 = performance.now()
+  if (audio?.length || opts.haiku === false || !haikuEnabled()) {
+    const r = await geminiAgentCall(AGENT_SYSTEM, user, tools, audio, { ...(audio?.length ? { model: AUDIO_MODEL() } : {}), timeoutMs: opts.timeoutMs, signal: opts.signal })
+    return { calls: known(r.calls), ms: r.ms, model: 'gemini' }
+  }
+  // the deadline is a plain timer (not AbortSignal.timeout) so it is one clock for both legs
+  const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS
+  const done = new AbortController()
+  const timer = setTimeout(() => done.abort(new DOMException('agent deadline', 'TimeoutError')), timeoutMs)
+  const signal = opts.signal ? AbortSignal.any([opts.signal, done.signal]) : done.signal
+  const good = (model: AgentModel) => (r: { calls: { name: string; args: Record<string, unknown> }[]; cacheRead?: number }): Decision => {
+    const calls = known(r.calls)
+    if (!calls.length) throw new Error(`${model}: no known tool call`)
+    return { calls, ms: performance.now() - t0, model, ...(r.cacheRead !== undefined ? { cacheRead: r.cacheRead } : {}) }
+  }
+  try {
+    return await Promise.any([
+      geminiAgentCall(AGENT_SYSTEM, user, tools, undefined, { timeoutMs, signal }).then(good('gemini')),
+      haikuAgentCall(AGENT_SYSTEM, user, tools, { signal, timeoutMs }).then(good('haiku')),
+    ])
+  } catch (e) {
+    const errs = e instanceof AggregateError ? e.errors : [e]
+    throw new Error(`agent: both models failed (${errs.map((x) => String(x instanceof Error ? x.message : x).slice(0, 120)).join('; ')})`, { cause: e })
+  } finally {
+    clearTimeout(timer)
+    done.abort() // cancels the loser
+  }
 }

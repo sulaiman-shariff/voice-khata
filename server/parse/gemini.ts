@@ -11,7 +11,7 @@ import crypto from 'node:crypto'
 export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite'
 const LOCATION = process.env.VERTEX_LOCATION ?? 'asia-south1'
 /** A voice turn cannot wait: ~0.6 s is normal; give up at 3 s and ask the shopkeeper instead. */
-const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS ?? 3000)
+export const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS ?? 3000)
 
 interface ServiceKey {
   client_email: string

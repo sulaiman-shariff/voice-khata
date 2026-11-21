@@ -34,6 +34,8 @@ interface Conv {
 }
 
 const args = process.argv.slice(2)
+// the cached answers are Gemini's: a raced --record would mix in Haiku's and the 0/0 bar would drift
+process.env.AGENT_HAIKU = 'off'
 const file = args.find((a) => a.endsWith('.json')) ?? 'eval/corpus/prod.json'
 const label = args.includes('--label') ? args[args.indexOf('--label') + 1] : null
 const verbose = args.includes('-v')
