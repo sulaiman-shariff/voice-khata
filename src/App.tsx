@@ -407,7 +407,9 @@ function Home({ store }: { store: KhataStore }) {
         )}
       </main>
 
-      <footer ref={footer} className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-8 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+      {/* solid behind captions/mic (on a short phone the list reaches under them); only a thin fade above */}
+      <footer ref={footer} className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-background px-4 pt-3 pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))]">
+        <div aria-hidden className="absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-background to-transparent" />
         <div className="pointer-events-auto space-y-3">
           {pending && <PendingCard p={pending} t={t} onAnswer={(a) => {
             if (a === 'haan') voice.current?.tap('yes')
