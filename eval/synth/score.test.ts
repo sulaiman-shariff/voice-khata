@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { scoreScene } from './score.js'
+import { alignFinal, scoreScene, textSim } from './score.js'
 import type { Scene } from './scenes.js'
 
 const scene: Scene = {
@@ -33,5 +33,33 @@ describe('score', () => {
     expect(wrongTool.wrong).toBe(1)
     const ok = scoreScene(scene, [{ woke: false, calls: [] }, { woke: true, calls: [entry(100)] }], 60_000)
     expect(ok).toMatchObject({ unaddressedEntries: 0, falseWakes: 0, missedWakes: 0, wrong: 0 })
+  })
+
+  it('counts an asked-back entry with the right name and amount separately from wrong', () => {
+    const r = scoreScene(scene, [{ woke: false, calls: [] }, { woke: true, calls: [], asked: true }], 60_000)
+    expect(r).toMatchObject({ askedCorrect: 1, wrong: 0, writtenCorrect: 0 })
+  })
+
+  it('keeps proposals apart from ledger writes for un-addressed lines', () => {
+    const r = scoreScene(scene, [{ woke: true, calls: [], proposed: [entry(100)] }, { woke: true, calls: [entry(100)] }], 60_000)
+    expect(r).toMatchObject({ unaddressedEntries: 0, proposedUnaddressed: 1 })
+  })
+})
+
+describe('alignFinal', () => {
+  const lines = [
+    { text: 'चीनी चालीस रुपये किलो है', startMs: 1000, endMs: 3000 },
+    { text: 'खाताभाई, रमेश के खाते में तीन सौ रुपये उधार लिखो', startMs: 4000, endMs: 7000 },
+    { text: 'ठीक है भैया कल पैसे दे दूँगा', startMs: 8000, endMs: 10000 },
+  ]
+  it('matches text across scripts', () => {
+    expect(textSim('Ramesh ke khate mein teen sau rupaye udhaar likho', lines[1]!.text)).toBeGreaterThan(0.4)
+  })
+  it('assigns by order and text even when the final lands after the next line began', () => {
+    expect(alignFinal(lines, -1, 4300, 'chinee 40 rupaye kilo hai')).toBe(0)
+    expect(alignFinal(lines, 0, 8200, 'Katha bhai Ramesh ke khate mein 300 rupaye udhaar likho')).toBe(1)
+  })
+  it('never goes back to an earlier line', () => {
+    expect(alignFinal(lines, 1, 10500, 'thik hai bhaiya kal paise de dunga')).toBe(2)
   })
 })
