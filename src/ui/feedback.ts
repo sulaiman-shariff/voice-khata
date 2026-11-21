@@ -56,3 +56,35 @@ export function savedFeedback() {
     navigator.vibrate?.(30)
   } catch { /* sound is a nicety only */ }
 }
+
+function notes(freqs: readonly (readonly [number, number])[], peak: number, len: number, buzz: number) {
+  try {
+    const c = audio()
+    if (c) {
+      const t0 = c.currentTime
+      for (const [f, d] of freqs) {
+        const o = c.createOscillator()
+        const g = c.createGain()
+        o.type = 'sine'
+        o.frequency.value = f
+        g.gain.setValueAtTime(0.0001, t0 + d)
+        g.gain.exponentialRampToValueAtTime(peak, t0 + d + 0.01)
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + len)
+        o.connect(g).connect(c.destination)
+        o.start(t0 + d)
+        o.stop(t0 + d + len + 0.01)
+      }
+    }
+    if (buzz) navigator.vibrate?.(buzz)
+  } catch { /* sound is a nicety only */ }
+}
+
+/** Awake: a short rising two-note "I'm listening". */
+export function wakeChime() {
+  notes([[660, 0], [990, 0.09]], 0.1, 0.12, 20)
+}
+
+/** Back to sleep: a softer, falling two-note. */
+export function sleepChime() {
+  notes([[740, 0], [494, 0.1]], 0.05, 0.14, 0)
+}

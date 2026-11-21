@@ -22,6 +22,7 @@ const SPEECH_LEVEL = 0.02
 const PARTIAL_STALE_MS = 4000
 const THINK_TIMEOUT_MS = 25_000
 const RESUME_TIMEOUT_MS = 1000
+const MIC_CONSTRAINTS: MediaStreamConstraints = { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
 
 interface StartOpts {
   lang: Lang
@@ -30,6 +31,8 @@ interface StartOpts {
   handsFree: boolean
   fastSpeech?: boolean
   readBackAll?: boolean
+  /** false: socket only (typed text); the mic opens on the first wake */
+  mic?: boolean
 }
 
 export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
@@ -37,6 +40,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let handsFree = false
   let running = false
   let status: VoiceStatus = 'idle'
+  /** awake = 'listening'; asleep waits for the wake word or a tap */
+  let awake = false
 
   let stream: MediaStream | null = null
   let ctx: AudioContext | null = null
@@ -85,6 +90,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let pendingMetrics: TurnMetrics | null = null
   let metricsTimer: ReturnType<typeof setTimeout> | null = null
 
+  const idleStatus = (): VoiceStatus => (awake ? 'listening' : 'asleep')
   const isBusy = () => status === 'speaking' || status === 'thinking'
 
   function setStatus(s: VoiceStatus) {
@@ -94,7 +100,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       // never stay busy forever if the server never answers this turn
       thinkTimer = setTimeout(() => {
         thinkTimer = null
-        if (status === 'thinking') setStatus('listening')
+        if (status === 'thinking') setStatus(idleStatus())
       }, THINK_TIMEOUT_MS)
     }
     if (status === s) return
@@ -104,7 +110,16 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   /** The turn produced no spoken reply: stop showing "thinking". */
   const settleIfSilent = () => {
-    if (status === 'thinking') setStatus('listening')
+    if (status === 'thinking') setStatus(idleStatus())
+  }
+
+  /** Awake/asleep changed (server answer or optimistic local change after a tap). */
+  function setAwake(a: boolean) {
+    if (awake === a) return
+    awake = a
+    ev.attention?.(a ? 'awake' : 'asleep')
+    if (a && status === 'asleep') setStatus('listening')
+    else if (!a && status === 'listening') setStatus('asleep')
   }
 
   function sendTo(sock: WebSocket | null, msg: ClientMsg) {
@@ -148,8 +163,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       await Promise.all([c.audioWorklet.addModule('/worklets/mic.js'), c.audioWorklet.addModule('/worklets/player.js')])
       const mic = new AudioWorkletNode(c, 'mic', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1, channelCountMode: 'explicit' })
       const player = new AudioWorkletNode(c, 'player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] })
-      const src = c.createMediaStreamSource(stream as MediaStream)
-      src.connect(mic) // mic is never connected to the destination
+      if (stream) c.createMediaStreamSource(stream).connect(mic) // mic is never connected to the destination
       player.connect(c.destination)
       mic.port.onmessage = onMicFrame
       player.port.onmessage = onPlayerMsg
@@ -185,7 +199,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     } else if (t === 'drained') {
       log.debug('playback_done', { audioBytes: turnAudioBytes })
       send({ type: 'playback_done' })
-      if (status === 'speaking') setStatus('listening')
+      if (status === 'speaking') setStatus(idleStatus())
     }
   }
 
@@ -264,7 +278,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     switch (m.type) {
       case 'ready':
         // the socket can be up before the mic is (it opens in parallel with the permission prompt)
-        if ((status === 'connecting' || status === 'offline') && micNode) setStatus('listening')
+        if (status === 'connecting' || status === 'offline') setStatus(idleStatus())
+        break
+      case 'attention':
+        setAwake(m.state === 'awake')
         break
       case 'heard':
         ev.heard?.()
@@ -314,7 +331,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         break
       case 'stop_audio':
         toPlayer({ type: 'stop' })
-        if (status === 'speaking') setStatus('listening')
+        if (status === 'speaking') setStatus(idleStatus())
         break
       case 'pending':
         pendingOpen = m.pending !== null
@@ -325,6 +342,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         turns.onTurnDone(performance.now())
         if (m.resume) resume = m.resume
         partialAt = null
+        ev.turnDone?.()
         settleIfSilent()
         break
       case 'show':
@@ -534,7 +552,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         hello(sock)
         adopt(sock)
         log.info('reconnected', { attempt: backoffIdx })
-        setStatus('listening')
+        setAwake(false) // a new server session starts asleep; it says so if it is awake
+        setStatus(idleStatus())
       } catch (e) {
         log.warn('reconnect_failed', { error: String(e) })
         scheduleReconnect()
@@ -621,6 +640,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     opts = { ...o }
     handsFree = o.handsFree
     running = true
+    awake = false
     setStatus('connecting')
     // connect in parallel with the mic permission prompt and audio setup: the server opens the
     // Gnani streams meanwhile. On the very first run the AI disclosure is spoken right after
@@ -640,19 +660,12 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const ms = () => Math.round(performance.now() - t0)
     log.info('start', { lang: o.lang, handsFree: o.handsFree, firstRun: o.firstRun, early })
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      })
-      log.info('mic_ready', { ms: ms() })
-      try {
-        await buildGraph(16000)
-      } catch (e) {
-        log.warn('audio_16k_refused', { error: String(e) })
-        await buildGraph(undefined) // browser refused 16 kHz context or a cross-rate mic connection
+      if (o.mic !== false) {
+        stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
+        log.info('mic_ready', { ms: ms() })
       }
-      log.info('audio_ready', { ms: ms(), sampleRate: ctx?.sampleRate })
-      await resumeCtx()
-      watchMic()
+      await setupAudio(ms)
+      if (stream) watchMic()
       document.addEventListener('visibilitychange', onVisibility)
       window.addEventListener('online', onOnline)
       window.addEventListener('offline', onOffline)
@@ -662,7 +675,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (!sock || !running) return
       if (!early) hello(sock)
       log.info('started', { ms: ms(), audioState: ctx?.state })
-      if (status === 'connecting') setStatus('listening')
+      if (status === 'connecting') setStatus(idleStatus())
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       log.error('start_failed', { ms: ms(), error: msg })
@@ -670,6 +683,42 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       ev.error(msg)
       setStatus('idle')
       throw e
+    }
+  }
+
+  /** The audio graph (speaker always; mic input when the stream is open). Text-only sessions survive without audio. */
+  async function setupAudio(ms: () => number): Promise<void> {
+    try {
+      try {
+        await buildGraph(16000)
+      } catch (e) {
+        log.warn('audio_16k_refused', { error: String(e) })
+        await buildGraph(undefined) // browser refused 16 kHz context or a cross-rate mic connection
+      }
+    } catch (e) {
+      if (stream) throw e
+      log.warn('audio_unavailable', { error: String(e) }) // typed text still works, just silently
+      return
+    }
+    log.info('audio_ready', { ms: ms(), sampleRate: ctx?.sampleRate })
+    await resumeCtx()
+  }
+
+  /** Open the mic on a socket-only session (first wake). */
+  async function attachMic(): Promise<void> {
+    if (stream || !running) return
+    try {
+      const s = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
+      if (!running) { s.getTracks().forEach((t) => t.stop()); return }
+      stream = s
+      if (!ctx) await setupAudio(() => 0)
+      else if (micNode) ctx.createMediaStreamSource(s).connect(micNode)
+      watchMic()
+      void resumeCtx()
+      log.info('mic_attached')
+    } catch (e) {
+      log.error('mic_attach_failed', { error: String(e) })
+      ev.error(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -826,7 +875,32 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       log.info('barge_in', { status })
       send({ type: 'barge' })
       toPlayer({ type: 'stop' }) // silence now, do not wait for the server
-      if (status === 'speaking' || status === 'thinking') setStatus('listening')
+      if (status === 'speaking' || status === 'thinking') setStatus(idleStatus())
+    },
+    wake(source) {
+      if (!running) return
+      log.info('wake', { source })
+      send({ type: 'wake', source })
+      setAwake(true) // optimistic: the server's 'attention' confirms (or says asleep)
+      if (!stream) void attachMic()
+    },
+    holdEnd() {
+      if (!running) return
+      log.debug('hold_end')
+      send({ type: 'hold_end' })
+    },
+    sleep() {
+      if (!running) return
+      log.info('sleep')
+      setAwake(false)
+    },
+    setLang(l) {
+      if (opts) opts.lang = l
+      // the protocol only carries the language in hello: re-hello on a fresh socket, mic stays on
+      if (running && ws && !swapping) {
+        clearRefresh()
+        void proactiveReconnect(true)
+      }
     },
   }
 }

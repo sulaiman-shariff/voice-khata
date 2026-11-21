@@ -76,6 +76,8 @@ export type ClientMsg =
   | { type: 'ping'; t: number } // heartbeat: the server answers pong at once
   | { type: 'replay_start' } // binary frames until replay_end are buffered speech from a dropped connection
   | { type: 'replay_end' }
+  | { type: 'wake'; source: 'tap' | 'hold' | 'phone' } // the shopkeeper woke the agent without the wake word
+  | { type: 'hold_end' } // the mic button held for 'wake' was released
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
@@ -132,3 +134,5 @@ export type ServerMsg =
   | { type: 'turn_done'; resume?: string }
   /** heard, and taken as talk to someone else: nothing written, nothing asked (the phone shows it dimmed) */
   | { type: 'not_entry'; text: string }
+  /** the agent woke (wake word, tap) or went back to sleep (idle timeout) */
+  | { type: 'attention'; state: 'asleep' | 'awake' }

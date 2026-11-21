@@ -1,5 +1,5 @@
-import { Check, Mic, Pencil, MicOff, Sparkles, Square, WifiOff, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Check, Mic, Pencil, Sparkles, Square, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
 import { cn } from '@/lib/utils'
@@ -130,12 +130,21 @@ function Answer({ className, children, onClick }: { className?: string; children
 }
 
 /**
- * Big mic: ONE control. Hands-free: tap = start listening, tap again = stop (mute); while the app is
- * speaking the tap cuts the reply short instead (square icon). Push-to-talk: hold to talk.
+/** Press-and-hold longer than this is a hold (wake while held); shorter is a tap. */
+const HOLD_MS = 350
+
+/**
+ * Big mic: ONE control. Asleep (dim ring): tap wakes. Awake: tap puts it to sleep; while the app is
+ * speaking the tap cuts the reply short instead (square icon). Hold = awake while held.
  * Rings breathe with the input level; colour shows who is talking.
  */
-export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRelease }: {
-  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; handsFree: boolean; t: UiStrings; onPress: () => void; onRelease: () => void
+export function MicButton({ status, levelSource, on, handsFree, t, onTap, onHoldStart, onHoldEnd }: {
+  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; handsFree: boolean; t: UiStrings
+  /** short press: wake / cut the reply short / go to sleep (the caller decides by state) */
+  onTap: () => void
+  /** pressed for a while (or any press in push-to-talk): awake while held */
+  onHoldStart: () => void
+  onHoldEnd: () => void
 }) {
   // the ~30 Hz mic level lives here, so it re-renders only this button, not the whole screen
   const [level, setLevel] = useState(0)
@@ -143,10 +152,29 @@ export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRe
     levelSource.add(setLevel)
     return () => { levelSource.delete(setLevel) }
   }, [levelSource])
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 'down' = pressed, not yet a hold; 'hold' = hold started; null = not pressed */
+  const press = useRef<'down' | 'hold' | null>(null)
+  const down = () => {
+    if (press.current) return
+    if (!handsFree) { press.current = 'hold'; onHoldStart(); return } // push-to-talk: every press is a hold
+    press.current = 'down'
+    holdTimer.current = setTimeout(() => { holdTimer.current = null; press.current = 'hold'; onHoldStart() }, HOLD_MS)
+  }
+  const up = () => {
+    const p = press.current
+    press.current = null
+    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null }
+    if (p === 'hold') onHoldEnd()
+    else if (p === 'down') onTap()
+  }
+  useEffect(() => () => { if (holdTimer.current) clearTimeout(holdTimer.current) }, [])
+
   const s = 1 + Math.min(level * 3, 0.6)
   const live = on && status !== 'offline'
-  const interrupt = handsFree && live && status === 'speaking'
-  const label = !on ? (handsFree ? t.micStart : t.hold) : interrupt ? t.interrupt : handsFree ? t.micStop : t.hold
+  const asleep = !on || status === 'asleep'
+  const interrupt = live && status === 'speaking'
+  const label = asleep ? t.micStart : interrupt ? t.interrupt : t.micStop
   return (
     <div className="relative grid size-28 place-items-center">
       {live && status === 'listening' && (
@@ -160,20 +188,20 @@ export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRe
       <button
         type="button"
         aria-label={label}
-        // a toggle in hands-free mode (pressed = listening); push-to-talk is a hold button, not a toggle
-        aria-pressed={handsFree ? on && !interrupt : undefined}
-        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); onPress() } }}
-        onKeyUp={(e) => { if (e.key === 'Enter' || e.key === ' ') onRelease() }}
-        onPointerDown={(e) => { e.preventDefault(); onPress() }}
-        onPointerUp={onRelease}
-        onPointerLeave={onRelease}
+        // one toggle: pressed = awake
+        aria-pressed={!asleep && !interrupt}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); onTap() } }}
+        onPointerDown={(e) => { e.preventDefault(); down() }}
+        onPointerUp={up}
+        onPointerCancel={up}
+        onPointerLeave={up}
         onContextMenu={(e) => e.preventDefault()}
         className={cn(
           'relative grid size-24 touch-none select-none place-items-center rounded-full shadow-xl transition-colors',
-          !on ? 'bg-card text-primary ring-4 ring-primary/40' : status === 'speaking' ? 'bg-payment text-white' : status === 'offline' ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
+          asleep ? 'bg-card text-primary/60 ring-4 ring-primary/20' : status === 'speaking' ? 'bg-payment text-white' : 'bg-primary text-primary-foreground',
         )}
       >
-        {status === 'offline' && on ? <WifiOff className="size-9" /> : interrupt ? <Square className="size-8 fill-current" /> : on ? <Mic className="size-10" /> : <MicOff className="size-10" />}
+        {interrupt ? <Square className="size-8 fill-current" /> : <Mic className="size-10" />}
       </button>
     </div>
   )
