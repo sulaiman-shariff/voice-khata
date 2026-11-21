@@ -109,6 +109,7 @@ describe('missing parts are asked, and the answer completes the entry', () => {
 
   it('a lone name split from its amount by a pause is joined, not asked about', async () => {
     const h = harness([cust('s', 'Suresh')], { lang: 'kn' })
+    h.s.onClient({ type: 'wake', source: 'tap' })
     h.cb.onFinal!('ಸುರೇಶ್')
     await new Promise((r) => setTimeout(r, 100))
     h.cb.onFinal!('300 ರೂಪಾಯಿ ಸಾಲ.')
@@ -464,6 +465,7 @@ describe('lists', () => {
 
   it('a list the recogniser split at a breath is handled as one list', async () => {
     const h = harness([cust('s', 'Suresh'), cust('g', 'Geeta'), cust('m', 'Mohan')])
+    h.s.onClient({ type: 'wake', source: 'tap' })
     h.cb.onFinal!('सुरेश 200,')
     await new Promise((r) => setTimeout(r, 200))
     expect(h.asks).toBeNull() // Suresh is not asked about alone
@@ -474,6 +476,7 @@ describe('lists', () => {
 
   it('a lone "रमेश 340" is not held forever: asked about after the short wait', async () => {
     const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'wake', source: 'tap' })
     h.cb.onFinal!('रमेश 340')
     await new Promise((r) => setTimeout(r, MID_LIST_HOLD_MS + 200))
     await h.s.idle()
@@ -739,5 +742,119 @@ describe('turn taking', () => {
     expect(await talk((h) => { h.cb.onSpeechStart?.(); h.cb.onPartial?.('nahi ruko') })).toBe(true)
     expect(await talk((h) => { h.cb.onSpeechStart?.(); h.cb.onSpeechEnd?.() })).toBe(false)
     expect(await talk((h) => h.cb.onPartial?.('Ramesh का कुल'))).toBe(false)
+  })
+})
+
+describe('attention: asleep and awake', () => {
+  const states = (out: ServerMsg[]) => out.filter((m) => m.type === 'attention').map((m) => (m as { state: string }).state)
+  const spoke = async (h: ReturnType<typeof harness>, text: string) => {
+    h.cb.onFinal!(text)
+    await new Promise((r) => setTimeout(r, 30))
+    await h.s.idle()
+    // the test room has no measured SNR, so a clear entry is read back first: say yes
+    if (h.asks === 'confirm') await h.tap('yes')
+  }
+
+  it('hello is followed by the current state; a resumed open question starts awake', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    expect(states(h.out)).toEqual(['asleep'])
+    await h.turn('Ramesh 300')
+    expect(h.asks).not.toBeNull()
+    const h2 = harness([cust('r', 'Ramesh')], { resume: h.lastResume() })
+    expect(states(h2.out)).toEqual(['awake'])
+  })
+
+  it('asleep: customer talk with numbers writes nothing and says nothing', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await spoke(h, 'Ramesh ka 300 udhaar')
+    await spoke(h, 'teen sau do sau pachaas')
+    expect(h.ops()).toEqual([])
+    expect(h.said).toEqual([])
+    expect(h.out.some((m) => m.type === 'final')).toBe(false)
+    expect(h.s.pending).toBeNull()
+  })
+
+  it('asleep: "KhataBhai, Ramesh 300 udhaar" wakes and writes', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await spoke(h, 'KhataBhai, Ramesh 300 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+    expect(states(h.out)).toEqual(['asleep', 'awake'])
+  })
+
+  it('a bare wake word wakes and says hello', async () => {
+    const h = harness()
+    await spoke(h, 'खाता भाई')
+    expect(states(h.out)).toEqual(['asleep', 'awake'])
+    expect(h.said).toEqual(['हाँ, बोलिए।'])
+  })
+
+  it('awake: speech is handled without the wake word; a sleep word sleeps at once', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    await spoke(h, 'Ramesh ka 300 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+    await spoke(h, 'bas')
+    expect(states(h.out)).toEqual(['asleep', 'awake', 'asleep'])
+    expect(h.written()).toHaveLength(1)
+    await spoke(h, 'Ramesh ka 100 udhaar')
+    expect(h.written()).toHaveLength(1)
+  })
+
+  it('our own reply containing KhataBhai does not wake it', async () => {
+    const h = harness([cust('r', 'Ramesh')], { lang: 'en', speakMs: 80 })
+    h.s.onClient({ type: 'hello', lang: 'en', snapshot: h.s.snap, firstRun: true, ptt: false })
+    await new Promise((r) => setTimeout(r, 20)) // the disclosure ("I am KhataBhai...") is being spoken
+    h.cb.onFinal!('I am KhataBhai, an AI assistant')
+    h.cb.onFinal!('KhataBhai Ramesh 300 udhaar')
+    await h.s.idle()
+    expect(states(h.out).at(-1)).toBe('asleep')
+    expect(h.written()).toEqual([])
+  })
+
+  it('"...bolo KhataBhai wale bhaiya ko" wakes, but nothing is written', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await spoke(h, 'ye sab ko bolo KhataBhai wale bhaiya ko')
+    expect(states(h.out).at(-1)).toBe('awake')
+    expect(h.ops()).toEqual([])
+  })
+
+  it('a phone wake with no wake word in the transcript goes back to sleep', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'wake', source: 'phone' })
+    expect(states(h.out).at(-1)).toBe('awake')
+    await spoke(h, 'Ramesh ka 300 udhaar')
+    expect(states(h.out)).toEqual(['asleep', 'awake', 'asleep'])
+    expect(h.ops()).toEqual([])
+    expect(h.said).toEqual([])
+  })
+
+  it('a phone wake confirmed by the wake word handles the rest', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'wake', source: 'phone' })
+    await spoke(h, 'KhataBhai Ramesh ka 300 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+    expect(states(h.out).at(-1)).toBe('awake')
+  })
+
+  it('typed text is handled while asleep', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    await h.typed('Ramesh ka 300 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+  })
+
+  it('a sleep message sleeps at once', async () => {
+    const h = harness()
+    h.s.onClient({ type: 'wake', source: 'tap' })
+    h.s.onClient({ type: 'sleep' })
+    expect(states(h.out)).toEqual(['asleep', 'awake', 'asleep'])
+  })
+
+  it('hold keeps it awake until hold_end', async () => {
+    const h = harness([cust('r', 'Ramesh')])
+    h.s.onClient({ type: 'wake', source: 'hold' })
+    await spoke(h, 'Ramesh ka 300 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+    h.s.onClient({ type: 'hold_end' })
+    expect(states(h.out).at(-1)).toBe('awake') // the 15 s window starts now
   })
 })
