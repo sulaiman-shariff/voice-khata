@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { eraseWord } from '../../shared/replies.js'
 import { nullLogger } from '../log.js'
 import { type Draft, LedgerCore, PENDING_TTL_MS } from './core.js'
 
@@ -43,5 +44,24 @@ describe('ledger core', () => {
     now += PENDING_TTL_MS + 1
     expect(c.pendingView()).toBeNull()
     expect(c.pending).toBeNull()
+  })
+
+  it('an open amount question survives a reconnect', () => {
+    const c = core()
+    c.snap.customers = [{ cid: 'r', name: 'Ramesh', aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 0, typicalPaise: null }]
+    c.processDrafts([draft('Ramesh', 0, 'credit', { cid: 'r', nameSure: true, reasons: ['no-amount'] })])
+    expect(c.pending?.kind).toBe('amount')
+    const next = core()
+    next.importState(c.exportState())
+    expect(next.pending?.kind).toBe('amount')
+  })
+
+  it('a restored erase question always needs the typed word', () => {
+    const blob = (pending: unknown) => Buffer.from(JSON.stringify({ v: 1, at: Date.now(), lang: 'hi', pending, pendingAgeMs: 0, focusCid: null, history: [] })).toString('base64url')
+    for (const p of [{ kind: 'delete' }, { kind: 'delete', requireType: 'yes' }]) {
+      const c = new LedgerCore({ lang: () => 'hi', now: () => 0, newId: () => 'x', log: nullLogger })
+      c.importState(blob(p))
+      expect(c.pending).toEqual({ kind: 'delete', requireType: eraseWord('hi') })
+    }
   })
 })

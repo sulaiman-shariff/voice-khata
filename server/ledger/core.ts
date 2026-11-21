@@ -8,7 +8,7 @@ import { type Direction, type EntryIntent, type Intent, directionAnswer, mention
 import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
 import { parseAmounts } from '../../shared/numbers.js'
 import type { LedgerOp, PendingView, ServerMsg, SettingMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
-import { type Lang, LOCALE, say, sayMore } from '../../shared/replies.js'
+import { type Lang, LOCALE, eraseWord, say, sayMore } from '../../shared/replies.js'
 import type { Logger } from '../log.js'
 
 const ANOMALY_FACTOR = 5
@@ -215,10 +215,11 @@ export class LedgerCore {
       if (Array.isArray(st.history)) this.history = st.history.filter((h): h is string => typeof h === 'string').slice(-8)
       if (typeof st.focusCid === 'string' || st.focusCid === null) this.focusCid = st.focusCid
       const pendingAge = age + (typeof st.pendingAgeMs === 'number' ? st.pendingAgeMs : 0)
-      const kinds = ['confirm', 'name', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify', 'choose']
+      const kinds = ['confirm', 'name', 'amount', 'direction', 'confusable', 'which', 'delete', 'batch', 'modify', 'choose']
       const pendingOk = !!st.pending && typeof st.pending === 'object' && kinds.includes((st.pending as { kind?: string }).kind ?? '')
       if (pendingOk && pendingAge < PENDING_TTL_MS) {
-        this.pending = st.pending
+        // an erase question from the blob always needs this language's typed word (never a yes, never the blob's word)
+        this.pending = st.pending!.kind === 'delete' ? { kind: 'delete', requireType: eraseWord(this.lang) } : st.pending
         this.pendingAt = this.now() - pendingAge
       }
       this.log.info('resume', { ageMs: age, pending: pendingOk ? (st.pending as { kind: string }).kind : null, restored: !!this.pending, history: this.history.length })
