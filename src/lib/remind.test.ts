@@ -51,3 +51,18 @@ describe('WhatsApp reminder message', () => {
     }
   })
 })
+
+describe('Twilio status check', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it('a failed check is asked again (server restarting), and a yes is remembered', async () => {
+    const { twilioReady } = await import('./remind')
+    const fetch = vi.fn()
+      .mockRejectedValueOnce(new Error('server restarting'))
+      .mockResolvedValueOnce({ json: async () => ({ configured: true }) })
+    vi.stubGlobal('fetch', fetch)
+    expect(await twilioReady(true)).toBe(false)
+    expect(await twilioReady(true)).toBe(true)
+    expect(await twilioReady()).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+})

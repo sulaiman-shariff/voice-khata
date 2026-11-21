@@ -36,6 +36,23 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
   - **Status bar:** the bar pads for the phone's status bar (`env(safe-area-inset-top)`), for the Capacitor app.
 - **Files:** `src/ui/RemindSheet.tsx` (new), `src/App.tsx` (top bar, bell, sheet), `src/ui/Dropdown.tsx` (`compact`), `src/ui/EntrySheet.tsx` (new-customer number and consent), `src/ui/strings.ts` (`EXTRA6`, 5 languages).
 
+**Bug found in testing: "Send opens WhatsApp instead of sending through Twilio."**
+- **Cause:** the app asked the server once per page whether Twilio was set up and remembered the answer, including a failed check. The voice server restarts for about a second whenever server code changes (`tsx watch`). A page that checked during a restart remembered "no Twilio", so every reminder after that silently opened WhatsApp. The server log showed no send request at all.
+- **Fix** (`src/lib/remind.ts`):
+  - Only a **yes** is remembered. A no, or no answer, is asked again: every tap re-checks, and the menu and Reminders screen re-check when opened.
+  - When Twilio refuses a message, WhatsApp is **no longer opened by itself**. The toast says why, and offers a **WhatsApp** button to send it from the shop's own WhatsApp instead.
+  - Twilio's common trial errors are explained in plain words (`toastRemind` in `src/ui/Sheets.tsx`):
+    - 63015: number has not joined
+    - 63016: 24 h window closed, send the join code again
+    - 21211: invalid number
+    - 21608: trial, verified number only
+    - 21610: customer replied STOP
+    - 63007: wrong sender in `.env`
+    - 20003: wrong SID/token
+  - With no number saved it asks for one, instead of opening WhatsApp with no recipient.
+  - Only when the server has no Twilio at all does a tap open WhatsApp directly, as intended.
+- **Test:** `src/lib/remind.test.ts`: a failed check is retried and a yes is remembered.
+
 ---
 
 ## 7. WhatsApp reminder wording

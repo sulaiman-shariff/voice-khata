@@ -17,12 +17,33 @@ import type { KhataStore, Settings } from './contracts'
 
 export type RemindResult =
   | { ok: true; via: 'twilio' | 'share' }
-  | { ok: false; reason: 'no-phone' | 'not-allowed' | 'nothing-due' | 'failed'; error?: string }
+  | {
+    ok: false; reason: 'no-phone' | 'not-allowed' | 'nothing-due' | 'failed'; error?: string
+    /** Twilio code when Twilio refused (63015 not joined, 63016 outside the 24 h window, 21211 bad number) */
+    code?: number
+    /** send it from the shop's own WhatsApp instead (offered, never opened by itself) */
+    share?: () => void
+  }
 
-let configured: Promise<boolean> | null = null
-/** Is Twilio set up on the server? (cached; a failed check counts as no) */
-export const twilioReady = (): Promise<boolean> =>
-  (configured ??= fetch(api('/api/remind')).then((r) => r.json()).then((j: { configured?: boolean }) => !!j.configured).catch(() => false))
+let configured = false
+let checkedAt = 0
+/**
+ * Is Twilio set up on the server? Only a yes is remembered: a no, or no answer (the server was
+ * restarting, the network blinked), is asked again on the next send instead of quietly switching
+ * every reminder to the WhatsApp share for the rest of the session.
+ */
+export async function twilioReady(force = false): Promise<boolean> {
+  if (configured) return true
+  if (!force && Date.now() - checkedAt < 5000) return false
+  checkedAt = Date.now()
+  try {
+    const j = (await (await fetch(api('/api/remind'))).json()) as { configured?: boolean }
+    configured = !!j.configured
+  } catch {
+    configured = false
+  }
+  return configured
+}
 
 export const canRemind = (state: LedgerState, cid: string): boolean => {
   const c = state.customers.get(cid)
@@ -86,30 +107,29 @@ export async function sendReminder(store: KhataStore, cid: string, opts: { text?
   if (balance(s, cid) <= 0) return { ok: false, reason: 'nothing-due' }
   const text = opts.text ?? reminderMessage(s, store.settings, cid)
   const stamp = () => store.updateSettings({ reminded: { ...(store.settings.reminded ?? {}), [cid]: Date.now() } })
-  if (c.phone && (await twilioReady())) {
-    try {
-      const res = await fetch(api('/api/remind'), {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ to: c.phone, body: text, vars: { name: c.name, amount: `₹${(balance(s, cid) / 100).toLocaleString('en-IN')}`, shop: store.settings.shopName } }),
-      })
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; code?: number }
-      if (res.ok && j.ok) {
-        await stamp()
-        return { ok: true, via: 'twilio' }
-      }
-      if (!opts.interactive) return { ok: false, reason: 'failed', error: j.error ?? `HTTP ${res.status}` }
-      // Twilio refused (e.g. 63015: the customer has not joined the sandbox): let the shopkeeper send it
-      share(text, c.phone)
-      await stamp()
-      return { ok: false, reason: 'failed', error: `${j.code ? `${j.code}: ` : ''}${j.error ?? res.status} — opened WhatsApp instead` }
-    } catch (e) {
-      if (!opts.interactive) return { ok: false, reason: 'failed', error: String(e) }
-    }
+  if (!c.phone) return { ok: false, reason: 'no-phone' }
+  const byHand = opts.interactive ? () => { share(text, c.phone); void stamp() } : undefined
+  // a tap always asks the server afresh, so a check that failed earlier never sticks
+  if (!(await twilioReady(!!opts.interactive))) {
+    // no Twilio on the server at all: the shop's own WhatsApp is the way (a tap opens it)
+    if (!byHand) return { ok: false, reason: 'failed', error: 'twilio not configured' }
+    byHand()
+    return { ok: true, via: 'share' }
   }
-  if (!opts.interactive) return { ok: false, reason: c.phone ? 'failed' : 'no-phone' }
-  share(text, c.phone)
-  await stamp()
-  return { ok: true, via: 'share' }
+  try {
+    const res = await fetch(api('/api/remind'), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ to: c.phone, body: text, vars: { name: c.name, amount: `₹${(balance(s, cid) / 100).toLocaleString('en-IN')}`, shop: store.settings.shopName } }),
+    })
+    const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; code?: number }
+    if (res.ok && j.ok) {
+      await stamp()
+      return { ok: true, via: 'twilio' }
+    }
+    return { ok: false, reason: 'failed', error: j.error ?? `HTTP ${res.status}`, code: j.code, share: byHand }
+  } catch (e) {
+    return { ok: false, reason: 'failed', error: String(e), share: byHand }
+  }
 }
 
 /** Customers an automatic run would remind now: allowed, has a number, owes, not reminded recently. */

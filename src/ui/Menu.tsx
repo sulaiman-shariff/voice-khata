@@ -23,7 +23,7 @@ export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImp
   const [editing, setEditing] = useState(false)
   const [debugLogs, setDebugLogs] = useState(clientLog.enabled)
   const [twilio, setTwilio] = useState<boolean | null>(null)
-  useEffect(() => { if (open) void twilioReady().then(setTwilio) }, [open])
+  useEffect(() => { if (open) void twilioReady(true).then(setTwilio) }, [open])
   const due = dueForReminder(store.state, st).length
 
   return (

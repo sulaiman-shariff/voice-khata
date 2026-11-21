@@ -22,7 +22,7 @@ export function RemindSheet({ store, open, t, onClose, onChanged }: {
   const [all, setAll] = useState(false)
   const [twilio, setTwilio] = useState<boolean | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  useEffect(() => { if (open) void twilioReady().then(setTwilio) }, [open])
+  useEffect(() => { if (open) void twilioReady(true).then(setTwilio) }, [open])
 
   const rows = [...s.customers.values()]
     .map((c) => ({ c, owed: balance(s, c.cid) }))
