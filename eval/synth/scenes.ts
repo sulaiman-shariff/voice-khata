@@ -14,7 +14,7 @@ export type Scene = { id: string; lines: Line[] }
 type L = Line['lang']
 const bg = (lang: L, text: string): Line => ({ text, lang, addressed: false })
 const kb = (lang: L, text: string, expect: ToolCall[]): Line => ({ text, lang, addressed: true, expect })
-const add = (name: string, amount: number, direction: 'gave' | 'got' = 'gave'): ToolCall => ({
+const add = (name: string, amount: number, direction: 'credit' | 'payment' = 'credit'): ToolCall => ({
   name: 'add_entries',
   args: { entries: [{ name, amount, direction }] },
 })
@@ -90,12 +90,12 @@ export const SCENES: Scene[] = [
   ] },
   { id: 's12_repayment_hi', lines: [
     bg('hi-IN', 'भैया पिछले हफ्ते का पैसा लाया हूँ'),
-    kb('hi-IN', 'खाताभाई, रमेश ने दो सौ रुपये वापस दिए', [add('Ramesh', 200, 'got')]),
+    kb('hi-IN', 'खाताभाई, रमेश ने दो सौ रुपये वापस दिए', [add('Ramesh', 200, 'payment')]),
     bg('hi-IN', 'बाकी अगले महीने दूँगा'),
   ] },
   { id: 's13_repayment_en', lines: [
     bg('en-IN', 'I brought the money from last week'),
-    kb('en-IN', 'KhataBhai, Suresh paid back three hundred rupees', [add('Suresh', 300, 'got')]),
+    kb('en-IN', 'KhataBhai, Suresh paid back three hundred rupees', [add('Suresh', 300, 'payment')]),
     bg('en-IN', 'The rest I will give on Monday'),
   ] },
   { id: 's14_show_customer_hi', lines: [
@@ -140,8 +140,8 @@ export const SCENES: Scene[] = [
     bg('hi-IN', 'आज बहुत भीड़ है दुकान पर'),
     kb('hi-IN', 'खाताभाई, रमेश के सौ रुपये और सुरेश के दो सौ रुपये उधार लिखो', [
       { name: 'add_entries', args: { entries: [
-        { name: 'Ramesh', amount: 100, direction: 'gave' },
-        { name: 'Suresh', amount: 200, direction: 'gave' },
+        { name: 'Ramesh', amount: 100, direction: 'credit' },
+        { name: 'Suresh', amount: 200, direction: 'credit' },
       ] } },
     ]),
     bg('hi-IN', 'अगला कौन है'),
@@ -150,8 +150,8 @@ export const SCENES: Scene[] = [
     bg('en-IN', 'It is very crowded today'),
     kb('en-IN', 'KhataBhai, put fifty rupees for Priya and seventy for Lakshmi on credit', [
       { name: 'add_entries', args: { entries: [
-        { name: 'Priya', amount: 50, direction: 'gave' },
-        { name: 'Lakshmi', amount: 70, direction: 'gave' },
+        { name: 'Priya', amount: 50, direction: 'credit' },
+        { name: 'Lakshmi', amount: 70, direction: 'credit' },
       ] } },
     ]),
     bg('en-IN', 'Next please'),
@@ -205,7 +205,7 @@ export const SCENES: Scene[] = [
     bg('kn-IN', 'ಅಣ್ಣ ಒಂದು ಲೀಟರ್ ಹಾಲು ಕೊಡಿ'),
     bg('kn-IN', 'ಹಾಲು ಐವತ್ತು ರೂಪಾಯಿ'),
     bg('en-IN', 'Do you have change for two hundred?'),
-    kb('kn-IN', 'ಖಾತಾಭಾಯ್, ಲಕ್ಷ್ಮಿ ಐವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು', [add('Lakshmi', 50, 'got')]),
+    kb('kn-IN', 'ಖಾತಾಭಾಯ್, ಲಕ್ಷ್ಮಿ ಐವತ್ತು ರೂಪಾಯಿ ಕೊಟ್ಟರು', [add('Lakshmi', 50, 'payment')]),
     bg('kn-IN', 'ಧನ್ಯವಾದ'),
   ] },
   { id: 's33_busy_mix_3', lines: [
@@ -219,12 +219,12 @@ export const SCENES: Scene[] = [
   { id: 's34_two_requests_hi', lines: [
     kb('hi-IN', 'खाताभाई, रमेश का कितना बाकी है', [bal('Ramesh')]),
     bg('hi-IN', 'अरे वाह, कम हो गया'),
-    kb('hi-IN', 'खाताभाई, रमेश ने पचास रुपये दिए', [add('Ramesh', 50, 'got')]),
+    kb('hi-IN', 'खाताभाई, रमेश ने पचास रुपये दिए', [add('Ramesh', 50, 'payment')]),
   ] },
   { id: 's35_two_requests_en', lines: [
     kb('en-IN', 'KhataBhai, how much does Suresh owe', [bal('Suresh')]),
     bg('en-IN', 'That is a lot, remind him'),
-    kb('en-IN', 'KhataBhai, Suresh paid two hundred', [add('Suresh', 200, 'got')]),
+    kb('en-IN', 'KhataBhai, Suresh paid two hundred', [add('Suresh', 200, 'payment')]),
   ] },
   { id: 's36_phone_call_chatter', lines: [
     bg('hi-IN', 'हैलो हाँ, मैं दुकान पर हूँ'),
@@ -253,6 +253,31 @@ export const SCENES: Scene[] = [
     bg('hi-IN', 'खाता खोलने के लिए आधार कार्ड चाहिए क्या'),
     bg('en-IN', 'No no, just your name and phone number'),
     bg('hi-IN', 'अच्छा ठीक है, कल लाता हूँ'),
+  ] },
+  // the real wake word inside chatter that is not an instruction: nothing may be written
+  { id: 's41_wakeword_chatter_hi', lines: [
+    bg('hi-IN', 'अरे बोलो खाताभाई वाले भैया को कल आना'),
+    bg('hi-IN', 'तीन सौ रुपये माँग रहा था, पाँच सौ का नोट है उसके पास'),
+    bg('hi-IN', 'खाताभाई ऐप बहुत अच्छा है, पड़ोस वाली दुकान पर भी लगा है'),
+    bg('hi-IN', 'चीनी चालीस की, चाय पत्ती एक सौ बीस की'),
+  ] },
+  { id: 's42_wakeword_chatter_en', lines: [
+    bg('en-IN', 'Tell the KhataBhai guy to come tomorrow, three hundred rupees he was asking'),
+    bg('en-IN', 'My cousin also uses KhataBhai in his shop, he says it is good'),
+    bg('en-IN', 'Sugar is forty five, dal is one twenty'),
+    bg('en-IN', 'Do not forget, two hundred for the milk man'),
+  ] },
+  { id: 's43_wakeword_chatter_kn', lines: [
+    bg('kn-IN', 'ಖಾತಾಭಾಯ್ ಹೇಳುವವರಿಗೆ ನಾಳೆ ಬರಲು ಹೇಳಿ'),
+    bg('kn-IN', 'ಮುನ್ನೂರು ರೂಪಾಯಿ ಕೇಳ್ತಿದ್ರು, ಐನೂರು ನೋಟು ಇದೆ'),
+    bg('kn-IN', 'ಖಾತಾಭಾಯ್ ಆಪ್ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ ಅಂತ ಹೇಳಿದ್ರು'),
+    bg('kn-IN', 'ಅಕ್ಕಿ ಅರವತ್ತು, ಬೇಳೆ ನೂರಾ ಇಪ್ಪತ್ತು'),
+  ] },
+  { id: 's44_wakeword_chatter_mixed', lines: [
+    bg('hi-IN', 'Bhaiya, KhataBhai wala uncle kal aayega, do hundred lega'),
+    bg('en-IN', 'Is KhataBhai working on your phone too?'),
+    bg('hi-IN', 'हाँ, पर अभी रुको, पहले ग्राहक को निपटा लूँ, एक सौ साठ रुपये हुए'),
+    bg('kn-IN', 'ಸರಿ ಅಣ್ಣ, ನಾನು ಆಮೇಲೆ ಬರ್ತೀನಿ'),
   ] },
   { id: 's40_long_with_two_wakes', lines: [
     bg('en-IN', 'Uncle, is the shop open on Sunday?'),
