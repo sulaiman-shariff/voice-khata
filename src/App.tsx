@@ -14,6 +14,7 @@ import { API_BASE, voiceUrl } from '@/lib/api'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
 import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
+import { isNative, keepAwake, onBackButton } from '@/lib/native'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
@@ -237,11 +238,26 @@ function Home({ store }: { store: KhataStore }) {
 
   // keep the screen awake while the khata is listening
   useEffect(() => {
+    if (isNative) { keepAwake(on); return () => keepAwake(false) }
     if (!on || !('wakeLock' in navigator)) return
     let lock: WakeLockSentinel | null = null
     void navigator.wakeLock.request('screen').then((l) => (lock = l)).catch(() => {})
     return () => void lock?.release()
   }, [on])
+
+  // Android back button: close the topmost layer, else minimise (onboarding/profile fall through to minimise)
+  const back = useRef<() => boolean>(() => false)
+  useEffect(() => {
+    back.current = () => {
+      if (entry) closeEntry()
+      else if (typing) setTyping(false)
+      else if (sheet) setSheet(null)
+      else if (cid) setCid(null)
+      else return false
+      return true
+    }
+  })
+  useEffect(() => onBackButton(() => back.current()), [])
 
   if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto })} />
   if (!settings.profileDone) {

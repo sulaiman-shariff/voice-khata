@@ -5,6 +5,7 @@ import { balance, displayName } from '../../shared/ledger.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
+import { openExternal } from '@/lib/native'
 import { isUpiId } from '@/lib/pay'
 import { type RemindResult, reminderMessage, sendReminder } from '@/lib/remind'
 import { cn } from '@/lib/utils'
@@ -35,7 +36,7 @@ const saveLinks = (m: Record<string, string>) => {
 export function shareWhatsApp(text: string, phone?: string) {
   const digits = phone?.replace(/\D/g, '') ?? ''
   const to = digits.length === 10 ? `91${digits}` : digits
-  window.open(`https://wa.me/${to}?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
+  openExternal(`https://wa.me/${to}?text=${encodeURIComponent(text)}`)
 }
 
 export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEntry }: {

@@ -1,3 +1,5 @@
+import { syncStatusBar } from '../lib/native'
+
 /** Colour schemes (tokens in src/index.css, one block per id). Swatch: primary, accent, background. */
 export interface Theme { id: string; name: string; hint: string; dark: boolean; swatch: [string, string, string] }
 
@@ -27,6 +29,7 @@ export function applyTheme(id: string | undefined) {
   root.style.colorScheme = t.dark ? 'dark' : 'light'
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(root).getPropertyValue('--background').trim())
   try { localStorage.setItem(KEY, t.id) } catch { /* private mode */ }
+  syncStatusBar()
 }
 
 /** Before React mounts: last scheme used on this phone. */
