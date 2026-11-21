@@ -35,3 +35,18 @@ describe('score', () => {
     expect(ok).toMatchObject({ unaddressedEntries: 0, falseWakes: 0, missedWakes: 0, wrong: 0 })
   })
 })
+
+import { assignToLines } from './score.js'
+
+describe('assignToLines', () => {
+  const lines = [{ startMs: 1000, endMs: 3000 }, { startMs: 4000, endMs: 6000 }]
+  it('maps an event to the line that ended most recently, within the tail', () => {
+    expect(assignToLines(lines, 3500, 3000)).toBe(0) // a final lands after its line ended, even once the next began
+    expect(assignToLines(lines, 4200, 3000)).toBe(0)
+    expect(assignToLines(lines, 6400, 3000)).toBe(1)
+  })
+  it('drops events before any line ended or past the tail', () => {
+    expect(assignToLines(lines, 2500, 3000)).toBe(-1)
+    expect(assignToLines(lines, 12000, 3000)).toBe(-1)
+  })
+})
