@@ -526,89 +526,102 @@ const MORE: Record<Lang, MoreReplies> = {
 export const sayMore = (lang: Lang): MoreReplies => MORE[lang]
 
 /**
- * The WhatsApp reminder a customer receives: a friendly note from a shop they know. Warm and
- * factual — the balance, an easy way to pay, a thank-you. Never pleading ("kindly request",
- * "please please") and never pressing ("overdue", "immediately", penalties). Always says how to
- * stop the messages. The amount is in *bold* (WhatsApp formatting).
+ * The WhatsApp reminder a customer receives: a clear, businesslike note from the shop. It states
+ * the balance and asks for it to be settled on the next visit (or paid online), and thanks them.
+ * Firm, not lenient, and never harsh: no pleading ("kindly"), no pressure ("overdue",
+ * "immediately", penalties). Bold (WhatsApp *...*) carries the emphasis; at most one emoji.
+ * Always says how to stop the messages.
  */
 export interface ReminderWords {
-  greet: (name: string, shop: string) => string
-  balance: (amount: string) => string
-  /** followed by the pay link */
-  pay: string
+  header: (shop: string) => string
+  balance: (name: string, amount: string) => string
+  /** followed by the pay link on the next line */
+  settleOnline: string
+  /** when the shop has no UPI ID */
+  settle: string
   thanks: string
   optOut: string
 }
 const REMINDER: Record<Lang, ReminderWords> = {
   en: {
-    greet: (n, s) => `👋 Hi ${n}! A friendly reminder from ${s}.`,
-    balance: (a) => `Your khata balance is *${a}*.`,
-    pay: 'Pay whenever it suits you 👉',
-    thanks: 'Thank you for shopping with us! 🙏',
-    optOut: 'Sent via KhataBhai · reply STOP to stop these messages',
+    header: (s) => `*${s}* — Payment reminder`,
+    balance: (n, a) => `Hi ${n}, your khata balance with us is *${a}*.`,
+    settleOnline: 'Please settle it on your next visit, or pay online here:',
+    settle: 'Please settle it on your next visit.',
+    thanks: 'Thank you 🙏',
+    optOut: '_KhataBhai · Reply STOP to stop these reminders._',
   },
   hi: {
-    greet: (n, s) => `👋 नमस्ते ${n} जी! ${s} की ओर से एक छोटी-सी याद।`,
-    balance: (a) => `आपके खाते में *${a}* बाकी हैं।`,
-    pay: 'जब सुविधा हो, यहाँ से भुगतान कर सकते हैं 👉',
-    thanks: 'हमारे साथ ख़रीदारी के लिए शुक्रिया! 🙏',
-    optOut: 'KhataBhai से भेजा गया · ये संदेश नहीं चाहिए तो "बंद" लिखें',
+    header: (s) => `*${s}* — भुगतान याद-दिहानी`,
+    balance: (n, a) => `नमस्ते ${n} जी, हमारे यहाँ आपके खाते में *${a}* बाकी हैं।`,
+    settleOnline: 'अगली बार आने पर चुका दें, या यहाँ ऑनलाइन भुगतान करें:',
+    settle: 'अगली बार आने पर चुका दें।',
+    thanks: 'धन्यवाद 🙏',
+    optOut: '_KhataBhai · ये संदेश बंद करने के लिए "बंद" लिखें।_',
   },
   kn: {
-    greet: (n, s) => `👋 ನಮಸ್ಕಾರ ${n} ಅವರೇ! ${s} ಕಡೆಯಿಂದ ಒಂದು ಸಣ್ಣ ನೆನಪು.`,
-    balance: (a) => `ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ *${a}* ಬಾಕಿ ಇದೆ.`,
-    pay: 'ಅನುಕೂಲವಾದಾಗ ಇಲ್ಲಿ ಪಾವತಿಸಬಹುದು 👉',
-    thanks: 'ನಮ್ಮಲ್ಲಿ ಖರೀದಿಸಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ! 🙏',
-    optOut: 'KhataBhai ಮೂಲಕ ಕಳುಹಿಸಲಾಗಿದೆ · ಈ ಸಂದೇಶ ಬೇಡವಾದರೆ "ನಿಲ್ಲಿಸಿ" ಎಂದು ಉತ್ತರಿಸಿ',
+    header: (s) => `*${s}* — ಪಾವತಿ ನೆನಪು`,
+    balance: (n, a) => `ನಮಸ್ಕಾರ ${n} ಅವರೇ, ನಮ್ಮಲ್ಲಿ ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ *${a}* ಬಾಕಿ ಇದೆ.`,
+    settleOnline: 'ಮುಂದಿನ ಬಾರಿ ಬಂದಾಗ ಚುಕ್ತಾ ಮಾಡಿ, ಅಥವಾ ಇಲ್ಲಿ ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಪಾವತಿಸಿ:',
+    settle: 'ಮುಂದಿನ ಬಾರಿ ಬಂದಾಗ ಚುಕ್ತಾ ಮಾಡಿ.',
+    thanks: 'ಧನ್ಯವಾದ 🙏',
+    optOut: '_KhataBhai · ಈ ಸಂದೇಶಗಳು ಬೇಡವಾದರೆ "ನಿಲ್ಲಿಸಿ" ಎಂದು ಉತ್ತರಿಸಿ._',
   },
   ta: {
-    greet: (n, s) => `👋 வணக்கம் ${n}! ${s} கடையிலிருந்து ஒரு சிறிய நினைவூட்டல்.`,
-    balance: (a) => `உங்கள் கணக்கில் *${a}* பாக்கி உள்ளது.`,
-    pay: 'வசதியான நேரத்தில் இங்கே செலுத்தலாம் 👉',
-    thanks: 'எங்களிடம் வாங்கியதற்கு நன்றி! 🙏',
-    optOut: 'KhataBhai மூலம் அனுப்பப்பட்டது · இவை வேண்டாமெனில் "நிறுத்து" என்று பதில் அனுப்புங்கள்',
+    header: (s) => `*${s}* — பணம் செலுத்த நினைவூட்டல்`,
+    balance: (n, a) => `வணக்கம் ${n}, எங்களிடம் உங்கள் கணக்கில் *${a}* பாக்கி உள்ளது.`,
+    settleOnline: 'அடுத்த முறை வரும்போது செலுத்துங்கள், அல்லது இங்கே ஆன்லைனில் செலுத்தலாம்:',
+    settle: 'அடுத்த முறை வரும்போது செலுத்துங்கள்.',
+    thanks: 'நன்றி 🙏',
+    optOut: '_KhataBhai · இவை வேண்டாமெனில் "நிறுத்து" என்று பதில் அனுப்புங்கள்._',
   },
   te: {
-    greet: (n, s) => `👋 నమస్కారం ${n} గారు! ${s} నుండి ఒక చిన్న గుర్తు.`,
-    balance: (a) => `మీ ఖాతాలో *${a}* బాకీ ఉంది.`,
-    pay: 'మీకు వీలైనప్పుడు ఇక్కడ చెల్లించవచ్చు 👉',
-    thanks: 'మా దగ్గర కొన్నందుకు ధన్యవాదాలు! 🙏',
-    optOut: 'KhataBhai ద్వారా పంపబడింది · ఇవి వద్దంటే "ఆపండి" అని జవాబివ్వండి',
+    header: (s) => `*${s}* — చెల్లింపు రిమైండర్`,
+    balance: (n, a) => `నమస్కారం ${n} గారు, మా దగ్గర మీ ఖాతాలో *${a}* బాకీ ఉంది.`,
+    settleOnline: 'తదుపరి సారి వచ్చినప్పుడు చెల్లించండి, లేదా ఇక్కడ ఆన్‌లైన్‌లో చెల్లించండి:',
+    settle: 'తదుపరి సారి వచ్చినప్పుడు చెల్లించండి.',
+    thanks: 'ధన్యవాదాలు 🙏',
+    optOut: '_KhataBhai · ఇవి వద్దంటే "ఆపండి" అని జవాబివ్వండి._',
   },
   ml: {
-    greet: (n, s) => `👋 നമസ്കാരം ${n}! ${s}-ൽ നിന്ന് ഒരു ചെറിയ ഓർമ്മപ്പെടുത്തൽ.`,
-    balance: (a) => `നിങ്ങളുടെ കണക്കിൽ *${a}* ബാക്കിയുണ്ട്.`,
-    pay: 'സൗകര്യം പോലെ ഇവിടെ പണമടയ്ക്കാം 👉',
-    thanks: 'ഞങ്ങളുടെ കടയിൽ നിന്ന് വാങ്ങിയതിന് നന്ദി! 🙏',
-    optOut: 'KhataBhai വഴി അയച്ചത് · ഇവ വേണ്ടെങ്കിൽ "നിർത്തുക" എന്ന് മറുപടി നൽകുക',
+    header: (s) => `*${s}* — പേയ്‌മെന്റ് ഓർമ്മപ്പെടുത്തൽ`,
+    balance: (n, a) => `നമസ്കാരം ${n}, ഞങ്ങളുടെ കടയിൽ നിങ്ങളുടെ കണക്കിൽ *${a}* ബാക്കിയുണ്ട്.`,
+    settleOnline: 'അടുത്ത തവണ വരുമ്പോൾ തീർക്കുക, അല്ലെങ്കിൽ ഇവിടെ ഓൺലൈനായി അടയ്ക്കുക:',
+    settle: 'അടുത്ത തവണ വരുമ്പോൾ തീർക്കുക.',
+    thanks: 'നന്ദി 🙏',
+    optOut: '_KhataBhai · ഇവ വേണ്ടെങ്കിൽ "നിർത്തുക" എന്ന് മറുപടി നൽകുക._',
   },
   mr: {
-    greet: (n, s) => `👋 नमस्कार ${n}! ${s} कडून एक छोटीशी आठवण.`,
-    balance: (a) => `तुमच्या खात्यात *${a}* बाकी आहेत.`,
-    pay: 'सोयीनुसार इथे पैसे भरू शकता 👉',
-    thanks: 'आमच्याकडून खरेदी केल्याबद्दल धन्यवाद! 🙏',
-    optOut: 'KhataBhai मार्फत पाठवले · हे संदेश नको असल्यास "बंद" लिहा',
+    header: (s) => `*${s}* — पेमेंट आठवण`,
+    balance: (n, a) => `नमस्कार ${n}, आमच्याकडे तुमच्या खात्यात *${a}* बाकी आहेत.`,
+    settleOnline: 'पुढच्या वेळी आल्यावर भरा, किंवा इथे ऑनलाइन पैसे भरा:',
+    settle: 'पुढच्या वेळी आल्यावर भरा.',
+    thanks: 'धन्यवाद 🙏',
+    optOut: '_KhataBhai · हे संदेश नको असल्यास "बंद" लिहा._',
   },
   bn: {
-    greet: (n, s) => `👋 নমস্কার ${n}! ${s} থেকে একটি ছোট্ট মনে করানো।`,
-    balance: (a) => `আপনার খাতায় *${a}* বাকি আছে।`,
-    pay: 'সুবিধামতো এখানে পেমেন্ট করতে পারেন 👉',
-    thanks: 'আমাদের দোকান থেকে কেনার জন্য ধন্যবাদ! 🙏',
-    optOut: 'KhataBhai থেকে পাঠানো · এই বার্তা না চাইলে "বন্ধ" লিখুন',
+    header: (s) => `*${s}* — পেমেন্ট রিমাইন্ডার`,
+    balance: (n, a) => `নমস্কার ${n}, আমাদের দোকানে আপনার খাতায় *${a}* বাকি আছে।`,
+    settleOnline: 'পরের বার এলে মিটিয়ে দিন, অথবা এখানে অনলাইনে পেমেন্ট করুন:',
+    settle: 'পরের বার এলে মিটিয়ে দিন।',
+    thanks: 'ধন্যবাদ 🙏',
+    optOut: '_KhataBhai · এই বার্তা না চাইলে "বন্ধ" লিখুন।_',
   },
   gu: {
-    greet: (n, s) => `👋 નમસ્તે ${n}! ${s} તરફથી એક નાનકડી યાદ.`,
-    balance: (a) => `તમારા ખાતામાં *${a}* બાકી છે.`,
-    pay: 'અનુકૂળતાએ અહીંથી ચુકવણી કરી શકો 👉',
-    thanks: 'અમારી પાસેથી ખરીદી કરવા બદલ આભાર! 🙏',
-    optOut: 'KhataBhai દ્વારા મોકલેલ · આ સંદેશા ન જોઈએ તો "બંધ" લખો',
+    header: (s) => `*${s}* — ચુકવણી રીમાઇન્ડર`,
+    balance: (n, a) => `નમસ્તે ${n}, અમારે ત્યાં તમારા ખાતામાં *${a}* બાકી છે.`,
+    settleOnline: 'આગલી વખતે આવો ત્યારે ચૂકવી દેજો, અથવા અહીં ઓનલાઇન ચુકવણી કરો:',
+    settle: 'આગલી વખતે આવો ત્યારે ચૂકવી દેજો.',
+    thanks: 'આભાર 🙏',
+    optOut: '_KhataBhai · આ સંદેશા ન જોઈએ તો "બંધ" લખો._',
   },
   pa: {
-    greet: (n, s) => `👋 ਸਤ ਸ੍ਰੀ ਅਕਾਲ ${n} ਜੀ! ${s} ਵੱਲੋਂ ਇੱਕ ਛੋਟੀ ਜਿਹੀ ਯਾਦ।`,
-    balance: (a) => `ਤੁਹਾਡੇ ਖਾਤੇ ਵਿੱਚ *${a}* ਬਾਕੀ ਹਨ।`,
-    pay: 'ਸਹੂਲਤ ਅਨੁਸਾਰ ਇੱਥੋਂ ਭੁਗਤਾਨ ਕਰ ਸਕਦੇ ਹੋ 👉',
-    thanks: 'ਸਾਡੇ ਤੋਂ ਖਰੀਦਦਾਰੀ ਲਈ ਧੰਨਵਾਦ! 🙏',
-    optOut: 'KhataBhai ਰਾਹੀਂ ਭੇਜਿਆ · ਇਹ ਸੁਨੇਹੇ ਨਹੀਂ ਚਾਹੀਦੇ ਤਾਂ "ਬੰਦ" ਲਿਖੋ',
+    header: (s) => `*${s}* — ਭੁਗਤਾਨ ਯਾਦ-ਦਹਾਨੀ`,
+    balance: (n, a) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ ${n} ਜੀ, ਸਾਡੇ ਕੋਲ ਤੁਹਾਡੇ ਖਾਤੇ ਵਿੱਚ *${a}* ਬਾਕੀ ਹਨ।`,
+    settleOnline: "ਅਗਲੀ ਵਾਰ ਆਉਣ 'ਤੇ ਚੁਕਾ ਦਿਓ, ਜਾਂ ਇੱਥੇ ਆਨਲਾਈਨ ਭੁਗਤਾਨ ਕਰੋ:",
+    settle: "ਅਗਲੀ ਵਾਰ ਆਉਣ 'ਤੇ ਚੁਕਾ ਦਿਓ।",
+    thanks: 'ਧੰਨਵਾਦ 🙏',
+    optOut: '_KhataBhai · ਇਹ ਸੁਨੇਹੇ ਨਹੀਂ ਚਾਹੀਦੇ ਤਾਂ "ਬੰਦ" ਲਿਖੋ।_',
   },
 }
 export const reminderWords = (lang: Lang): ReminderWords => REMINDER[lang]

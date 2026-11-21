@@ -30,20 +30,20 @@ export const canRemind = (state: LedgerState, cid: string): boolean => {
 }
 
 /**
- * The WhatsApp reminder, in the shop's language: a friendly note from a shop the customer knows
- * (shared/replies.ts reminderWords) — greeting, balance, an easy way to pay, thanks, the shop's
- * signature, and how to stop these messages.
+ * The WhatsApp reminder, in the shop's language (shared/replies.ts reminderWords): businesslike,
+ * bold for what matters, one emoji at most.
  *
- *   👋 Hi Ramesh! A friendly reminder from Sharma Kirana.
+ *   *Sharma Kirana* — Payment reminder
  *
- *   Your khata balance is *₹500*.
- *   Pay whenever it suits you 👉 https://…/pay?…
- *   UPI: sharma@okaxis
+ *   Hi Ramesh, your khata balance with us is *₹500*.
+ *   Please settle it on your next visit, or pay online here:
+ *   https://…/pay?…
+ *   UPI: *sharma@okaxis*
  *
- *   Thank you for shopping with us! 🙏
- *   — Rakesh · Jayanagar · 📞 98…
+ *   Thank you 🙏
+ *   Rakesh · Jayanagar · 98…
  *
- *   Sent via KhataBhai · reply STOP to stop these messages
+ *   _KhataBhai · Reply STOP to stop these reminders._
  */
 export function reminderMessage(state: LedgerState, settings: Settings, cid: string): string {
   const c = state.customers.get(cid)!
@@ -52,17 +52,17 @@ export function reminderMessage(state: LedgerState, settings: Settings, cid: str
   const amount = `₹${owed.toLocaleString('en-IN')}`
   const upi = isUpiId(settings.shopUpi) ? settings.shopUpi!.trim() : null
   const pay = upi && owed > 0
-    ? [`${w.pay} ${payPageUrl({ pa: upi, pn: settings.shopName, am: owed, tn: `Khata: ${c.name}` })}`, `UPI: ${upi}`]
-    : []
-  const sign = [settings.ownerName, settings.shopAddress, settings.shopPhone ? `📞 ${settings.shopPhone}` : ''].filter(Boolean).join(' · ')
+    ? [w.settleOnline, payPageUrl({ pa: upi, pn: settings.shopName, am: owed, tn: `Khata: ${c.name}` }), `UPI: *${upi}*`]
+    : [w.settle]
+  const sign = [settings.ownerName, settings.shopAddress, settings.shopPhone].filter(Boolean).join(' · ')
   return [
-    w.greet(c.name, settings.shopName),
+    w.header(settings.shopName),
     '',
-    w.balance(amount),
+    w.balance(c.name, amount),
     ...pay,
     '',
     w.thanks,
-    ...(sign ? [`— ${sign}`] : []),
+    ...(sign ? [sign] : []),
     '',
     w.optOut,
   ].join('\n')

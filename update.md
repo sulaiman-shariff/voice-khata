@@ -14,37 +14,41 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 ---
 
-## 7. Friendly WhatsApp reminder wording
+## 7. WhatsApp reminder wording
 
-**Owner's ask:** the reminder from the Twilio number should read like a friendly note ("hey, friendly reminder"), never like begging or harsh collecting.
+**Owner's asks:**
+- **First round:** it should feel like a reminder from the shop, never like begging or harsh collecting.
+- **Second round:** not lenient ("whenever it suits you" was too soft), no emojis except at most one, and bold instead.
 
 **The message now** (in the shop's language; English shown):
 ```
-👋 Hi Ramesh! A friendly reminder from Sharma Kirana.
+*Sharma Kirana* — Payment reminder
 
-Your khata balance is *₹500*.
-Pay whenever it suits you 👉 https://<site>/pay?…
-UPI: sharma@okaxis
+Hi Ramesh, your khata balance with us is *₹500*.
+Please settle it on your next visit, or pay online here:
+https://<site>/pay?…
+UPI: *sharma@okaxis*
 
-Thank you for shopping with us! 🙏
-— Rakesh · Jayanagar · 📞 98xxxxxxxx
+Thank you 🙏
+Rakesh · Jayanagar · 98xxxxxxxx
 
-Sent via KhataBhai · reply STOP to stop these messages
+_KhataBhai · Reply STOP to stop these reminders._
 ```
 - **Structure:**
-  - greeting from a shop the customer knows,
-  - the balance as a plain fact (bold in WhatsApp),
-  - an easy, no-pressure way to pay (only when the shop's UPI ID is set),
+  - the shop name in bold as the header,
+  - the balance stated plainly, in bold,
+  - a clear ask to settle on the next visit, or pay online when the shop has a UPI ID (otherwise just "Please settle it on your next visit."),
   - thanks,
   - the shop's signature (owner, address, phone),
-  - how to stop the messages.
+  - an italic opt-out line.
+- **Emoji:** one only, 🙏 after the thanks.
 - **Languages:** written in all 10 (`reminderWords()` in `shared/replies.ts`), used for manual, voice and automatic reminders.
-- **Tone guard:** the BANNED list, which also guards spoken replies, now also blocks collection-agency and pleading words: *overdue, urgent, final notice/reminder/warning, pay now, failure to, kindly*. A test checks every language's reminder words against it.
-- **Voice reminders:** "Ramesh ko yaad dilao" now uses the same message, built on the phone with the profile and pay link. Before, it used the server's shorter text without the link or signature.
+- **Tone guard:** the BANNED list, which also guards spoken replies, blocks harsh and pleading words: penalty, legal action, immediately, **overdue, urgent, final notice/reminder/warning, pay now, failure to, kindly**. A test checks every language's reminder against it, and that each has at most one emoji.
+- **Voice reminders:** "Ramesh ko yaad dilao" sends the same message, built on the phone with the profile and pay link.
 - **Preview:** the customer screen's reminder box has **"See the message"**, showing exactly what will be sent.
-- **Brand:** the message says **KhataBhai**. "Khatabook" is a different, real company's brand, so it is not used.
-- **Files:** `shared/replies.ts` (`reminderWords`, `pressingWord`, BANNED), `src/lib/remind.ts` (`reminderMessage`), `src/App.tsx` (voice reminder), `src/ui/Sheets.tsx` (preview), `src/ui/strings.ts` (`msgPreview`), `src/lib/pay.ts` (unused labels removed).
-- **Tests:** `src/lib/remind.test.ts`: message layout with UPI, without UPI, and no pressing words in any language.
+- **Brand:** the message says **KhataBhai**. "Khatabook" is a different, real company's brand.
+- **Files:** `shared/replies.ts` (`reminderWords`, `pressingWord`, BANNED), `src/lib/remind.ts` (`reminderMessage`), `src/App.tsx` (voice reminder), `src/ui/Sheets.tsx` (preview), `src/ui/strings.ts` (`msgPreview`), `src/lib/pay.ts`.
+- **Tests:** `src/lib/remind.test.ts`: the exact English layout with UPI, Hindi without UPI, and the tone and emoji limit in every language.
 
 ---
 
