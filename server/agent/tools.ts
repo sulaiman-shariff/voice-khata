@@ -16,7 +16,10 @@
  *  - Two customers who fit a name: a 'choose' question lists all of them; the answer finishes the
  *    same tool call.
  *  - answer_question never takes yes / no / an amount from the model: only from what was heard.
- *    A name or option from the model counts only when it is exactly one on screen or a customer.
+ *    An option from the model counts only when it is exactly one on screen; a customer's name only
+ *    when that name was also heard (a sure match in some stream).
+ *  - Internal args (`<slot>__cid`, `_new`) are stripped from the model's calls; only our own
+ *    'choose' continuations may set them.
  *  - Answers for show and query tools are computed from core.snap (balances; history via
  *    entries filtered by day).
  */
@@ -123,7 +126,17 @@ const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_
 /** The sentence the tool was called for, and every language stream's reading of it (when there are several). */
 export type ToolMeta = TurnMeta & { transcript: string; heard?: string[] }
 
+/** Args only our own "which one" continuations may set (`<slot>__cid`, `_new`): never taken from the model. */
+const internalKey = (k: string) => k.startsWith('_') || k.includes('__')
+
+/** Run a tool the model called. Internal args are stripped: a model cannot pin a customer by id. */
 export function runTool(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
+  const args = Object.fromEntries(Object.entries(call.args ?? {}).filter(([k]) => !internalKey(k)))
+  return runTrusted(core, { name: call.name, args }, meta)
+}
+
+/** Run a tool call whose args we built (a 'choose' continuation), or the model's after stripping. */
+function runTrusted(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
   attachTools(core)
   const before = core.sayBalance
   core.sayBalance = true // a confident save says the new balance (savedWithBalance)
@@ -140,7 +153,7 @@ export function runTool(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply
  * arrives as a tap through the turn loop. runTool does this itself; call it once per session too.
  */
 export function attachTools(core: LedgerCore) {
-  core.choose = (tool, args, transcript, meta) => (isToolName(tool) ? runTool(core, { name: tool, args }, { ...meta, transcript }) : null)
+  core.choose = (tool, args, transcript, meta) => (isToolName(tool) ? runTrusted(core, { name: tool, args }, { ...meta, transcript }) : null)
 }
 
 /** only an entry written in this session within this long is undone without a question */
@@ -466,10 +479,17 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       if (!core.pending) return notCaught()
       const kind = a.kind
       const value = str(a.value)
-      // a name or an option from the model only when it is exactly one on screen or a customer's name
       const view = core.pendingView()
-      if ((kind === 'name' || kind === 'option') && value &&
-        (view?.options?.includes(value) || core.snap.customers.some((c) => c.name === value)))
+      // a customer's name from the model counts only when that name was also heard (a sure match
+      // in some stream): a made-up existing name must never get an entry attached to it
+      const named = kind === 'name' && value ? core.snap.customers.filter((c) => c.name === value || core.label(c) === value) : []
+      if (named.length) {
+        const sure = heard.some((t) => core.candidates(t).some((x) => x.score >= NAME_SURE && named.some((c) => c.cid === x.c.cid)))
+        if (!sure) return notCaught()
+        return core.answerPending(value!, { type: 'unknown' }, tm) ?? notCaught()
+      }
+      // an option from the model only when it is exactly one on screen
+      if (kind === 'option' && value && view?.options?.includes(value))
         return core.answerPending(value, { type: 'unknown' }, tm) ?? notCaught()
       // everything else (yes, no, amounts, directions) only from what was heard
       const read = heard.map((t) => ({ t, i: parseFast(t) })).find((x) => x.i.type !== 'unknown')

@@ -15,6 +15,8 @@ const ANOMALY_FACTOR = 5
 /** with no history for the customer, ₹10,000 or more is read back first */
 const BIG_PAISE = 10_000_00
 export const PENDING_TTL_MS = 45_000
+/** how long an entry written in this session is remembered for an instant undo */
+export const WRITTEN_KEEP_MS = 60_000
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
 
 /** How the turn being handled was heard: noise level, and whether the fast parser or the model read it. */
@@ -66,7 +68,7 @@ export type Pending =
    * "Which one?" for an agent tool (two customers fit a name): the chosen option's args finish the
    * original tool call through the `choose` hook, against the sentence that asked for it.
    */
-  | { kind: 'choose'; ask: string; tool: string; transcript: string; options: ChooseOption[] }
+  | { kind: 'choose'; ask: string; tool: string; transcript: string; options: ChooseOption[]; reasked?: number }
 
 export interface ChooseOption {
   /** shown on screen and matched exactly when tapped */
@@ -638,7 +640,14 @@ export class LedgerCore {
         return this.dispatch(intent, text, meta)
       }
       const i = intent.type === 'yes' && p.options.length === 1 ? 0 : LedgerCore.chooseIndex(p.options, text)
-      if (i < 0) return { parts: [p.ask], ops: [] }
+      if (i < 0) {
+        // talk that answers nothing (one stray word, or a long aside with no money in it) keeps the
+        // question on screen quietly; otherwise it is asked again once, then it waits
+        const words = text.trim().split(/\s+/).filter(Boolean).length
+        if ((words <= 1 || words > 4) && !mentionsMoney(text)) return null
+        p.reasked = (p.reasked ?? 0) + 1
+        return p.reasked > 1 ? null : { parts: [p.ask], ops: [] }
+      }
       this.pending = null
       return this.choose(p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
     }
@@ -961,6 +970,7 @@ export class LedgerCore {
       case 'entry': {
         const day = istDay(op.dayOffset)
         s.last = { eid: op.eid, cid: op.cid, paise: op.paise, direction: op.direction, day, promise: op.promise || undefined }
+        for (const [eid, t] of this.writtenAt) if (this.now() - t > WRITTEN_KEEP_MS) this.writtenAt.delete(eid)
         this.writtenAt.set(op.eid, this.now())
         s.entries = [{ ...s.last }, ...(s.entries ?? [])]
         if (op.promise) break // a promise is remembered, never posted to the balance

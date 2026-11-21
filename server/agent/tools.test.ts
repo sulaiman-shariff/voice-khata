@@ -247,6 +247,47 @@ describe('agent tools', () => {
     expect(s.core.pending?.kind).toBe('amount')
   })
 
+  it('answer_question: an existing name from the model must also have been heard', () => {
+    const mk = () => {
+      const t = setup([cust('c1', 'Ramesh', 300)])
+      t.core.processDrafts([{
+        heardName: null, cid: null, newName: null, nameSure: false, spoken: true, paise: 20000, alt: null, direction: 'credit', dayOffset: 0,
+        promise: false, confidence: 'high', reasons: ['no-name'], path: 'llm', transcript: '200 udhaar', snrDb: null, noisy: false,
+      }])
+      expect(t.core.pending?.kind).toBe('name')
+      return t
+    }
+    let s = mk()
+    let r = s.run('answer_question', { kind: 'name', value: 'Ramesh' }, 'haan wahi wala')
+    expect(r.ops).toEqual([])
+    expect(r.parts).toEqual([R.didNotCatch()])
+    expect(s.core.pending?.kind).toBe('name')
+    s = mk()
+    r = s.run('answer_question', { kind: 'name', value: 'Ramesh' }, 'Ramesh ke naam')
+    expect(s.core.pending?.kind).not.toBe('name')
+    expect(r.parts.join(' ')).toContain('Ramesh')
+  })
+
+  it('internal args from the model are dropped: name__cid does not skip the sure-name check', () => {
+    const { run } = setup([cust('c1', 'Ramesh', 200)])
+    const r = run('rename_customer', { name: 'Rajesh', name__cid: 'c1', new_name: 'Pappu' }, 'Rajesh ka naam Pappu karo')
+    expect(r.ops).toEqual([])
+    const n = run('add_customer', { name: 'Ramesha', _new: true }, 'Ramesha ka khata kholo')
+    expect(n.ops).toEqual([])
+  })
+
+  it('a which-one question for a tool keeps quiet for asides and asks again only once', () => {
+    const { core, run, meta } = setup([cust('c1', 'Suresh', 300), cust('c2', 'Suresh', 1200)])
+    run('show_customer', { name: 'Suresh' }, 'Suresh ka khata dikhao')
+    const ans = (t: string) => core.answerPending(t, parseFast(t), meta(t))
+    expect(ans('hmm')).toBeNull()
+    expect(ans('abhi baad mein dekhte hain bhai')).toBeNull()
+    expect(ans('kaun sa matlab')?.parts).toEqual([R.askWhich('Suresh · ₹300', 'Suresh · ₹1,200')])
+    expect(ans('kaun sa matlab')).toBeNull()
+    expect(core.pending?.kind).toBe('choose')
+    expect(ans('1,200 wala')?.show).toEqual({ type: 'show', view: 'customer', cid: 'c2' })
+  })
+
   it('answer_question with nothing open says it did not catch that', () => {
     const { run } = setup([cust('c1', 'Ramesh', 300)])
     expect(run('answer_question', { kind: 'yes' }, 'haan').parts).toEqual([R.didNotCatch()])
@@ -260,6 +301,11 @@ describe('agent tools', () => {
     const u = run('undo_last', {}, 'hata do')
     expect(u.ops).toEqual([{ op: 'void', eid, reason: 'spoken undo' }])
     tick(61_000)
+    // stamps older than the undo window are dropped as new ones are made
+    core.applyLocal({ op: 'entry', eid: 'later', cid: 'c1', paise: 100, direction: 'credit', dayOffset: 0, promise: false,
+      source: { transcript: 't', confidence: 'high', reasons: [], lang: 'en', path: 'llm' } })
+    expect([...core.writtenAt.keys()]).toEqual(['later'])
+    core.applyLocal({ op: 'void', eid: 'later', reason: 'test' })
     const late = run('undo_last', {}, 'hata do')
     expect(late.ops).toEqual([])
     expect(core.pending?.kind).toBe('modify')
