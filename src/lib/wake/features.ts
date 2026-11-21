@@ -30,8 +30,8 @@ export const MODEL_CONTRACT = {
   },
   /** Silent chunks run once after loading (2 s); their end state is the reset state. */
   warmupChunks: 25,
-  /** Default detection threshold; callers may override. */
-  threshold: 0.5,
+  /** Default detection threshold; callers may override. 0.6: a bare "khata" scored 0.66-0.70 on TTS, positives 0.59-0.86 — false phone wakes are cheap (the server confirms the word), missed ones need a tap. */
+  threshold: 0.6,
   /** At most one wake per this much audio. */
   debounceMs: 2000,
 }
