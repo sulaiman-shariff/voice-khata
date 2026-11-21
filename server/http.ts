@@ -6,7 +6,7 @@
  * https://localhost (Android) or capacitor://localhost (iOS) and calls the deployed API
  * (VITE_API_BASE). More origins: ALLOWED_ORIGINS="https://a.example,https://b.example".
  */
-const BUILT_IN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$|^(capacitor|ionic):\/\/localhost$/
+const BUILT_IN = /^https:\/\/(voice-khata|khatabhai)[a-z0-9-]*\.vercel\.app$|^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$|^(capacitor|ionic):\/\/localhost$/
 
 export function isAllowedOrigin(origin: string | null | undefined): boolean {
   if (!origin) return true // scripts and server-to-server calls send no Origin (the eval harness)

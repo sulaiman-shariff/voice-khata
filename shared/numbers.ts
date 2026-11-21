@@ -9,6 +9,8 @@
  * Dravidian languages fuse hundreds and suffix the half: ಮೂರುವರೆ / மூன்றரை / మూడున్నర = 3.5).
  */
 
+import { SoundIndex } from './sound.js'
+
 export type AmountFlag =
   | 'from-context' // copied from a recent entry ("same for Suresh"), not spoken in this turn
   | 'elided_scale' // "teen chaalis" read as 340 (scale word not spoken)
@@ -322,7 +324,14 @@ interface Tok {
 
 function lexOf(w: string): Lex | undefined {
   if (/^\d+(\.\d+)?$/.test(w)) return { kind: 'num', v: Number(w) }
-  return LEX.get(w)
+  return lexGet(w)
+}
+
+// number and rupee words also match when written in another script ("टू हंड्रेड", "ತೀನ್ ಸೌ"); see shared/sound.ts
+const SOUND_LEX = new SoundIndex<Lex>()
+for (const [w, e] of LEX) SOUND_LEX.add(w, e)
+function lexGet(t: string): Lex | undefined {
+  return LEX.get(t) ?? SOUND_LEX.find(t)
 }
 
 /** Value of a run of number tokens. Returns null if the run is not a number. */
@@ -505,13 +514,13 @@ function makeSpan(toks: Tok[], s: number, e: number, ev: { value: number; flags:
 /** True if the (folded) token is a number word, scale, fraction or numeral. */
 /** Rupee / paise words in any language ("ரூபா", "రూపాయల", "रुपये"): part of an amount, never a name. */
 export function isCurrencyWord(t: string): boolean {
-  const e = LEX.get(t)
+  const e = lexGet(t)
   return !!e && (e.kind === 'currency' || e.kind === 'paise')
 }
 
 export function isNumberWord(t: string): boolean {
   if (/^\d/.test(t)) return true
-  const e = LEX.get(t)
+  const e = lexGet(t)
   return !!e && e.kind !== 'currency' && e.kind !== 'and'
 }
 

@@ -14,7 +14,7 @@ import { THEMES, applyTheme, themeId } from './theme'
 /** The hamburger menu (left side): shop profile, colour theme, WhatsApp reminders, voice, my data. */
 export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImport, onRemindAll }: {
   store: KhataStore; open: boolean; t: UiStrings; onClose: () => void
-  onChanged: (p: { handsFree?: boolean; fastSpeech?: boolean; readBackAll?: boolean }) => void
+  onChanged: (p: { handsFree?: boolean; fastSpeech?: boolean }) => void
   onPrivacy: () => void
   onImport: () => void
   onRemindAll: () => void
@@ -96,8 +96,7 @@ export function MenuSheet({ store, open, t, onClose, onChanged, onPrivacy, onImp
             <Heading>{t.voiceSettings}</Heading>
             <div className="space-y-1 rounded-lg bg-card p-3 ring-1 ring-foreground/10">
               <Row label={t.handsFree}><Switch checked={st.handsFree} onCheckedChange={(v) => void store.updateSettings({ handsFree: v }).then(() => onChanged({ handsFree: v }))} /></Row>
-              <Row label={t.fastSpeech}><Switch checked={!!st.fastSpeech} onCheckedChange={(v) => void store.updateSettings({ fastSpeech: v }).then(() => onChanged({ fastSpeech: v }))} /></Row>
-              <Row label={t.readBackAll}><Switch checked={!!st.readBackAll} onCheckedChange={(v) => void store.updateSettings({ readBackAll: v }).then(() => onChanged({ readBackAll: v }))} /></Row>
+              <Row label={t.fastSpeech}><Switch checked={st.speed === 1.2} onCheckedChange={(v) => onChanged({ fastSpeech: v })} /></Row>
               <Row label={t.latency}><Switch checked={st.showLatency} onCheckedChange={(v) => void store.updateSettings({ showLatency: v })} /></Row>
               <Row label={t.debugLogs}><Switch checked={debugLogs} onCheckedChange={(v) => { clientLog.set(v); setDebugLogs(v) }} /></Row>
             </div>

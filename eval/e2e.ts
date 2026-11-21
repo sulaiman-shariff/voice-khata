@@ -61,7 +61,7 @@ const SNAP: Snapshot = {
     { cid: 'r', name: 'रमेश', aliases: ['Ramesh'], householdId: null, remindersOptIn: false, adult: true, balancePaise: 0, typicalPaise: null },
     { cid: 's', name: 'सुरेश', aliases: ['Suresh'], householdId: null, remindersOptIn: false, adult: true, balancePaise: 50000, typicalPaise: null },
   ],
-  last: null,
+  last: null, entries: [],
   today: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
 }

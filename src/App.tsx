@@ -1,4 +1,4 @@
-import { BellRing, BookOpen, ChevronRight, Globe, Keyboard, Menu as MenuIcon, MessageCircle, Mic, Plus, Search, ShieldCheck, WifiOff } from 'lucide-react'
+import { BellRing, BookOpen, ChevronRight, Globe, Keyboard, Menu as MenuIcon, MessageCircle, Mic, Plus, Search, ShieldCheck } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { balance, daySummary, displayName, dues, promises } from '../shared/ledger.js'
@@ -13,11 +13,11 @@ import { createVoiceClient } from '@/lib/voice'
 import { API_BASE, voiceUrl } from '@/lib/api'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
-import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
+import { heardFeedback, primeFeedback, savedFeedback, sleepChime, wakeChime } from '@/ui/feedback'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
-import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
-import { CustomerSheet, PrivacySheet, toastRemind } from '@/ui/Sheets'
+import { MicButton, PendingCard, ReadyCard, Waterfall } from '@/ui/parts'
+import { CustomerSheet, ListSheet, type ListView, PrivacySheet, SettingsSheet, shareWhatsApp, toastRemind } from '@/ui/Sheets'
 import { ui } from '@/ui/strings'
 import { Dropdown } from '@/ui/Dropdown'
 import { MenuSheet } from '@/ui/Menu'
@@ -59,6 +59,8 @@ function Home({ store }: { store: KhataStore }) {
   /** ledger writes in order; feedback no longer waits for them */
   const writes = useRef<Promise<unknown>>(Promise.resolve())
   const [heard, setHeard] = useState('')
+  /** a tap that cut a reply short: a second tap right after it must not also mute */
+  const lastBargeAt = useRef(0)
   /** the heard line was taken as talk to someone else (shown dimmed, marked "not an entry") */
   const [heardIgnored, setHeardIgnored] = useState(false)
   const [said, setSaid] = useState('')
@@ -66,13 +68,16 @@ function Home({ store }: { store: KhataStore }) {
   const [metrics, setMetrics] = useState<(TurnMetrics & { clientFirstAudioMs: number | null }) | null>(null)
   const [tab, setTab] = useState<'today' | 'dues'>('today')
   const [cid, setCid] = useState<string | null>(null)
-  const [sheet, setSheet] = useState<'menu' | 'privacy' | 'import' | 'remind' | null>(null)
+  const [sheet, setSheet] = useState<'menu' | 'privacy' | 'import' | 'remind' | 'settings' | null>(null)
   // rows read aloud from an old paper khata go straight to the open import sheet
   const importSink = useRef<ImportSink['current']>(null)
-  const importHandsFree = useRef<boolean | null>(null)
   // the bottom panel (question card, mic) floats over the list: the list is padded by its real height
   const footer = useRef<HTMLElement>(null)
   const [footerH, setFooterH] = useState(260)
+  /** a spoken "show ..." list: a day's entries, a search, the biggest dues */
+  const [listView, setListView] = useState<ListView | null>(null)
+  /** a tool's one-tap card: send this on WhatsApp, or open the backup */
+  const [ready, setReady] = useState<{ kind: 'whatsapp' | 'backup'; cid?: string; text?: string } | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const [on, setOn] = useState(false)
   const [net, setNet] = useState<'good' | 'slow' | 'offline'>('good')
@@ -82,6 +87,16 @@ function Home({ store }: { store: KhataStore }) {
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<'amount' | 'name'>('amount')
   const voice = useRef<VoiceClient | null>(null)
+  /** the mic stream is open (or being opened): false for a typed-text-only session */
+  const [micReady, setMicReady] = useState(false)
+  /** the previous status, to clear the reply caption when speech ends */
+  const lastStatus = useRef<VoiceStatus>('idle')
+  const ignoredRef = useRef(false)
+  const markIgnored = (b: boolean) => { ignoredRef.current = b; setHeardIgnored(b) }
+  const ignoredTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** mic button still down / push-to-talk started for this press (hold-to-start can outlast start()) */
+  const held = useRef(false)
+  const pttOn = useRef(false)
 
   const onOps = useCallback(async (ops: LedgerOp[]) => {
     // feedback first: the chime, highlight and toast must not wait for the encrypted IndexedDB write
@@ -108,50 +123,94 @@ function Home({ store }: { store: KhataStore }) {
     voice.current?.sendSnapshot()
   }, [store, t])
 
-  const start = useCallback(async (lang: Lang) => {
+  const newTurn = () => {
+    if (ignoredTimer.current) clearTimeout(ignoredTimer.current)
+    ignoredTimer.current = null
+    setSaid('')
+  }
+
+  /** Open the connection. `mic: false` (typed text, example chips): socket only, no permission prompt yet. */
+  const start = useCallback(async (lang: Lang, mic = true) => {
     if (voice.current) return
     const v = createVoiceClient(VOICE_URL, {
-      status: (st) => { setStatus(st); if (st === 'offline' || (st as string) === 'reconnecting') setPending(null) },
+      status: (st) => {
+        if (lastStatus.current === 'speaking' && st !== 'speaking') setSaid('') // the reply is over: its caption goes
+        lastStatus.current = st
+        setStatus(st)
+        if (st === 'offline' || (st as string) === 'reconnecting') setPending(null)
+      },
       level: (v) => { for (const f of levelSource) f(v) },
       heard: heardFeedback,
-      partial: (x) => { setHeard(x); setHeardIgnored(false) },
-      final: (x) => { setHeard(x); setHeardIgnored(false) },
-      notEntry: () => setHeardIgnored(true),
+      attention: (s) => { if (s === 'awake') wakeChime(); else sleepChime() },
+      turnDone: () => {
+        // the reply caption stays while its audio plays (cleared when speaking ends); a silent turn clears it now
+        if (lastStatus.current !== 'speaking') setSaid('')
+        if (ignoredTimer.current) clearTimeout(ignoredTimer.current)
+        // "not an entry" stays readable for a few seconds, a normal heard line goes with the turn
+        if (ignoredRef.current) ignoredTimer.current = setTimeout(() => { setHeard(''); markIgnored(false) }, 6000)
+        else setHeard('')
+      },
+      micError: () => { setMicReady(false); toast.error(t.micError) },
+      partial: (x) => { newTurn(); setHeard(x); markIgnored(false) },
+      final: (x) => { setReady(null); newTurn(); setHeard(x); markIgnored(false) },
+      notEntry: () => markIgnored(true),
       say: (x) => setSaid(x),
       ops: (ops) => onOps(ops),
       network: (s) => setNet(s),
       resent: (text) => toast(`${t.resent}: “${text.length > 60 ? `${text.slice(0, 60)}…` : text}”`, { duration: 6000 }),
       pending: (p) => {
         setPending(p)
-        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false) } // the question card must be visible
+        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false); setListView(null); setReady(null) } // the question card must be visible
       },
       show: (s) => {
-        if (s.view === 'customer') setCid(s.cid)
-        else if (s.view === 'dues') setTab('dues')
-        else if (s.view === 'summary') setTab('today')
+        // one view at a time: the new one replaces whatever was open
+        setReady(null) // a card from an earlier turn must not stay tappable
+        if (s.view !== 'customer') setCid(null)
+        if (s.view !== 'history' && s.view !== 'search' && s.view !== 'top_debtors') setListView(null)
+        if (s.view === 'customer') { setListView(null); setSheet(null); setCid(s.cid) }
+        else if (s.view === 'dues') { setSheet(null); setTab('dues') }
+        else if (s.view === 'summary' || s.view === 'today') { setSheet(null); setTab('today') }
         else if (s.view === 'privacy') setSheet('privacy')
+        else if (s.view === 'settings') setSheet('settings')
+        else if (s.view === 'history') { setSheet(null); setListView({ k: 'history', from: s.from, to: s.to, cid: s.cid }) }
+        else if (s.view === 'search') { setSheet(null); setListView({ k: 'search', text: s.text, cids: s.cids, eids: s.eids }) }
+        else if (s.view === 'top_debtors') { setSheet(null); setListView({ k: 'top', count: s.count }) }
+        else if (s.view === 'close') { setSheet(null); setListView(null); setEntry(null); setTyping(false); setReady(null) }
       },
-      remind: (c) => { if (c) void sendReminder(store, c, { interactive: true }).then((r) => toastRemind(t, r)).catch((e) => clientLog.warn('remind_failed', { error: String(e) })) },
+      // settings changed by voice: stored here, and the voice client told (the language is applied by `lang`, the mic stays on)
+      setting: (m) => {
+        if (m.key === 'speed' && (m.value === 0.8 || m.value === 1 || m.value === 1.2)) { const speed = m.value; void store.updateSettings({ speed }); voice.current?.setSpeed(speed) }
+        else if (m.key === 'shopName' && typeof m.value === 'string') void store.updateSettings({ shopName: m.value })
+      },
+      ready: (m) => setReady({ kind: m.kind, cid: m.cid, text: m.text }),
       metrics: setMetrics,
       error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),
-      importRows: (rows, text) => importSink.current?.(rows, text),
     })
     primeFeedback()
     voice.current = v
     setOn(true)
+    setMicReady(mic)
     try {
-      await v.start({ lang, auto: store.settings.autoLang !== false, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, fastSpeech: store.settings.fastSpeech, readBackAll: store.settings.readBackAll })
+      await v.start({ lang, snapshot: () => store.snapshot(), firstRun: !store.settings.firstRunDone, handsFree: store.settings.handsFree, speed: store.settings.speed, mic })
+      if (mic) v.wake('tap') // tapping the mic to start also wakes it
       if (!store.settings.firstRunDone) void store.updateSettings({ firstRunDone: true })
     } catch {
       voice.current = null
       setOn(false)
+      setMicReady(false)
       toast.error(t.micError)
     }
   }, [onOps, store, t])
 
+  /** who a WhatsApp card goes to: the customer's name and number, or a note that WhatsApp will ask */
+  const recipient = (c?: string) => {
+    const cu = c ? store.state.customers.get(c) : undefined
+    if (!cu) return t.noNumber
+    return cu.phone ? `${cu.name} · ${cu.phone}` : `${cu.name} · ${t.noNumber}`
+  }
   const sendTyped = async (text: string) => {
-    if (!voice.current) await start(store.settings.lang!)
+    if (!voice.current) await start(store.settings.lang!, false)
     if (!voice.current) return false
     voice.current.sendText(text)
     return true
@@ -171,7 +230,14 @@ function Home({ store }: { store: KhataStore }) {
     })
   }
 
-  const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setStatus('idle'); setPending(null) }
+  const micTap = () => {
+    const v = voice.current
+    if (!on || !v) void start(settings.lang!)
+    else if (status === 'speaking' || status === 'thinking') { lastBargeAt.current = Date.now(); v.bargeIn() } // cut the reply short, stay awake
+    else if (status === 'asleep') { setMicReady(true); v.wake('tap') }
+    else if (status === 'listening') { if (Date.now() - lastBargeAt.current > 1500) v.sleep() } // a quick second tap is part of the interrupt
+  }
+  const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setStatus('idle'); setPending(null); setMicReady(false) }
 
   // the saved scheme wins over the quick local copy used for the first paint
   useEffect(() => { applyTheme(store.settings.theme) }, [store])
@@ -225,19 +291,9 @@ function Home({ store }: { store: KhataStore }) {
   }
 
   /** Import "read aloud": the mic must be on and open (hands-free) while the book is read. */
-  const importReading = async (on: boolean): Promise<boolean> => {
-    if (on) {
-      if (!voice.current) await start(store.settings.lang!)
-      const v = voice.current
-      if (!v) return false
-      if (!store.settings.handsFree) { importHandsFree.current = false; v.setHandsFree(true) }
-      v.setImportMode(true)
-      return true
-    }
-    voice.current?.setImportMode(false)
-    if (importHandsFree.current === false) { voice.current?.setHandsFree(false); importHandsFree.current = null }
-    return true
-  }
+  // reading an old khata aloud needed the old voice session's import mode (the agent has none): typed and photo import remain
+  const importReading = async (_on: boolean): Promise<boolean> => false
+
 
   const setLanguage = (v: string) => {
     const auto = v === 'auto'
@@ -276,7 +332,7 @@ function Home({ store }: { store: KhataStore }) {
   const shownDues = due
     .filter((d) => { const c = state.customers.get(d.cid); return !needle || !!c && (c.name.toLowerCase().includes(needle) || c.aliases.some((a) => a.toLowerCase().includes(needle))) })
     .sort((a, b) => (sort === 'name' ? name(a.cid).localeCompare(name(b.cid), t.loc) : b.paise - a.paise))
-  const statusText = !on ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : settings.handsFree ? t.listening : t.hold
+  const statusText = !on || (!micReady && status === 'asleep') ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : status === 'asleep' ? t.sayKhataBhai : settings.handsFree ? t.awake : t.hold
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
@@ -305,12 +361,6 @@ function Home({ store }: { store: KhataStore }) {
           </div>
         </div>
       </header>
-
-      {on && status === 'offline' && (
-        <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300">
-          <WifiOff className="size-4 shrink-0" /><span>{t.offlineBanner}</span>
-        </div>
-      )}
 
       <section className="mx-4 mt-3 grid grid-cols-3 gap-1.5">
         <Stat label={`${t.today} · ${t.credit}`} value={rsShort(day.creditPaise)} className="text-credit" />
@@ -392,21 +442,38 @@ function Home({ store }: { store: KhataStore }) {
 
       <footer ref={footer} className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-8 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="pointer-events-auto space-y-3">
+          {ready && !pending && (
+            <ReadyCard
+              t={t} text={ready.kind === 'whatsapp' ? ready.text : undefined}
+              to={ready.kind === 'whatsapp' ? recipient(ready.cid) : undefined}
+              label={ready.kind === 'whatsapp' ? t.sendWhatsApp : t.openBackup}
+              onDismiss={() => setReady(null)}
+              onGo={() => {
+                try {
+                  if (ready.kind === 'backup') setSheet('privacy')
+                  else if (ready.cid) void sendReminder(store, ready.cid, { interactive: true }).then((r) => toastRemind(t, r)).catch((e) => clientLog.warn('remind_failed', { error: String(e) }))
+                  else if (ready.text) shareWhatsApp(ready.text)
+                } catch (e) { clientLog.warn('ready_failed', { error: String(e) }) }
+                setReady(null)
+              }}
+            />
+          )}
           {pending && <PendingCard p={pending} t={t} onAnswer={(a) => {
             if (a === 'haan') voice.current?.tap('yes')
             else if (a === 'nahi') voice.current?.tap('no')
             else voice.current?.answer(a)
           }} />}
-          {on && net !== 'good' && (
-            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300')}>
-              {net === 'offline' ? t.netOffline : t.netSlow}
+          {on && (net !== 'good' || status === 'offline') && (
+            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' || status === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-800 dark:text-amber-300')}>
+              {net === 'offline' || status === 'offline' ? t.netOffline : t.netSlow}
             </div>
           )}
           {(heard || said) && on && (
             <div className="space-y-1 text-center">
               {heard && (
-                <div className={cn('truncate text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
-                  “{heard}”{heardIgnored && <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
+                <div className={cn('flex items-center justify-center gap-1.5 text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
+                  <span className="min-w-0 truncate">“{heard}”</span>{heardIgnored && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
+                  {heardIgnored && <button onClick={() => { const x = heard; markIgnored(false); setHeard(''); voice.current?.force(x) }} className="min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold text-primary ring-1 ring-primary/30">{t.saveAnyway}</button>}
                 </div>
               )}
               {said && <div className="text-base font-medium">{said}</div>}
@@ -417,13 +484,25 @@ function Home({ store }: { store: KhataStore }) {
               <span className="size-14" aria-hidden />
               <MicButton
                 status={status} levelSource={levelSource} on={on} handsFree={settings.handsFree} t={t}
-                onPress={() => {
-                  if (!on) void start(settings.lang!)
-                  else if (!settings.handsFree) voice.current?.pttDown() // push-to-talk: hold
-                  else if (status === 'speaking') voice.current?.bargeIn() // tap while it talks: cut the reply short, keep listening
-                  else stop() // tap the same button again: mute
+                onTap={micTap}
+                onHoldStart={() => {
+                  held.current = true
+                  setMicReady(true)
+                  if (!on || !voice.current) {
+                    // start() wakes by itself (tap); released before it finishes = no hold at all, never a second wake
+                    void start(settings.lang!).then(() => {
+                      if (held.current && voice.current && !settings.handsFree) { voice.current.pttDown(); pttOn.current = true }
+                    })
+                    return
+                  }
+                  voice.current.wake('hold')
+                  if (!settings.handsFree) { voice.current.pttDown(); pttOn.current = true }
                 }}
-                onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
+                onHoldEnd={() => {
+                  held.current = false
+                  voice.current?.holdEnd() // no-op unless a hold wake was sent
+                  if (pttOn.current) { pttOn.current = false; voice.current?.pttUp() }
+                }}
               />
               <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-foreground/10 active:scale-95"><Keyboard className="size-6" /></button>
             </div>
@@ -443,7 +522,11 @@ function Home({ store }: { store: KhataStore }) {
       <RemindSheet store={store} open={sheet === 'remind'} t={t} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <ImportSheet store={store} open={sheet === 'import'} t={t} sink={importSink} onReading={importReading} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onImport={() => setSheet('import')} onRemindAll={() => void remindAll()}
-        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll) }} />
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) { const speed = p.fastSpeech ? 1.2 : 1; void store.updateSettings({ speed }); voice.current?.setSpeed(speed) } }} />
+      <ListSheet store={store} view={listView} t={t} onClose={() => setListView(null)}
+        onCustomer={(c) => { setListView(null); setCid(c) }} onEntry={(eid) => { setListView(null); setEntry({ kind: 'edit', eid }) }} />
+      <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.speed !== undefined) voice.current?.setSpeed(p.speed); if (p.lang) voice.current?.setLang(p.lang) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />
     </div>

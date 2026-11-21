@@ -76,7 +76,7 @@ class Phone {
   private snapshot(): Snapshot {
     const zero = { creditPaise: 0, paymentPaise: 0, entries: 0 }
     return {
-      shopName: 'Test', last: null, today: { ...zero, entries: this.entries.size }, month: { ...zero },
+      shopName: 'Test', last: null, entries: [], today: { ...zero, entries: this.entries.size }, month: { ...zero },
       customers: [...this.customers].map(([cid, name]) => ({ cid, name, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 0, typicalPaise: null })),
     }
   }

@@ -24,7 +24,7 @@ export interface Persistence {
 }
 
 export const defaultSettings = (): Settings => ({
-  lang: null, autoLang: true, shopName: 'Meri Dukaan', firstRunDone: false, handsFree: true, showLatency: false, fastSpeech: false, readBackAll: false,
+  lang: null, autoLang: true, shopName: 'Meri Dukaan', firstRunDone: false, handsFree: true, showLatency: false, speed: 1,
 })
 
 // ------------------------------------------------------------------ memory persistence (tests)
@@ -79,7 +79,15 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('keys')) db.createObjectStore('keys')
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
     }
-    r.onsuccess = () => res(r.result)
+    r.onsuccess = () => {
+      const db = r.result
+      // another tab is deleting or upgrading the ledger (?reset=1): let go, and reload into the new one
+      db.onversionchange = () => {
+        db.close()
+        if (typeof location !== "undefined") location.reload()
+      }
+      res(db)
+    }
     r.onerror = () => rej(r.error)
   })
 }
@@ -133,7 +141,10 @@ export function idbPersistence(): Persistence {
 // ------------------------------------------------------------------ the store
 export async function createStore(p: Persistence): Promise<KhataStore> {
   let records = await p.loadRecords()
-  let settings: Settings = { ...defaultSettings(), ...(await p.loadSettings()) }
+  const stored = await p.loadSettings()
+  let settings: Settings = { ...defaultSettings(), ...stored }
+  // settings stored before `speed`: the old "faster replies" switch
+  if (stored && stored.speed === undefined && (stored as { fastSpeech?: boolean }).fastSpeech === true) settings.speed = 1.2
   const listeners = new Set<() => void>()
   let queue: Promise<unknown> = Promise.resolve()
 
@@ -216,6 +227,9 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
       }
       case 'void': return { type: 'entry_voided', eid: o.eid, reason: o.reason }
       case 'delete_all': return 'delete_all'
+      case 'rename_customer': return { type: 'customer_renamed', cid: o.cid, name: o.name }
+      case 'merge_customers': return { type: 'customers_merged', cid: o.into, from: o.from }
+      case 'set_phone': return { type: 'phone_set', cid: o.cid, phone: o.phone }
     }
   }
 
@@ -272,7 +286,19 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
     setConfirmation: (eid, status) => enqueue(() => append([{ type: 'confirmation', eid, status }])),
     forgetCustomer: (cid) =>
       enqueue(async () => {
-        await shred(cid, p.keys)
+        // every account merged into this one (and into those, recursively) is this person too:
+        // their own keys still seal the entries that moved over, so they are shredded as well
+        const merges: { into: string; from: string }[] = []
+        for (const r of records) {
+          const ev = await open(r, p.keys).catch(() => null)
+          if (ev?.type === 'customers_merged') merges.push({ into: ev.cid, from: ev.from })
+        }
+        const gone = new Set([cid])
+        for (let grew = true; grew;) {
+          grew = false
+          for (const m of merges) if (gone.has(m.into) && !gone.has(m.from)) { gone.add(m.from); grew = true }
+        }
+        for (const id of gone) await shred(id, p.keys)
         state = await rebuild()
         notify()
       }),
@@ -297,10 +323,10 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
           cid: c.cid, name: c.name, aliases: [...c.aliases], householdId: c.householdId,
           ...(displayName(state, c.cid) !== c.name ? { label: displayName(state, c.cid) } : {}),
           remindersOptIn: c.remindersOptIn, adult: c.adult,
-          balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid),
+          balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid), phone: c.phone,
         })),
         last: last ? { eid: last.eid, cid: last.cid, paise: last.paise, direction: last.direction, day: last.day } : null,
-        recent: [...state.order].reverse().map((id) => state.entries.get(id)!).filter((e) => e && !e.voided).slice(0, 20)
+        entries: [...state.order].reverse().map((id) => state.entries.get(id)!).filter((e) => e && !e.voided)
           .map((e) => ({ eid: e.eid, cid: e.cid, paise: e.paise, direction: e.direction, day: e.day, promise: e.promise, ts: e.ts })),
         today: pick(today),
         month: pick(month),

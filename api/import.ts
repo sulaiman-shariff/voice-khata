@@ -6,7 +6,7 @@
 import { cors } from '../server/http.js'
 import { log, logged } from '../server/log.js'
 import { json } from '../server/db.js'
-import { geminiKeys } from '../server/parse/llm.js'
+import { geminiKeys } from '../server/parse/gemini-keys.js'
 import { VISION_MODEL, readLedgerPhoto } from '../server/parse/vision.js'
 
 const MAX_CHARS = 6_000_000 // ~4.5 MB of base64; the phone sends a ~1600 px JPEG (a few hundred KB)

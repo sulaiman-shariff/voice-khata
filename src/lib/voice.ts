@@ -6,6 +6,8 @@ import type { ClientMsg, ServerMsg, Snapshot, TurnMetrics } from '../../shared/p
 import type { Lang } from '../../shared/replies.js'
 import type { VoiceClient, VoiceEvents, VoiceStatus } from './contracts'
 import { clientLog as log } from './log'
+import { createWakeDetector, WAKE_MODEL_URL, type WakeDetector } from './wake'
+import { MODEL_CONTRACT } from './wake/features'
 import { NetMonitor, PING_EVERY_MS, PROBE_TIMEOUT_MS, SpeechBuffer, TurnTracker, backoffMs } from './link'
 
 export function defaultVoiceUrl(): string {
@@ -22,6 +24,7 @@ const SPEECH_LEVEL = 0.02
 const PARTIAL_STALE_MS = 4000
 const THINK_TIMEOUT_MS = 25_000
 const RESUME_TIMEOUT_MS = 1000
+const MIC_CONSTRAINTS: MediaStreamConstraints = { audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
 
 interface StartOpts {
   lang: Lang
@@ -29,16 +32,41 @@ interface StartOpts {
   snapshot: () => Snapshot
   firstRun: boolean
   handsFree: boolean
-  fastSpeech?: boolean
-  readBackAll?: boolean
-  importMode?: boolean
+  speed?: 0.8 | 1 | 1.2
+  /** false: socket only (typed text); the mic opens on the first wake */
+  mic?: boolean
 }
 
-export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
+const PREROLL_MS = 2000
+/** A reply that never drains must not leave the detector paused (the app deaf) for ever. */
+const SPEAKING_WATCHDOG_MS = 30_000
+
+/**
+ * The real detector, only when the trained model file is reachable (a dev server answers a missing
+ * file with index.html, so a web page is not a model). createWakeDetector itself returns null when
+ * the worker or WASM cannot load.
+ */
+async function defaultCreateDetector(): Promise<WakeDetector | null> {
+  try {
+    const r = await fetch(WAKE_MODEL_URL, { method: 'HEAD' })
+    if (!r.ok || (r.headers.get('content-type') ?? '').includes('text/html')) return null
+    return await createWakeDetector({ threshold: MODEL_CONTRACT.threshold })
+  } catch {
+    return null
+  }
+}
+
+export interface VoiceDeps {
+  createDetector?: () => Promise<WakeDetector | null>
+}
+
+export function createVoiceClient(url: string, ev: VoiceEvents, deps: VoiceDeps = {}): VoiceClient {
   let opts: StartOpts | null = null
   let handsFree = false
   let running = false
   let status: VoiceStatus = 'idle'
+  /** awake = 'listening'; asleep waits for the wake word or a tap */
+  let awake = false
 
   let stream: MediaStream | null = null
   let ctx: AudioContext | null = null
@@ -64,11 +92,16 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let turnAudioBytes = 0
 
   let pttHeld = false
+  /** a 'wake' with source 'hold' was sent and its hold_end has not been */
+  let holdActive = false
   let pttTailTimer: ReturnType<typeof setTimeout> | null = null
 
   // bad-network handling (src/lib/link.ts)
   const turns = new TurnTracker()
   const speech = new SpeechBuffer()
+  /** the last ~2 s while asleep behind a detector; never replayed after a reconnect */
+  const preroll = new SpeechBuffer(PREROLL_MS + 500)
+  let speakingTimer: ReturnType<typeof setTimeout> | null = null
   const net = new NetMonitor()
   let netShown: 'good' | 'slow' | 'offline' | null = null
   /** the server's latest session state, handed back in the next hello */
@@ -87,6 +120,65 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let pendingMetrics: TurnMetrics | null = null
   let metricsTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** On-phone wake detector; null = none (or it failed): audio streams to the server as before. */
+  let detector: WakeDetector | null = null
+  let detectorLoading = false
+  /** asleep with a live detector: no audio leaves the phone */
+  const gated = () => detector !== null && !awake
+
+  /** The detector listens only while asleep and while the app is not speaking (its own voice must not wake it). */
+  function syncDetector() {
+    if (!detector) return
+    if (awake || status === 'speaking') detector.pause()
+    else detector.resume()
+  }
+
+  function dropDetector() {
+    const d = detector
+    detector = null
+    d?.dispose()
+  }
+
+  async function initDetector() {
+    if (detector || detectorLoading || !running) return
+    detectorLoading = true
+    try {
+      const d = await (deps.createDetector ?? defaultCreateDetector)()
+      if (!d) return
+      if (!running) { d.dispose(); return }
+      d.onWake(onDetectorWake)
+      d.onFail(() => {
+        log.warn('wake_detector_failed')
+        if (detector === d) detector = null // stream to the server again: it spots the wake word
+      })
+      detector = d
+      syncDetector()
+      log.info('wake_detector_ready')
+    } catch (e) {
+      log.warn('wake_detector_unavailable', { error: String(e) })
+    } finally {
+      detectorLoading = false
+    }
+  }
+
+  /** The phone heard the wake word: tell the server, give it the last 2 s, then live frames follow. */
+  function onDetectorWake() {
+    if (!running || awake || !detector) return
+    // Socket closed or swapping: the wake could not reach the server (and the pre-roll would be lost),
+    // so stay asleep and keep listening; the shopkeeper says it again once the link is back.
+    if (!ws || ws.readyState !== WebSocket.OPEN || swapping) {
+      log.warn('wake_dropped', { reason: 'no_socket' })
+      return
+    }
+    log.info('wake', { source: 'phone' })
+    send({ type: 'wake', source: 'phone' })
+    setAwake(true)
+    const now = performance.now()
+    for (const f of preroll.replayWindow(now - PREROLL_MS, now, 0)) ws.send(f)
+    preroll.clear()
+  }
+
+  const idleStatus = (): VoiceStatus => (awake ? 'listening' : 'asleep')
   const isBusy = () => status === 'speaking' || status === 'thinking'
 
   function setStatus(s: VoiceStatus) {
@@ -96,17 +188,39 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       // never stay busy forever if the server never answers this turn
       thinkTimer = setTimeout(() => {
         thinkTimer = null
-        if (status === 'thinking') setStatus('listening')
+        if (status === 'thinking') setStatus(idleStatus())
       }, THINK_TIMEOUT_MS)
+    }
+    if (speakingTimer) clearTimeout(speakingTimer)
+    speakingTimer = null
+    if (s === 'speaking') {
+      speakingTimer = setTimeout(() => {
+        speakingTimer = null
+        if (status === 'speaking') {
+          log.warn('speaking_watchdog')
+          setStatus(idleStatus())
+        }
+      }, SPEAKING_WATCHDOG_MS)
     }
     if (status === s) return
     status = s
+    syncDetector()
     ev.status(s)
   }
 
   /** The turn produced no spoken reply: stop showing "thinking". */
   const settleIfSilent = () => {
-    if (status === 'thinking') setStatus('listening')
+    if (status === 'thinking') setStatus(idleStatus())
+  }
+
+  /** Awake/asleep changed (server answer or optimistic local change after a tap). */
+  function setAwake(a: boolean, quiet = false) {
+    if (awake === a) return
+    awake = a
+    if (!quiet) ev.attention?.(a ? 'awake' : 'asleep') // quiet: a reconnect reset, not worth a chime
+    syncDetector()
+    if (a && status === 'asleep') setStatus('listening')
+    else if (!a && status === 'listening') setStatus('asleep')
   }
 
   function sendTo(sock: WebSocket | null, msg: ClientMsg) {
@@ -119,11 +233,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const again = resend
     resend = null
     sendTo(sock, {
-      type: 'hello', lang: opts.lang, auto: !!opts.auto, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree,
-      speed: opts.fastSpeech ? 1.2 : 1, readBack: !!opts.readBackAll, resume, ...(again ? { resend: again } : {}),
+      type: 'hello', lang: opts.lang, snapshot: opts.snapshot(), firstRun: opts.firstRun, ptt: !handsFree,
+      speed: opts.speed ?? 1, resume, ...(again ? { resend: again } : {}),
     })
     opts.firstRun = false // the disclosure plays once, not on every reconnect
-    if (opts.importMode) sendTo(sock, { type: 'import', on: true }) // a reconnect keeps the import mode
     if (again) {
       log.warn('resend', { text: again })
       ev.resent?.(again)
@@ -151,8 +264,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       await Promise.all([c.audioWorklet.addModule('/worklets/mic.js'), c.audioWorklet.addModule('/worklets/player.js')])
       const mic = new AudioWorkletNode(c, 'mic', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1, channelCountMode: 'explicit' })
       const player = new AudioWorkletNode(c, 'player', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] })
-      const src = c.createMediaStreamSource(stream as MediaStream)
-      src.connect(mic) // mic is never connected to the destination
+      if (stream) c.createMediaStreamSource(stream).connect(mic) // mic is never connected to the destination
       player.connect(c.destination)
       mic.port.onmessage = onMicFrame
       player.port.onmessage = onPlayerMsg
@@ -174,6 +286,14 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       ev.level(level)
     }
     if (micDead || !(handsFree || pttHeld)) return
+    if (gated() && !pttHeld) {
+      // Asleep behind a detector: nothing may reach the server, so this audio stays out of the
+      // reconnect-replay buffer and only the short pre-roll ring keeps it. While the app speaks the
+      // detector is paused and feed() drops the frame by its own paused check.
+      preroll.push(buf, level, now)
+      detector?.feed(buf)
+      return
+    }
     speech.push(buf, level, now) // kept a few seconds so speech during a drop can be replayed
     if (!ws || ws.readyState !== WebSocket.OPEN || swapping) return // not sent now; replayed after reconnect
     ws.send(buf)
@@ -188,7 +308,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     } else if (t === 'drained') {
       log.debug('playback_done', { audioBytes: turnAudioBytes })
       send({ type: 'playback_done' })
-      if (status === 'speaking') setStatus('listening')
+      if (status === 'speaking') setStatus(idleStatus())
     }
   }
 
@@ -249,12 +369,6 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         case 'show':
           ev.show(m)
           break
-        case 'remind':
-          ev.remind(m.cid, m.text)
-          break
-        case 'import_rows':
-          ev.importRows?.(m.rows, m.text)
-          break
         case 'error':
           ev.error(m.message)
           settleIfSilent()
@@ -268,9 +382,20 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       return
     }
     switch (m.type) {
+      case 'setting':
+        if (m.key === 'lang' && typeof m.value === 'string') {
+          // spoken language change: continue in it on this socket (no reconnect, the mic stays on)
+          if (opts) opts.lang = m.value as Lang
+          ev.lang?.(m.value as Lang)
+        } else ev.setting?.(m)
+        break
       case 'ready':
+        if ('kind' in m) { ev.ready?.(m); break } // the one-tap card, not the connection greeting
         // the socket can be up before the mic is (it opens in parallel with the permission prompt)
-        if ((status === 'connecting' || status === 'offline') && micNode) setStatus('listening')
+        if (status === 'connecting' || status === 'offline') setStatus(idleStatus())
+        break
+      case 'attention':
+        setAwake(m.state === 'awake')
         break
       case 'heard':
         ev.heard?.()
@@ -320,7 +445,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         break
       case 'stop_audio':
         toPlayer({ type: 'stop' })
-        if (status === 'speaking') setStatus('listening')
+        if (status === 'speaking') setStatus(idleStatus())
         break
       case 'pending':
         pendingOpen = m.pending !== null
@@ -331,16 +456,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         turns.onTurnDone(performance.now())
         if (m.resume) resume = m.resume
         partialAt = null
+        ev.turnDone?.()
         settleIfSilent()
         break
       case 'show':
         ev.show(m)
-        break
-      case 'remind':
-        ev.remind(m.cid, m.text)
-        break
-      case 'import_rows':
-        ev.importRows?.(m.rows, m.text)
         break
       case 'metrics':
         if (!turnSaid) settleIfSilent()
@@ -543,7 +663,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         hello(sock)
         adopt(sock)
         log.info('reconnected', { attempt: backoffIdx })
-        setStatus('listening')
+        setAwake(false, true) // a new server session starts asleep; it says so if it is awake
+        setStatus(idleStatus())
       } catch (e) {
         log.warn('reconnect_failed', { error: String(e) })
         scheduleReconnect()
@@ -613,6 +734,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         }, OLD_SOCKET_GRACE_MS)
       }
       adopt(sock)
+      setAwake(false, true) // the new session starts asleep; its 'attention' (sent after hello) says otherwise
       swapping = false
       log.info('swap_done', { ms: Math.round(performance.now() - swapT0) })
     } catch (e) {
@@ -630,6 +752,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     opts = { ...o }
     handsFree = o.handsFree
     running = true
+    awake = false
     setStatus('connecting')
     // connect in parallel with the mic permission prompt and audio setup: the server opens the
     // Gnani streams meanwhile. On the very first run the AI disclosure is spoken right after
@@ -649,19 +772,12 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const ms = () => Math.round(performance.now() - t0)
     log.info('start', { lang: o.lang, handsFree: o.handsFree, firstRun: o.firstRun, early })
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      })
-      log.info('mic_ready', { ms: ms() })
-      try {
-        await buildGraph(16000)
-      } catch (e) {
-        log.warn('audio_16k_refused', { error: String(e) })
-        await buildGraph(undefined) // browser refused 16 kHz context or a cross-rate mic connection
+      if (o.mic !== false) {
+        stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
+        log.info('mic_ready', { ms: ms() })
       }
-      log.info('audio_ready', { ms: ms(), sampleRate: ctx?.sampleRate })
-      await resumeCtx()
-      watchMic()
+      await setupAudio(ms)
+      if (stream) { watchMic(); void initDetector() }
       document.addEventListener('visibilitychange', onVisibility)
       window.addEventListener('online', onOnline)
       window.addEventListener('offline', onOffline)
@@ -671,7 +787,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (!sock || !running) return
       if (!early) hello(sock)
       log.info('started', { ms: ms(), audioState: ctx?.state })
-      if (status === 'connecting') setStatus('listening')
+      if (status === 'connecting') setStatus(idleStatus())
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       log.error('start_failed', { ms: ms(), error: msg })
@@ -679,6 +795,47 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       ev.error(msg)
       setStatus('idle')
       throw e
+    }
+  }
+
+  /** The audio graph (speaker always; mic input when the stream is open). Text-only sessions survive without audio. */
+  async function setupAudio(ms: () => number): Promise<void> {
+    try {
+      try {
+        await buildGraph(16000)
+      } catch (e) {
+        log.warn('audio_16k_refused', { error: String(e) })
+        await buildGraph(undefined) // browser refused 16 kHz context or a cross-rate mic connection
+      }
+    } catch (e) {
+      if (stream) throw e
+      log.warn('audio_unavailable', { error: String(e) }) // typed text still works, just silently
+      return
+    }
+    log.info('audio_ready', { ms: ms(), sampleRate: ctx?.sampleRate })
+    await resumeCtx()
+  }
+
+  /** Open the mic on a socket-only session (first wake). */
+  async function attachMic(): Promise<void> {
+    if (stream || !running) return
+    try {
+      const s = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
+      if (!running) { s.getTracks().forEach((t) => t.stop()); return }
+      stream = s
+      if (!ctx) await setupAudio(() => 0)
+      else if (micNode) ctx.createMediaStreamSource(s).connect(micNode)
+      watchMic()
+      void initDetector()
+      void resumeCtx()
+      log.info('mic_attached')
+    } catch (e) {
+      log.error('mic_attach_failed', { error: String(e) })
+      ev.error(e instanceof Error ? e.message : String(e))
+      holdActive = false
+      send({ type: 'sleep' }) // the wake we sent has nothing to listen with
+      setAwake(false)
+      ev.micError?.()
     }
   }
 
@@ -716,6 +873,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   function teardown() {
     running = false
+    dropDetector()
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
@@ -723,6 +881,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     if (tick) clearInterval(tick)
     tick = null
     speech.clear()
+    preroll.clear()
+    if (speakingTimer) clearTimeout(speakingTimer)
+    speakingTimer = null
     resend = null
     droppedSince = null
     probeDeadline = null
@@ -749,6 +910,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     metricsTimer = null
     pendingMetrics = null
     pttHeld = false
+    holdActive = false
     swapInFlight = false
     swapping = false
     if (ws) {
@@ -816,31 +978,53 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     tap: (action) => send({ type: 'tap', action }),
     answer: (text) => send({ type: 'answer', text }),
     sendText: (text) => send({ type: 'text', text }),
+    force: (text) => send({ type: 'force', text }),
     sendSnapshot: () => {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
-    setImportMode(on: boolean) {
-      log.info('setting', { importMode: on })
-      if (opts) opts.importMode = on
-      send({ type: 'import', on })
-    },
-    setReadBackAll(on: boolean) {
-      log.info('setting', { readBackAll: on })
-      if (opts) opts.readBackAll = on
-      send({ type: 'readback', on })
-    },
-    setFastSpeech(on: boolean) {
-      log.info('setting', { fastSpeech: on })
-      if (opts) opts.fastSpeech = on
-      send({ type: 'speed', speed: on ? 1.2 : 1 })
+    setSpeed(speed: 0.8 | 1 | 1.2) {
+      log.info('setting', { speed })
+      if (opts) opts.speed = speed
+      send({ type: 'speed', speed })
     },
     bargeIn() {
       if (!running) return
       log.info('barge_in', { status })
       send({ type: 'barge' })
       toPlayer({ type: 'stop' }) // silence now, do not wait for the server
-      if (status === 'speaking' || status === 'thinking') setStatus('listening')
+      if (status === 'speaking' || status === 'thinking') setStatus(idleStatus())
+    },
+    wake(source) {
+      if (!running) return
+      log.info('wake', { source })
+      if (source === 'hold') {
+        if (holdActive) return // never two hold wakes for one press
+        holdActive = true
+      }
+      send({ type: 'wake', source })
+      setAwake(true) // optimistic: the server's 'attention' confirms (or says asleep)
+      if (!stream) void attachMic()
+    },
+    holdEnd() {
+      if (!running || !holdActive) return // no hold started: nothing to end
+      holdActive = false
+      log.debug('hold_end')
+      send({ type: 'hold_end' })
+    },
+    sleep() {
+      if (!running) return
+      log.info('sleep')
+      send({ type: 'sleep' })
+      setAwake(false)
+    },
+    setLang(l) {
+      if (opts) opts.lang = l
+      // the protocol only carries the language in hello: re-hello on a fresh socket, mic stays on
+      if (running && ws && !swapping) {
+        clearRefresh()
+        void proactiveReconnect(true)
+      }
     },
   }
 }

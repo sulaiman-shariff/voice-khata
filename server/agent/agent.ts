@@ -1,0 +1,122 @@
+/**
+ * The agent: one model call per turn that reads everything heard (all STT transcripts, and the
+ * audio itself when given) plus the app state, and answers with one or more tool calls.
+ * Text turns race the Gemini race against Claude Haiku 5.5; audio turns are Gemini only.
+ */
+import { geminiAgentCall, TIMEOUT_MS, type GeminiTool } from '../parse/gemini.js'
+import { haikuAgentCall, haikuEnabled } from '../parse/haiku.js'
+import type { PendingView } from '../../shared/protocol.js'
+import type { Lang } from '../../shared/replies.js'
+import { type ToolCall, isToolName } from './tools.js'
+
+export type { ToolCall } from './tools.js'
+
+export interface AgentContext {
+  lang: Lang
+  /** What each speech recogniser heard for this turn (one per locale tried). */
+  heard: { locale: string; text: string }[]
+  /** The last few exchanges, oldest first. */
+  history: string[]
+  /** Which screen the shopkeeper is looking at. */
+  screen: string
+  /** Names of the customers in the ledger. */
+  customers: string[]
+  /** The latest entries, numbered newest first ("#1 Ramesh credit 340 today"): tools point at one by its number. */
+  recent: string[]
+  /** A question the app is waiting on, or null. */
+  pending: PendingView | null
+}
+
+/** Frozen: no dates, names or per-user text, so it can be cached. */
+export const AGENT_SYSTEM = `You are the brain of KhataBhai, a voice ledger app for Indian shopkeepers. The shopkeeper speaks; you answer ONLY by calling tools. Never reply with plain text.
+
+Each turn you get:
+- lang: the app's current reply language.
+- heard: one or more transcripts of the same speech, from recognisers tuned to different languages. They disagree and make mistakes; compare them (and the audio, if attached) to work out what was really said.
+- history: the last few exchanges, oldest first.
+- screen: which screen the shopkeeper is on.
+- customers: the names in the ledger. A customer can be referred to by name in any script (Latin, Devanagari, Tamil, etc.) or spelling; match it to the ledger name.
+- recent: the latest ledger entries, numbered, #1 the newest. Use the number as "ref" to change or remove an entry; the customers in it answer "him", "her", "that one".
+- pending: a question the app is waiting on (confirm, name, amount, direction, which, delete, batch, modify), or none. If pending is set, an answer like yes, no, a name or an amount usually answers it.
+
+Rules:
+- Only act on what was said to the app. Asides, talk to customers, background chatter or TV: call not_for_me.
+- Direction: use credit or payment only when a word in the speech says it (udhaar, credit, saal, jama, paid, diye, liye ...). If none does, direction is null; never infer it from the amount, the name or an unclear word.
+- Names: when a heard name sounds like a ledger customer, use the ledger spelling ("Mahe" for the customer Mahi). Never invent, complete or translate a name. If no ledger customer is named, pass name null unless the shopkeeper clearly says it is a new customer; an ordinary word (just, only, write, took, gave, talk) is not a name.
+- Never invent amounts. An amount must be one that was actually said; if it is missing or doubtful, ask for it instead of guessing.
+- The reply language is the language the shopkeeper spoke.
+- If the words cannot be trusted (garbled, contradictory transcripts, too short to mean anything), call unclear.
+- Several tools may be called in one turn, in the order they should run (for example add several entries, then query a balance).
+- Pick tools only from the list given.`
+
+/** Build the user turn: every transcript, then the app state, as plain labelled lines. */
+export function userTurn(ctx: AgentContext): string {
+  return [
+    `lang: ${ctx.lang}`,
+    'heard:',
+    ...ctx.heard.map((h) => `- [${h.locale}] ${h.text}`),
+    `history: ${JSON.stringify(ctx.history)}`,
+    `screen: ${ctx.screen}`,
+    `customers: ${JSON.stringify(ctx.customers)}`,
+    `recent: ${JSON.stringify(ctx.recent)}`,
+    `pending: ${ctx.pending ? JSON.stringify(ctx.pending) : 'none'}`,
+  ].join('\n')
+}
+
+/** The model that hears audio: the measured winner of eval/audio_latency.ts unless AGENT_AUDIO_MODEL says otherwise. */
+const AUDIO_MODEL = () => process.env.AGENT_AUDIO_MODEL || 'gemini-3.5-flash-lite'
+
+export type AgentModel = 'gemini' | 'haiku'
+export interface Decision {
+  calls: ToolCall[]
+  /** wall-clock time of the whole call (the race, when raced) */
+  ms: number
+  /** which model's answer this is */
+  model: AgentModel
+  /** Haiku prompt-cache hits, when Haiku answered */
+  cacheRead?: number
+}
+
+/** a tool we do not have is never run */
+const known = (calls: { name: string; args: Record<string, unknown> }[]): ToolCall[] => calls.filter((c): c is ToolCall => isToolName(c.name))
+
+/**
+ * Text turns: the Gemini race (Mumbai + 2x global) and Haiku start together; the first answer with a
+ * tool we have wins and the other leg is aborted. One deadline (LLM_TIMEOUT_MS, 3 s, or opts.timeoutMs)
+ * plus the caller's signal covers both; if one side fails the other keeps the rest of it, and if
+ * both fail this throws (the session then says didNotCatch). Haiku is skipped for audio turns, with
+ * AGENT_HAIKU=off, with no ANTHROPIC_API_KEY, or with opts.haiku false.
+ */
+export async function decide(
+  ctx: AgentContext, tools: GeminiTool[], audio?: Buffer,
+  opts: { timeoutMs?: number; signal?: AbortSignal; haiku?: boolean } = {},
+): Promise<Decision> {
+  const user = userTurn(ctx)
+  const t0 = performance.now()
+  if (audio?.length || opts.haiku === false || !haikuEnabled()) {
+    const r = await geminiAgentCall(AGENT_SYSTEM, user, tools, audio, { ...(audio?.length ? { model: AUDIO_MODEL() } : {}), timeoutMs: opts.timeoutMs, signal: opts.signal })
+    return { calls: known(r.calls), ms: r.ms, model: 'gemini' }
+  }
+  // the deadline is a plain timer (not AbortSignal.timeout) so it is one clock for both legs
+  const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS
+  const done = new AbortController()
+  const timer = setTimeout(() => done.abort(new DOMException('agent deadline', 'TimeoutError')), timeoutMs)
+  const signal = opts.signal ? AbortSignal.any([opts.signal, done.signal]) : done.signal
+  const good = (model: AgentModel) => (r: { calls: { name: string; args: Record<string, unknown> }[]; cacheRead?: number }): Decision => {
+    const calls = known(r.calls)
+    if (!calls.length) throw new Error(`${model}: no known tool call`)
+    return { calls, ms: performance.now() - t0, model, ...(r.cacheRead !== undefined ? { cacheRead: r.cacheRead } : {}) }
+  }
+  try {
+    return await Promise.any([
+      geminiAgentCall(AGENT_SYSTEM, user, tools, undefined, { timeoutMs, signal }).then(good('gemini')),
+      haikuAgentCall(AGENT_SYSTEM, user, tools, { signal, timeoutMs }).then(good('haiku')),
+    ])
+  } catch (e) {
+    const errs = e instanceof AggregateError ? e.errors : [e]
+    throw new Error(`agent: both models failed (${errs.map((x) => String(x instanceof Error ? x.message : x).slice(0, 120)).join('; ')})`, { cause: e })
+  } finally {
+    clearTimeout(timer)
+    done.abort() // cancels the loser
+  }
+}
