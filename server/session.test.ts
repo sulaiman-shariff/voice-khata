@@ -378,6 +378,41 @@ describe('audio for unclear moments', () => {
     expect(h.said.join(' ')).toContain(say('en').didNotCatch())
   })
 
+  it('an audio call slower than the remaining budget is cut off and the shopkeeper is asked', async () => {
+    vi.useFakeTimers()
+    try {
+      const h = harness([cust('s', 'Suresh')], {
+        lang: 'en',
+        agent: (_c, audio) => (audio ? new Promise(() => {}) : unclear()), // the audio call never answers
+      })
+      const p = h.turn('mumble mumble')
+      await vi.advanceTimersByTimeAsync(2600)
+      await p
+      expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false, true])
+      expect(h.ops()).toEqual([])
+      expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+    } finally { vi.useRealTimers() }
+  })
+
+  it('an audio call that throws asks the shopkeeper', async () => {
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: (_c, audio) => { if (audio) throw new Error('boom'); return unclear() } })
+    await h.turn('mumble mumble')
+    expect(h.ops()).toEqual([])
+    expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+  })
+
+  it('an audio reading never answers an open question', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      lang: 'en',
+      agent: (c, audio) => (c.pending ? (audio ? callsOf({ name: 'answer_question', args: { kind: 'direction', value: 'credit' } }) : unclear()) : addEntry('Suresh', 300, null)),
+    })
+    await h.turn('Suresh 300')
+    expect(h.asks).toBe('direction')
+    await h.turn('mumble mumble')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('direction')
+  })
+
   it('still unclear with the audio asks the shopkeeper', async () => {
     const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: unclear })
     await h.turn('mumble mumble')

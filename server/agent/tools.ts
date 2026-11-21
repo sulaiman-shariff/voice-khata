@@ -124,7 +124,11 @@ const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase())
 const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
 
 /** The sentence the tool was called for, and every language stream's reading of it (when there are several). */
-/** `fromAudio`: the reading came from the model hearing the audio, not from the transcripts: every write is read back. */
+/**
+ * `fromAudio`: the reading came from the model hearing the audio, not from the transcripts. Honoured by
+ * add_entries (read back, amounts may come from the audio), change_entry (asked first) and
+ * answer_question (refused: an open question is answered only from heard text).
+ */
 export type ToolMeta = TurnMeta & { transcript: string; heard?: string[]; fromAudio?: boolean }
 
 /** Args only our own "which one" continuations may set (`<slot>__cid`, `_new`): never taken from the model. */
@@ -271,7 +275,8 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         modify: { ref, amount: num(a.new_amount), direction: a.new_direction === 'credit' || a.new_direction === 'payment' ? a.new_direction : null, name: null, remove: false },
       }
       // the new amount must have been heard, like any amount
-      const intent = validate(text, reading, meta.fromAudio && num(a.new_amount) != null ? [...contextAmounts, num(a.new_amount)!] : contextAmounts, entries.length)
+      const newAmount = num(a.new_amount)
+      const intent = validate(text, reading, meta.fromAudio && newAmount != null ? [...contextAmounts, newAmount] : contextAmounts, entries.length)
       if (intent.type !== 'modify') return notCaught()
       return core.modifyEntry(intent, meta.fromAudio ? { ask: true } : undefined)
     }
@@ -481,6 +486,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     case 'answer_question': {
       // nothing open (or it expired): say so rather than stay silent
       if (!core.pending) return notCaught()
+      if (meta.fromAudio) return notCaught() // the audio reading never answers a question; the card stays open
       const kind = a.kind
       const value = str(a.value)
       const view = core.pendingView()

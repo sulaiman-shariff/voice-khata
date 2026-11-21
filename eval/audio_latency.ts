@@ -14,6 +14,8 @@ const DIR = 'eval/data/synth'
 const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.5-flash']
 const BUDGET_MS = 2500
 const N = 20
+/** what an errored or timed-out call counts as in the stats */
+const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS ?? 15000)
 
 interface Clip { id: string; text: string; lang: string; pcm: Buffer }
 const clips: Clip[] = []
@@ -36,7 +38,7 @@ const q = (a: number[], p: number) => a[Math.min(a.length - 1, Math.floor(p * a.
 const rows: { model: string; cold: number; p50: number; p95: number; errors: number }[] = []
 for (const model of MODELS) {
   process.env.AGENT_AUDIO_MODEL = model
-  let cold = NaN
+  let cold = TIMEOUT_MS
   try { cold = (await decide(ctxOf(clips[0]), GEMINI_TOOLS, clips[0].pcm)).ms } catch (e) { console.log(`${model} warm-up failed: ${String(e).slice(0, 120)}`) }
   const ms: number[] = []
   let errors = 0
@@ -46,6 +48,7 @@ for (const model of MODELS) {
       ms.push(r.ms)
     } catch (e) {
       errors++
+      ms.push(TIMEOUT_MS)
       console.log(`${model} ${c.id}: ${String(e).slice(0, 100)}`)
     }
   }
@@ -54,7 +57,7 @@ for (const model of MODELS) {
 }
 
 console.log(`\n${clips.length} clips, audio ${Math.round(clips.reduce((s, c) => s + c.pcm.length, 0) / clips.length / 32)} ms avg`)
-console.log('model'.padEnd(24), 'cold ms', 'warm p50', 'warm p95', 'errors')
-for (const r of rows) console.log(r.model.padEnd(24), String(Math.round(r.cold)).padStart(7), String(Math.round(r.p50)).padStart(8), String(Math.round(r.p95)).padStart(8), String(r.errors).padStart(6))
+console.log('model'.padEnd(24), 'cold ms', 'warm p50', 'warm p95', 'error rate')
+for (const r of rows) console.log(r.model.padEnd(24), String(Math.round(r.cold)).padStart(7), String(Math.round(r.p50)).padStart(8), String(Math.round(r.p95)).padStart(8), `${r.errors}/${clips.length}`.padStart(10))
 const ok = rows.filter((r) => r.p95 <= BUDGET_MS && !r.errors).sort((a, b) => a.p95 - b.p95)
 console.log(ok.length ? `winner (p95 <= ${BUDGET_MS} ms): ${ok[0].model}` : `no model met p95 <= ${BUDGET_MS} ms; default stays the best p50: ${[...rows].sort((a, b) => a.p50 - b.p50)[0].model}`)

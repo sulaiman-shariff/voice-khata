@@ -512,7 +512,8 @@ export class Session {
 
   private takeUttAudio(): Buffer | undefined {
     if (!this.uttAudio.length) return undefined
-    const pcm = Buffer.concat(this.uttAudio)
+    let pcm = Buffer.concat(this.uttAudio)
+    if (pcm.length > UTT_AUDIO_MAX) pcm = pcm.subarray(pcm.length - UTT_AUDIO_MAX) // the latest 20 s
     this.uttAudio = []
     this.uttBytes = 0
     return pcm
@@ -766,7 +767,8 @@ export class Session {
               new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error('audio budget')), left) }),
             ])
             this.log.info('agent_audio', { text, ms: a.ms, calls: a.calls.map((c) => c.name) })
-            if (r.ms + a.ms <= AUDIO_BUDGET_MS) { calls = a.calls; fromAudio = true }
+            calls = a.calls
+            fromAudio = true
           } catch (e) {
             this.log.warn('agent_audio_failed', { text, error: e })
           } finally {
