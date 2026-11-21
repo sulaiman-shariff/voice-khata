@@ -39,10 +39,10 @@ URL=$(gcloud run services describe $SERVICE --region $REGION $G --format='value(
 # hourly automatic reminders (the handler itself only sends 09:00-20:00 India time)
 if gcloud scheduler jobs describe voicekhata-reminders --location $REGION $G >/dev/null 2>&1; then op=update; else op=create; fi
 gcloud scheduler jobs $op http voicekhata-reminders --location $REGION $G \
-  --schedule "5 * * * *" --time-zone "Asia/Kolkata" --http-method POST \
+  --schedule "5 * * * *" --time-zone "Asia/Kolkata" --http-method POST --message-body "{}" \
   --uri "$URL/internal/reminders-tick" --update-headers "x-cron-secret=$CRON_SECRET" 2>/dev/null \
   || gcloud scheduler jobs $op http voicekhata-reminders --location $REGION $G \
-  --schedule "5 * * * *" --time-zone "Asia/Kolkata" --http-method POST \
+  --schedule "5 * * * *" --time-zone "Asia/Kolkata" --http-method POST --message-body "{}" \
   --uri "$URL/internal/reminders-tick" --headers "x-cron-secret=$CRON_SECRET"
 
 echo

@@ -6,7 +6,7 @@
  *   POST /webhooks/vonage/inbound     a customer replied 1/2/3/STOP (Vonage JWT, or ?k= token)
  *   POST /webhooks/vonage/status      delivery receipts             (same)
  *   POST /internal/reminders-tick     hourly automatic reminders    (Cloud Scheduler, x-cron-secret)
- *   GET  /healthz
+ *   GET  /health (Cloud Run reserves /healthz)
  *
  * Start: node --import tsx server/cloudrun.ts (listens on $PORT, 8080 by default).
  */
@@ -20,7 +20,7 @@ const routes: Routes = {
   '/webhooks/vonage/inbound': async () => logged('vonage', (await import('./wa/inbound.js')).handleVonageInbound),
   '/webhooks/vonage/status': async () => logged('vonage', (await import('./wa/inbound.js')).handleVonageStatus),
   '/internal/reminders-tick': async () => logged('reminders', (await import('./wa/reminders.js')).handleRemindersTick),
-  '/healthz': async () => async () => json({ ok: true }),
+  '/health': async () => async () => json({ ok: true }),
 }
 
 const server = http.createServer((req, res) => {
