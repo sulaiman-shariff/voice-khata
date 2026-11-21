@@ -5,6 +5,7 @@
 import type { ClientMsg, ServerMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
 import type { VoiceClient, VoiceEvents, VoiceStatus } from './contracts'
+import { clientLog as log } from './log'
 
 export function defaultVoiceUrl(): string {
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/voice`
@@ -57,6 +58,8 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   let turnSaid = false
   let thinkTimer: ReturnType<typeof setTimeout> | null = null
   let micDead = false
+  /** reply audio received for the current turn (logged, not otherwise used) */
+  let turnAudioBytes = 0
 
   let pttHeld = false
   let pttTailTimer: ReturnType<typeof setTimeout> | null = null
@@ -137,8 +140,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const t = e.data.type
     if (t === 'started') {
       playerStartedAt = performance.now()
+      log.info('playback_start', { msAfterFinal: finalAt === null ? null : Math.round(playerStartedAt - finalAt) })
       flushMetrics()
     } else if (t === 'drained') {
+      log.debug('playback_done', { audioBytes: turnAudioBytes })
       send({ type: 'playback_done' })
       if (status === 'speaking') setStatus('listening')
     }
@@ -159,6 +164,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     pendingMetrics = null
     if (metricsTimer) clearTimeout(metricsTimer)
     metricsTimer = null
+    log.info('turn_metrics', { ...turn, clientFirstAudioMs: ms })
     ev.metrics({ ...turn, clientFirstAudioMs: ms })
   }
 
@@ -167,7 +173,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const isOld = sock !== ws
     if (isOld && !oldSockets.has(sock)) return
     if (e.data instanceof ArrayBuffer) {
-      if (!isOld) toPlayer({ type: 'pcm', buf: e.data })
+      if (!isOld) {
+        turnAudioBytes += e.data.byteLength
+        toPlayer({ type: 'pcm', buf: e.data })
+      }
       return // audio from a retired socket would overlap the new one
     }
     if (typeof e.data !== 'string') return
@@ -175,8 +184,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     try {
       m = JSON.parse(e.data) as ServerMsg
     } catch {
+      log.warn('bad_server_message', { bytes: e.data.length })
       return
     }
+    logServerMsg(m, isOld)
     if (isOld) {
       // in-flight turn on the retired socket: keep its text results, never its audio/state control
       switch (m.type) {
@@ -285,19 +296,63 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
 
   /** Open a socket; resolves once open (hello is sent by the caller). */
   function openSocket(): Promise<WebSocket> {
+    const t0 = performance.now()
+    log.debug('socket_opening', { url })
     return new Promise((resolve, reject) => {
       const sock = new WebSocket(url)
       sock.binaryType = 'arraybuffer'
-      sock.onopen = () => resolve(sock)
-      sock.onerror = () => reject(new Error('socket error'))
-      sock.onclose = () => reject(new Error('socket closed'))
+      sock.onopen = () => {
+        log.info('socket_open', { ms: Math.round(performance.now() - t0) })
+        resolve(sock)
+      }
+      sock.onerror = () => {
+        log.warn('socket_error', { ms: Math.round(performance.now() - t0) })
+        reject(new Error('socket error'))
+      }
+      sock.onclose = (e) => {
+        log.warn('socket_closed_before_open', { code: e.code, reason: e.reason })
+        reject(new Error('socket closed'))
+      }
     })
+  }
+
+  /** One console line per server message (audio is counted per turn instead). */
+  function logServerMsg(m: ServerMsg, old: boolean) {
+    const tag = old ? { oldSocket: true } : {}
+    switch (m.type) {
+      case 'partial':
+        log.debug('partial', { text: m.text, ...tag })
+        break
+      case 'final':
+        turnAudioBytes = 0
+        log.info('final', { text: m.text, ...tag })
+        break
+      case 'say':
+        log.info('say', { text: m.text, ...tag })
+        break
+      case 'ops':
+        log.info('ops', { ops: m.ops.map((o) => o.op), ...tag })
+        break
+      case 'pending':
+        log.debug('pending', { kind: m.pending?.kind ?? null, ...tag })
+        break
+      case 'audio_end':
+        log.debug('audio_end', { audioBytes: turnAudioBytes, audioMs: Math.round(turnAudioBytes / 32), ...tag })
+        break
+      case 'error':
+        log.warn('server_error', { message: m.message, ...tag })
+        break
+      case 'metrics':
+        break // logged with the client's own first-audio time in flushMetrics
+      default:
+        log.debug(m.type, { ...(m as object), ...tag })
+    }
   }
 
   function adopt(sock: WebSocket) {
     sock.onmessage = (e) => handleMessage(sock, e)
     sock.onerror = null
-    sock.onclose = () => onClosed(sock)
+    sock.onclose = (e) => onClosed(sock, e.code, e.reason)
     ws = sock
     backoffIdx = 0
     adoptedAt = Date.now()
@@ -317,8 +372,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     pttTailTimer = null
   }
 
-  function onClosed(sock: WebSocket) {
+  function onClosed(sock: WebSocket, code?: number, reason?: string) {
     if (sock !== ws || !running) return
+    log.warn('socket_closed', { code, reason, ageS: Math.round((Date.now() - adoptedAt) / 1000) })
     ws = null
     clearRefresh()
     releasePtt()
@@ -331,6 +387,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     if (!running || reconnectTimer) return
     const delay = BACKOFF_MS[Math.min(backoffIdx, BACKOFF_MS.length - 1)]
     backoffIdx++
+    log.info('reconnect_scheduled', { delayMs: delay, attempt: backoffIdx })
     reconnectTimer = setTimeout(async () => {
       reconnectTimer = null
       if (!running) return
@@ -342,8 +399,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
         }
         hello(sock)
         adopt(sock)
+        log.info('reconnected', { attempt: backoffIdx })
         setStatus('listening')
-      } catch {
+      } catch (e) {
+        log.warn('reconnect_failed', { error: String(e) })
         scheduleReconnect()
       }
     }, delay)
@@ -372,9 +431,12 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     const partialActive = partialAt !== null && performance.now() - partialAt < PARTIAL_STALE_MS
     const quiet = urgent || (!pendingOpen && !partialActive && micLevel < SPEECH_LEVEL)
     if (!hard && (isBusy() || pttHeld || !quiet)) {
+      log.debug('swap_postponed', { ageS: Math.round(age / 1000), busy: isBusy(), ptt: pttHeld, quiet })
       scheduleRefresh(Math.max(250, Math.min(2000, HARD_SWAP_MS - age)))
       return
     }
+    log.info('swap_start', { ageS: Math.round(age / 1000), hard, urgent })
+    const swapT0 = performance.now()
     swapInFlight = true
     try {
       const sock = await openSocket()
@@ -385,6 +447,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       const nowHard = Date.now() - adoptedAt >= HARD_SWAP_MS
       if (!nowHard && (isBusy() || pttHeld)) {
         // got busy while connecting: keep the old socket and try later
+        log.info('swap_aborted', { reason: 'busy' })
         sock.close()
         scheduleRefresh(2000)
         return
@@ -408,8 +471,10 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       }
       adopt(sock)
       swapping = false
-    } catch {
+      log.info('swap_done', { ms: Math.round(performance.now() - swapT0) })
+    } catch (e) {
       swapping = false
+      log.warn('swap_failed', { error: String(e) })
       scheduleRefresh(5000) // old socket still alive (or its close handler will reconnect)
     } finally {
       swapInFlight = false
@@ -437,24 +502,32 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       return sock
     })
     sockP.catch(() => {})
+    const t0 = performance.now()
+    const ms = () => Math.round(performance.now() - t0)
+    log.info('start', { lang: o.lang, handsFree: o.handsFree, firstRun: o.firstRun, early })
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
+      log.info('mic_ready', { ms: ms() })
       try {
         await buildGraph(16000)
-      } catch {
+      } catch (e) {
+        log.warn('audio_16k_refused', { error: String(e) })
         await buildGraph(undefined) // browser refused 16 kHz context or a cross-rate mic connection
       }
+      log.info('audio_ready', { ms: ms(), sampleRate: ctx?.sampleRate })
       await resumeCtx()
       watchMic()
       document.addEventListener('visibilitychange', onVisibility)
       const sock = await sockP
       if (!sock || !running) return
       if (!early) hello(sock)
+      log.info('started', { ms: ms(), audioState: ctx?.state })
       if (status === 'connecting') setStatus('listening')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      log.error('start_failed', { ms: ms(), error: msg })
       teardown()
       ev.error(msg)
       setStatus('idle')
@@ -486,6 +559,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       t.onended = () => {
         if (!running || micDead) return
         micDead = true
+        log.error('mic_ended')
         releasePtt()
         ev.error('Microphone stopped (unplugged, or permission taken away). Please reconnect it and restart.')
         setStatus('offline')
@@ -537,6 +611,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
   }
 
   function stop() {
+    log.info('stop')
     teardown()
     setStatus('idle')
   }
@@ -549,6 +624,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       send({ type: 'ptt_end' })
     }
     pttHeld = true
+    log.debug('ptt_down')
     send({ type: 'ptt_start' })
   }
 
@@ -559,12 +635,14 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     pttTailTimer = setTimeout(() => {
       pttTailTimer = null
       pttHeld = false
+      log.debug('ptt_up')
       send({ type: 'ptt_end' })
     }, PTT_TAIL_MS)
   }
 
   function setHandsFree(on: boolean) {
     if (handsFree === on) return
+    log.info('setting', { handsFree: on })
     handsFree = on
     // the protocol only carries the mode in hello, so re-hello on a fresh socket
     if (running && ws && !swapping) {
@@ -586,15 +664,18 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     },
     setHandsFree,
     setReadBackAll(on: boolean) {
+      log.info('setting', { readBackAll: on })
       if (opts) opts.readBackAll = on
       send({ type: 'readback', on })
     },
     setFastSpeech(on: boolean) {
+      log.info('setting', { fastSpeech: on })
       if (opts) opts.fastSpeech = on
       send({ type: 'speed', speed: on ? 1.2 : 1 })
     },
     bargeIn() {
       if (!running) return
+      log.info('barge_in', { status })
       send({ type: 'barge' })
       toPlayer({ type: 'stop' }) // silence now, do not wait for the server
       if (status === 'speaking' || status === 'thinking') setStatus('listening')

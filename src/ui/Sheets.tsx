@@ -5,6 +5,7 @@ import { LANG_NAME, LANGS, type Lang } from '../../shared/replies.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
+import { clientLog } from '@/lib/log'
 import { cn } from '@/lib/utils'
 import { dayLabel, rs } from './format'
 import { Passbook } from './Ledger'
@@ -131,6 +132,7 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
 }) {
   const st = store.settings
   const [name, setName] = useState(st.shopName)
+  const [debugLogs, setDebugLogs] = useState(clientLog.enabled)
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="bottom" className="rounded-t-3xl pb-8">
@@ -152,6 +154,10 @@ export function SettingsSheet({ store, open, t, onClose, onChanged }: {
           <label className="flex items-center justify-between">
             <span>{t.readBackAll}</span>
             <Switch checked={!!st.readBackAll} onCheckedChange={(v) => void store.updateSettings({ readBackAll: v }).then(() => onChanged({ readBackAll: v }))} />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t.debugLogs}</span>
+            <Switch checked={debugLogs} onCheckedChange={(v) => { clientLog.set(v); setDebugLogs(v) }} />
           </label>
           <label className="flex items-center justify-between">
             <span>{t.latency}</span>

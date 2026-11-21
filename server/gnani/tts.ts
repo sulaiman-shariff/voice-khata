@@ -8,6 +8,7 @@
  * reply is drained and dropped, and the socket rejoins the pool once it finishes.
  */
 import WebSocket from 'ws'
+import { type Logger, nullLogger } from '../log.js'
 
 const TTS_URL = 'wss://api.vachana.ai/api/v1/tts'
 /**
@@ -53,21 +54,29 @@ export class TtsPool {
   private slots: Slot[] = []
   private closed = false
 
-  constructor(private key: string, private size = 2) {
+  constructor(private key: string, private size = 2, private log: Logger = nullLogger) {
     for (let i = 0; i < size; i++) this.slots.push(this.openSlot())
   }
 
   private openSlot(): Slot {
     const ws = new WebSocket(TTS_URL, { headers: { 'X-API-Key-ID': this.key } })
+    const t0 = performance.now()
     const ready = new Promise<void>((res, rej) => {
-      ws.once('open', () => res())
-      ws.once('error', rej)
+      ws.once('open', () => {
+        this.log.debug('tts_socket_open', { ms: performance.now() - t0, pool: this.slots.length })
+        res()
+      })
+      ws.once('error', (e) => {
+        this.log.warn('tts_socket_failed', { ms: performance.now() - t0, error: e })
+        rej(e)
+      })
     })
     ready.catch(() => {}) // surfaced at use time
     const slot: Slot = { ws, ready, busy: false }
-    ws.on('close', () => {
+    ws.on('close', (code) => {
       // replace dead sockets so the pool stays warm
       if (this.closed) return
+      this.log.info('tts_socket_closed', { code, replacing: true })
       const i = this.slots.indexOf(slot)
       if (i >= 0) this.slots[i] = this.openSlot()
     })
@@ -80,6 +89,7 @@ export class TtsPool {
     s ??= this.slots.find((x) => !x.busy && x.ws.readyState === WebSocket.CONNECTING)
     if (!s) {
       // all busy (e.g. a barged-in reply still draining): open an extra socket
+      this.log.info('tts_pool_grow', { size: this.slots.length + 1 })
       s = this.openSlot()
       this.slots.push(s)
     }
@@ -98,6 +108,7 @@ export class TtsPool {
       if (PHRASES.has(key) || this.closed) continue
       const chunks: Buffer[] = []
       const r = await this.synth(text, lang, (pcm) => chunks.push(pcm), undefined, speed)
+      this.log.debug('tts_warm', { text, lang, speed, ok: !r.error, ms: r.totalMs, bytes: r.bytes, error: r.error ?? null })
       if (!r.error && !r.cancelled && chunks.length) {
         if (PHRASES.size >= MAX_PHRASES) PHRASES.delete(PHRASES.keys().next().value!)
         PHRASES.set(key, chunks)
@@ -126,6 +137,7 @@ export class TtsPool {
       await slot.ready
     } catch (e) {
       slot.busy = false
+      this.log.error('tts_socket_unavailable', { error: e, text, lang })
       return { firstAudioMs: null, totalMs: performance.now() - t0, bytes: 0, cancelled: false, error: String(e) }
     }
     return new Promise<SpeakResult>((resolve) => {
@@ -137,6 +149,7 @@ export class TtsPool {
         if (settled) return
         settled = true
         signal?.removeEventListener('abort', onAbort)
+        if (error) this.log.error('tts_error', { error, text, lang, bytes, ms: performance.now() - t0 })
         resolve({ firstAudioMs: first, totalMs: performance.now() - t0, bytes, cancelled, error })
       }
       const onMessage = (raw: WebSocket.RawData) => {

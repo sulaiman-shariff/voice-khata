@@ -13,6 +13,7 @@ import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
 import { type Lang, LOCALE, guardReply, langFromLocale, say, sayMore, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
+import { type Logger, nullLogger } from './log.js'
 import type { LlmContext, LlmReading } from './parse/llm.js'
 import { validate } from './parse/llm.js'
 
@@ -30,6 +31,7 @@ export interface SttCallbacks {
   onFinal?: (text: string, detectedLang?: string) => void
   onError?: (msg: string) => void
   onClose?: (code: number) => void
+  onOpen?: () => void
 }
 export interface SessionDeps {
   openStt: (locale: string, keyterms: string[], cb: SttCallbacks) => SttLike
@@ -46,6 +48,8 @@ export interface SessionDeps {
   secondReading?: boolean
   send: (msg: ServerMsg) => void
   sendAudio: (pcm: Buffer) => void
+  /** Structured logger for this session (server/log.ts); silent when absent. */
+  log?: Logger
   now?: () => number
   newId?: () => string
 }
@@ -166,8 +170,15 @@ export class Session {
   private now: () => number
   private newId: () => string
 
+  private log: Logger
+  /** voice/tap turns handled so far (logged as `turn`) */
+  private turnNo = 0
+  private startedAt = 0
+
   constructor(private deps: SessionDeps) {
+    this.log = deps.log ?? nullLogger
     this.now = deps.now ?? (() => performance.now())
+    this.startedAt = this.now()
     this.newId = deps.newId ?? (() => crypto.randomUUID())
   }
 
@@ -175,6 +186,10 @@ export class Session {
   onClient(msg: ClientMsg): void {
     switch (msg.type) {
       case 'hello':
+        this.log.info('hello', {
+          lang: msg.lang, ptt: msg.ptt, speed: msg.speed ?? 1, readBack: !!msg.readBack, firstRun: msg.firstRun,
+          customers: msg.snapshot.customers.length, todayEntries: msg.snapshot.today.entries,
+        })
         this.lang = msg.lang
         this.snap = msg.snapshot
         this.snap.recent ??= []
@@ -189,40 +204,50 @@ export class Session {
           })
         break
       case 'snapshot':
+        this.log.debug('snapshot', { customers: msg.snapshot.customers.length, todayEntries: msg.snapshot.today.entries })
         this.snap = msg.snapshot
         this.snap.recent ??= []
         this.stt?.setKeyterms(this.keyterms())
         break
       case 'ptt_start':
+        this.log.debug('ptt_start')
         this.ptt = true
         this.bargeIn()
         break
       case 'ptt_end':
+        this.log.debug('ptt_end', { partial: this.lastPartial })
         this.sendHeard()
         this.commit(false)
         break
       case 'tap':
+        this.log.info('input', { kind: 'tap', action: msg.action })
         this.enqueue(() => this.handleText(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo', null, 'tap'))
         break
       case 'text':
+        this.log.info('input', { kind: 'typed', text: msg.text })
         // typed lists: one line per entry reads like a spoken list with pauses
         if (msg.text.trim() && msg.text.length <= 2000)
           this.enqueue(() => this.handleText(msg.text.replace(/\s*[\r\n]+\s*/g, ', ').trim(), null, 'tap'))
         break
       case 'answer':
+        this.log.info('input', { kind: 'answer', text: msg.text })
         if (msg.text.length <= 60) this.enqueue(() => this.handleText(msg.text, null, 'tap'))
         break
       case 'barge':
+        this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
         this.bargeIn()
         break
       case 'speed':
+        this.log.info('setting', { speed: msg.speed })
         this.speed = msg.speed
         this.warmPhrases()
         break
       case 'readback':
+        this.log.info('setting', { readBack: msg.on })
         this.readBackAll = msg.on
         break
       case 'playback_done':
+        this.log.debug('playback_done')
         if (this.speaking?.ducked) this.deps.send({ type: 'unduck' })
         this.speaking = null
         break
@@ -239,12 +264,15 @@ export class Session {
     return this.snap.customers.flatMap((c) => [c.name, ...c.aliases]).slice(0, 200)
   }
 
-  private openStt() {
+  private openStt(reason = 'hello') {
+    this.log.info('stt_open', { reason, locale: LOCALE[this.lang], keyterms: this.keyterms().length })
     const old = this.stt
     this.stt = null
     old?.close()
     this.sttOpenedAt = this.now()
+    const t0 = this.now()
     const stream: SttLike = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
+      onOpen: () => this.log.info('stt_ready', { reason, ms: this.now() - t0 }),
       onSpeechStart: () => {
         if (this.isSpeaking() && this.speaking && !this.speaking.ducked) {
           this.speaking.ducked = true
@@ -259,14 +287,22 @@ export class Session {
         }
       },
       onFinal: (t, l) => this.onFinal(t, l),
-      onError: (m) => this.deps.send({ type: 'error', message: `stt: ${m}` }),
-      onClose: () => {
+      onError: (m) => {
+        this.log.warn('stt_error', { message: m })
+        this.deps.send({ type: 'error', message: `stt: ${m}` })
+      },
+      onClose: (code) => {
         // Prisma dropped the stream (idle timeout, session cap, network): reopen, with backoff
         if (this.stt !== stream) return // a stream we replaced on purpose
-        if (this.closed || this.sttRetries >= 5) return
+        if (this.closed) return
+        if (this.sttRetries >= 5) {
+          this.log.error('stt_gave_up', { code, retries: this.sttRetries })
+          return
+        }
         const wait = 250 * 2 ** this.sttRetries++
+        this.log.warn('stt_closed', { code, retry: this.sttRetries, waitMs: wait })
         setTimeout(() => {
-          if (!this.closed) this.openStt()
+          if (!this.closed) this.openStt('reconnect')
         }, wait).unref?.()
       },
     })
@@ -277,7 +313,7 @@ export class Session {
   private maybeRefreshStt() {
     if (this.now() - this.sttOpenedAt < STT_REFRESH_MS || this.closed) return
     if (this.energy.inUtterance || this.committed || this.held || this.lastPartial) return
-    this.openStt()
+    this.openStt('refresh')
   }
 
   // ------------------------------------------------------------------ audio + end of turn
@@ -320,6 +356,7 @@ export class Session {
   private sendHeard() {
     if (this.heardAt !== null || !this.lastPartial || this.isSpeaking()) return
     this.heardAt = this.now()
+    this.log.debug('heard', { afterSpeechMs: this.heardAt - this.lastSpeechAt, partial: this.lastPartial })
     this.deps.send({ type: 'heard' })
   }
 
@@ -328,11 +365,13 @@ export class Session {
     this.committed = true
     this.commitAt = this.now()
     this.earlyCommit = early
+    this.log.debug('commit', { early, afterSpeechMs: this.commitAt - this.lastSpeechAt, partial: this.lastPartial })
     this.stt?.commit()
     const at = this.commitAt
     // Prisma sends no final when it had nothing buffered: do not stay "committed" forever
     setTimeout(() => {
       if (this.committed && this.commitAt === at) {
+        this.log.warn('commit_no_final', { waitedMs: 2500 })
         this.committed = false
         this.commitAt = null
       }
@@ -341,12 +380,16 @@ export class Session {
 
   private onPartial(text: string) {
     this.lastPartial = text
+    this.log.debug('partial', { text })
     this.deps.send({ type: 'partial', text })
     // two-stage barge-in: real words that are not our own echo stop the reply
     if (this.isSpeaking() && this.speaking) {
       const words = text.trim().split(/\s+/).filter(Boolean)
       const echo = this.speaking.text.includes(text.trim())
-      if (words.length >= 2 && !echo) this.bargeIn()
+      if (words.length >= 2 && !echo) {
+        this.log.info('barge_in', { by: 'speech', text })
+        this.bargeIn()
+      }
     }
   }
 
@@ -376,9 +419,19 @@ export class Session {
     this.commitAt = null
     this.earlyCommit = false
     this.lastPartial = ''
-    if (!text.trim()) return
+    if (!text.trim()) {
+      this.log.debug('final_empty', { committed: commitAt !== null })
+      return
+    }
     this.sttRetries = 0
-    if (this.isEcho(text)) return // our own reply heard back through the phone speaker
+    if (this.isEcho(text)) {
+      this.log.info('echo_dropped', { text })
+      return // our own reply heard back through the phone speaker
+    }
+    this.log.info('final', {
+      text, detectedLang, snrDb, noisy, early, pending: this.pending?.kind ?? null,
+      finalAfterSpeechMs: finalAt - speechEnd, commitAfterSpeechMs: commitAt === null ? null : commitAt - speechEnd,
+    })
     let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang, heardAt }
     if (this.held) {
       // the rest of a list the recogniser split at a breath: one turn, as spoken
@@ -388,11 +441,13 @@ export class Session {
       text = `${this.held.text.trim().replace(/[।.]$/, '')}${sep}${text.trim()}`
       const both = this.held.t.pcm && pcm ? Buffer.concat([this.held.t.pcm, pcm]) : pcm
       t = { ...t, noisy: t.noisy || this.held.t.noisy, snrDb: minSnr(t.snrDb, this.held.t.snrDb), pcm: both }
+      this.log.info('held_joined', { text, heldMs: this.now() - this.held.since })
       this.held = null
     } else if (commitAt === null && !this.ptt && !this.pending && (midList(text) || dangling(text))) {
       const since = this.now()
       this.held = { text, t, since, timer: setTimeout(() => this.releaseHeld(), MID_LIST_HOLD_MS) }
       this.held.timer.unref?.()
+      this.log.info('held', { text, why: midList(text) ? 'mid_list' : 'dangling' })
       this.deps.send({ type: 'partial', text })
       return
     }
@@ -418,8 +473,8 @@ export class Session {
         // heard in another language: that is the rescue's business, not a second opinion on the amount
         if (!r || (r.lang && r.lang !== LOCALE[this.lang])) return null
         const t2 = r.text
-        if (process.env.VK_DEBUG) console.log('[second]', JSON.stringify({ text, t2 }))
         const v = parseAmounts(t2).map((a) => a.value)
+        this.log.info('second_reading', { text, second: t2, amounts: v })
         return v.length ? v : null
       })
     const wait = new Promise<null>((resolve) => setTimeout(() => resolve(null), SECOND_READ_WAIT_MS).unref?.())
@@ -436,9 +491,20 @@ export class Session {
   private restRead(pcm: Buffer | undefined): Promise<{ text: string; lang?: string } | null> | null {
     if (!pcm || !this.deps.transcribe2 || pcm.length < 16000) return null
     const prev = this.history.length ? this.history[this.history.length - 1].replace(/^\w+: /, '') : undefined
+    const t0 = this.now()
     return Promise.race([
-      this.deps.transcribe2(pcm, LOCALE[this.lang], this.keyterms(), prev).catch(() => null),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), RESCUE_WAIT_MS).unref?.()),
+      this.deps.transcribe2(pcm, LOCALE[this.lang], this.keyterms(), prev)
+        .then((r) => {
+          this.log.info('rest_read', { ms: this.now() - t0, text: r.text, lang: r.lang, audioMs: pcm.length / 32 })
+          return r
+        })
+        .catch((e) => {
+          this.log.warn('rest_read_failed', { ms: this.now() - t0, error: e })
+          return null
+        }),
+      new Promise<null>((resolve) => setTimeout(() => {
+        resolve(null)
+      }, RESCUE_WAIT_MS).unref?.()),
     ])
   }
 
@@ -461,7 +527,7 @@ export class Session {
     const intent = parseFast(r.text)
     if (intent.type === 'unknown' || intent.type === 'yes' || intent.type === 'no') return null
     if (intent.type === 'entries' && intent.entries.some((e) => !e.direction && !e.promise)) return null // no better than what we had
-    if (process.env.VK_DEBUG) console.log('[rescue]', JSON.stringify({ from: this.lang, to: lang, text: r.text }))
+    this.log.info('language_rescue', { from: this.lang, to: lang, text: r.text })
     this.switchLang(lang)
     this.deps.send({ type: 'final', text: r.text })
     return { text: r.text, intent }
@@ -469,7 +535,7 @@ export class Session {
 
   /** Replies, and the realtime stream (update_settings, no reconnect), follow the shopkeeper's language. */
   private switchLang(lang: Lang) {
-    if (process.env.VK_DEBUG) console.log('[switch-lang]', this.lang, '->', lang)
+    this.log.info('language_switch', { from: this.lang, to: lang })
     this.lang = lang
     this.stt?.setLanguage?.(LOCALE[lang])
     this.deps.send({ type: 'lang', lang })
@@ -505,6 +571,7 @@ export class Session {
       h.timer.unref?.()
       return
     }
+    this.log.info('held_released', { text: h.text, heldMs: this.now() - h.since })
     this.held = null
     this.dispatchFinal(h.text, h.t)
   }
@@ -540,7 +607,11 @@ export class Session {
     const snrDb = t?.snrDb ?? null
     const noisy = t?.noisy ?? false
     // a question left hanging (shopkeeper turned to a customer) expires instead of catching a later "haan"
-    if (this.pending && this.now() - this.pendingAt > PENDING_TTL_MS) this.pending = null
+    if (this.pending && this.now() - this.pendingAt > PENDING_TTL_MS) {
+      this.log.info('pending_expired', { kind: this.pending.kind, ageMs: this.now() - this.pendingAt })
+      this.pending = null
+    }
+    const turn = ++this.turnNo
     // a turn that does not read may be in another language: ask Prisma REST now, decide after parsing
     const wantRescue = !this.pending && Session.rescuable(intent, text)
     const wantSecond = !!this.deps.secondReading && !!t?.noisy && mentionsMoney(text)
@@ -563,13 +634,14 @@ export class Session {
       try {
         const ctx = this.llmContext()
         const reading = await this.deps.llm(text, ctx).finally(() => clearTimeout(filler))
-        if (process.env.VK_DEBUG) console.log('[llm]', JSON.stringify({ text, reading, recent: ctx.recent }))
         const v = validate(text, reading, ctx.contextAmounts, ctx.recent?.length ?? 0)
+        this.log.info('llm', { turn, text, ms: this.now() - l0, filler: fillerSaid, reading, validated: v.type })
         // a model "no"/"unknown" never overrides a usable fast reading
         if ((v.type !== 'unknown' && v.type !== 'no') || intent.type === 'unknown') intent = v
         else if (change) unsureChange = true
         path = 'llm'
-      } catch {
+      } catch (e) {
+        this.log.error('llm_failed', { turn, text, ms: this.now() - l0, error: e })
         unsureChange = change
       }
       // a change to an older entry that could not be read must not fall back to changing the last one
@@ -629,8 +701,23 @@ export class Session {
         cached: spoken?.cached ?? false,
       }
       this.deps.send({ type: 'metrics', turn: m })
-      if (process.env.VK_DEBUG) console.log('[metrics]', JSON.stringify({ ...m, text }))
     }
+    this.log.info('turn', {
+      turn, src: _src, text, lang: this.lang, intent: intent.type, path,
+      reply: reply?.parts.join(' ') ?? null,
+      ops: reply?.ops.map((o) => (o.op === 'entry' ? { op: o.op, cid: o.cid, paise: o.paise, direction: o.direction, promise: o.promise, dayOffset: o.dayOffset } : { op: o.op })) ?? [],
+      pending: this.pending?.kind ?? null,
+      ...(t
+        ? {
+          snrDb: t.snrDb, noisy: t.noisy, earlyCommit: t.early,
+          heardAt: t.heardAt == null ? null : t.heardAt - t.speechEnd,
+          commitAt: t.commitAt === null ? null : t.commitAt - t.speechEnd,
+          finalAt: t.finalAt - t.speechEnd,
+          firstAudioAt: firstAudioAt === null ? null : firstAudioAt - t.speechEnd,
+        }
+        : {}),
+      parseMs, llmMs, replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0, cached: spoken?.cached ?? false,
+    })
     this.deps.send({ type: 'turn_done' })
   }
 
@@ -1316,6 +1403,7 @@ export class Session {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<void>((resolve) => {
       timer = setTimeout(() => {
+        this.log.warn('tts_timeout', { text, afterMs: TTS_TIMEOUT_MS, firstAudio: first !== null, bytes })
         ac.abort()
         resolve()
       }, TTS_TIMEOUT_MS)
@@ -1332,10 +1420,16 @@ export class Session {
         timeout,
       ])
     } catch (e) {
+      this.log.error('tts_failed', { text, error: e })
       this.deps.send({ type: 'error', message: `tts: ${String(e)}` })
     } finally {
       clearTimeout(timer)
     }
+    if (ac.signal.aborted && first === null && this.speaking?.ac === ac) this.log.warn('tts_no_audio', { text, waitedMs: this.now() - start })
+    this.log.debug('speak', {
+      text, filler: !!opts.filler, cached, bytes, firstAudioMs: first === null ? null : first - start,
+      totalMs: this.now() - start, cut: ac.signal.aborted,
+    })
     this.lastSaid = { text: this.speaking?.ac === ac ? this.speaking.text : text, until: (first ?? start) + (bytes / 32000) * 1000 + 1500 }
     if (!ac.signal.aborted) {
       // a filler's audio runs straight into the reply: one playback, one audio_end
@@ -1347,6 +1441,7 @@ export class Session {
   }
 
   close() {
+    this.log.info('session_end', { turns: this.turnNo, lang: this.lang, durationMs: this.now() - this.startedAt, pendingLeft: this.pending?.kind ?? null })
     this.closed = true
     if (this.held) clearTimeout(this.held.timer)
     this.held = null

@@ -1,3 +1,4 @@
+import { log, logged } from '../server/log.js'
 import { ensureSchema, json, randomHex, sql } from '../server/db.js'
 
 export const EXPIRY_DAYS = 30
@@ -50,7 +51,10 @@ export async function handle(req: Request): Promise<Response> {
       const upd = (await sql`UPDATE confirm_links SET status = ${answer}, answered_at = now()
         WHERE token = ${token} AND status = 'pending' AND created_at >= now() - make_interval(days => ${EXPIRY_DAYS})
         RETURNING token`) as unknown[]
-      if (upd.length) return json({ ok: true, status: answer })
+      if (upd.length) {
+        log.info('confirm_answer', { fn: 'confirm', answer })
+        return json({ ok: true, status: answer })
+      }
       const cur = (await sql`SELECT status, created_at < now() - make_interval(days => ${EXPIRY_DAYS}) AS expired FROM confirm_links WHERE token = ${token}`) as { status: string; expired: boolean }[]
       if (!cur.length) return json({ error: 'not found' }, 404)
       if (cur[0].expired) return json({ error: 'expired' }, 410)
@@ -65,11 +69,12 @@ export async function handle(req: Request): Promise<Response> {
     if (typeof lang !== 'string' || !LANGS.includes(lang)) return json({ error: 'bad lang' }, 400)
     const token = randomHex(16)
     await sql`INSERT INTO confirm_links (token, shop, paise, direction, day, lang) VALUES (${token}, ${shop.trim()}, ${paise}, ${direction}, ${day}, ${lang})`
+    log.info('confirm_link_created', { fn: 'confirm', lang })
     return json({ token })
   } catch (e) {
-    console.error('confirm error', (e as Error).message)
+    log.error('confirm_failed', { fn: 'confirm', error: e })
     return json({ error: 'server error' }, 500)
   }
 }
 
-export default { fetch: handle }
+export default { fetch: logged('confirm', handle) }

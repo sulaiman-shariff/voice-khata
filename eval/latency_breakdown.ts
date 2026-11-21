@@ -1,6 +1,7 @@
 /**
- * Where a turn's time goes, from a voice server log run with VK_DEBUG=1 (the `[metrics]` lines).
- *   VK_DEBUG=1 node --env-file=.env --import tsx eval/local_server.ts > server.log
+ * Where a turn's time goes, from a voice server log: the structured `"ev":"turn"` lines of
+ * server/log.ts (local: the server's stdout; Vercel: `vercel logs <url> --json`).
+ *   node --env-file=.env --import tsx eval/local_server.ts > server.log
  *   npx tsx eval/e2e_suite.ts ws://localhost:8787 ...
  *   npx tsx eval/latency_breakdown.ts server.log [other.log ...]
  * All times are ms after the end of speech (server-side energy detector).
@@ -18,7 +19,17 @@ function line(label: string, vals: (number | null | undefined)[]) {
 }
 
 for (const file of process.argv.slice(2)) {
-  const rows: Row[] = readFileSync(file, 'utf8').split('\n').filter((l) => l.startsWith('[metrics] ')).map((l) => JSON.parse(l.slice(10)))
+  const rows: Row[] = []
+  for (const l of readFileSync(file, 'utf8').split('\n')) {
+    const i = l.indexOf('{')
+    if (i < 0) continue
+    try {
+      let o = JSON.parse(l.slice(i))
+      // `vercel logs --json` wraps each line: the logger's JSON is in `message`
+      if (typeof o.message === 'string' && o.message.startsWith('{')) o = JSON.parse(o.message)
+      if (o.ev === 'turn' && typeof o.finalAt === 'number') rows.push(o)
+    } catch { /* not a log line */ }
+  }
   console.log(`\n${file}: ${rows.length} turns`)
   if (!rows.length) continue
   line('"heard" cue', rows.map((r) => r.heardAt))

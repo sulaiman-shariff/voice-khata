@@ -13,6 +13,7 @@ import { createVoiceClient, defaultVoiceUrl } from '@/lib/voice'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
 import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
+import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
 import { CustomerSheet, PrivacySheet, SettingsSheet, remindLink } from '@/ui/Sheets'
@@ -80,7 +81,7 @@ function Home({ store }: { store: KhataStore }) {
       await w
     } catch (err) {
       toast.error(`${t.saved}: ✗`)
-      console.warn('[store]', err)
+      clientLog.error('store_write_failed', { error: String(err), ops: ops.map((o) => o.op) })
     }
     voice.current?.sendSnapshot()
   }, [store, t])
@@ -105,9 +106,9 @@ function Home({ store }: { store: KhataStore }) {
         else if (s.view === 'summary') setTab('today')
         else if (s.view === 'privacy') setSheet('privacy')
       },
-      remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { console.warn('[remind]', e) } },
+      remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { clientLog.warn('remind_failed', { error: String(e) }) } },
       metrics: setMetrics,
-      error: (msg) => console.warn('[voice]', msg),
+      error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),
     })
     primeFeedback()

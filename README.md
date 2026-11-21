@@ -21,7 +21,7 @@ Voice Khata is a voice credit ledger for kirana shops, built for the Gnani Voice
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
 
-The deterministic parser handles most turns with no LLM call. Hard turns go to Gnani's Evon LLM first, with Claude Haiku as the fallback (our current key has no Evon scope, so today that is Haiku). Either way the output is validated: an amount that is not among the candidates found in the transcript is rejected.
+The deterministic parser handles most turns with no LLM call. Claude Haiku is called only for hard turns, and its output is validated: an amount that is not among the candidates found in the transcript is rejected.
 
 ## Architecture
 
@@ -38,7 +38,7 @@ flowchart LR
   STT["Gnani Prisma v3.0 STT"]
   TTS["Gnani Timbre v3.0 TTS"]
   REST["Gnani Prisma REST STT<br/>(noisy or unreadable turns)"]
-  LLM["Gnani Evon, Claude Haiku fallback<br/>(hard turns only)"]
+  LLM["Claude Haiku<br/>(hard turns only)"]
   NEON[("Neon Postgres<br/>backup ciphertext,<br/>confirmation tokens")]
   UI <-- "WebSocket: 16 kHz PCM up,<br/>PCM and JSON ops down" --> S
   S <-- WebSocket --> STT
@@ -122,8 +122,6 @@ Every claim below was checked against the live API with the probe scripts `eval/
 - `speed: 1.2` when "Faster replies" is on in Settings (it changes mid-session).
 - A pool of pre-opened sockets removes connect time, and one socket serves many requests. There is no cancel message: a probe sent `{"type":"cancel"}` and 94 of 96 chunks still arrived. On barge-in the listener is detached, and the rest of that reply is drained and dropped.
 
-**Evon LLM** (`POST https://api.vachana.ai/v1/chat/completions`, `evon-v3.5`, `reasoning_effort: none`)
-- Evon is tried first for hard turns, with the same prompt and tool schema as Haiku. On error, a 2.5 s timeout or no tool call, the turn falls back to Haiku. A 401/402/403 turns Evon off for the life of the process. Our hackathon key returns `403 SCOPE_NOT_ALLOWED` today, so Haiku answers. Set `LLM_PROVIDER=haiku` to skip Evon.
 - No voice cloning is used anywhere.
 
 Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our own code in `server/` and `shared/`.
@@ -131,6 +129,7 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 ## Responsible AI and privacy
 
 - **AI disclosure.** The first turn of a session is spoken in the user's chosen language, for example: "I am Voice Khata, an AI assistant. Your ledger stays only on this phone."
+- **Server logs include what was said.** The voice function writes one structured JSON log line per event (`server/log.ts`). For each turn that is the transcript, the parsed intent, the reply text, the ledger operations (customer id, amount, direction) and timings. Customer names and amounts therefore appear in Vercel's runtime logs, which keep them for about an hour on the current plan. Never logged: API keys and tokens (masked by field name), the phone's ledger snapshot (only counts), raw IP addresses (a short one-way hash), and backup ids, confirmation tokens or backup contents (the other endpoints log method, path, status and timing only). `LOG_LEVEL=debug` adds partial transcripts, commits and per-reply TTS detail.
 - **Ledger stays on the device.** Entries are stored in IndexedDB, encrypted with AES-GCM. Each customer has their own key, and shop-level data has a shop key.
 - **Erasure by crypto-shred.** Forgetting a customer deletes their key, so their records become unreadable. The hash chain covers ciphertext, so it still verifies afterwards.
 - **Tamper-evident audit trail.** Every entry carries its transcript, confidence and parsing path, and is linked into a SHA-256 hash chain. A disputed entry is marked, never erased.
@@ -152,7 +151,7 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Speech end to first reply audio | p50 729 ms, max 774 ms (Vercel bom1) |
 | Early commit | fires about 280 ms after the pause when the sentence is complete |
 | Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
-| Unit tests | 516 passing |
+| Unit tests | 524 passing |
 
 ### STT noise benchmark (exact amount)
 
@@ -192,7 +191,7 @@ Environment variables (names only; `.env` is gitignored):
 - `ANTHROPIC_API_KEY`
 - `DATABASE_URL` (optional; enables backup and confirmation links, set by the Neon integration on Vercel)
 - `CRON_SECRET` (optional; protects the cleanup cron)
-- `LLM_PROVIDER` (optional; `evon` by default, `haiku` to skip Evon)
+- `LOG_LEVEL` (optional; `debug`, `info` (default), `warn` or `error`)
 - `SECOND_READING` (optional; `on` adds the noisy-turn amount cross-check, `off` also disables the language rescue)
 - `STT_MIN_SILENCE_MS`, `STT_VAD_THRESHOLD` (optional; Prisma realtime VAD tuning, not sent unless set)
 
@@ -208,6 +207,12 @@ Tests and deploy:
 npx vitest run
 vercel deploy            # add --prod for production
 ```
+
+## Logs
+
+- Server: JSON lines on stdout/stderr, filterable in the Vercel log viewer or with `vercel logs <deployment-url> --json`. Every line has `ev` (event), `sid` (session) and `ip` (hashed). Main events: `conn_open`/`conn_close`/`conn_rejected`, `hello`, `stt_open`/`stt_ready`/`stt_closed`/`stt_error`, `final`, `held`/`held_joined`, `turn` (transcript, intent, reply, ops, all timings), `llm`/`llm_call`, `language_rescue`, `barge_in`, `tts_error`/`tts_timeout`, `session_end`.
+- Latency report from a log: `npx tsx eval/latency_breakdown.ts server.log`.
+- Browser: open the app with `?log=1` (remembered; `?log=0` turns it off) or switch on "Debug logs" in Settings. Console lines look like `[vk +12.345s] socket_open {ms: 312}`. Warnings and errors are always printed.
 
 ## Repo layout
 

@@ -1,5 +1,5 @@
 /**
- * Slow path: Gnani Evon (Claude Haiku 5.5 as fallback) reads turns the fast path could not settle.
+ * Slow path: Claude Haiku 5.5 reads turns the fast path could not settle.
  *
  * The model never invents money. It picks from the amounts our own parser heard
  * (`candidates`); anything else is rejected by `validate()` and the agent asks instead.
@@ -9,6 +9,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { EntryIntent, Intent } from '../../shared/intent.js'
 import { type AmountSpan, parseAmounts } from '../../shared/numbers.js'
+import { log } from '../log.js'
 
 export const LLM_MODEL = 'claude-haiku-5-5'
 
@@ -187,79 +188,12 @@ export async function readWithLlm(
   return { reading: block.input as Partial<LlmReading>, ms, cachedTokens: res.usage.cache_read_input_tokens ?? 0 }
 }
 
-export const EVON_MODEL = 'evon-v3.5'
-const EVON_URL = 'https://api.vachana.ai/v1/chat/completions'
-/** Evon gets this long before the turn falls back to Haiku. */
-export const EVON_TIMEOUT_MS = 2500
-
-/** Gnani Evon (OpenAI-compatible chat completions) with the same prompt and tool as Haiku. */
-export async function readWithEvon(
-  transcript: string, ctx: LlmContext, signal?: AbortSignal,
-): Promise<{ reading: Partial<LlmReading>; ms: number }> {
-  const t0 = performance.now()
-  const res = await fetch(EVON_URL, {
-    method: 'POST',
-    headers: { 'X-API-Key-ID': process.env.GNANI_API_KEY ?? '', 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: EVON_MODEL,
-      reasoning_effort: 'none',
-      max_tokens: 600,
-      temperature: 0,
-      messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: userMessage(transcript, ctx) }],
-      tools: [{ type: 'function', function: { name: TOOL.name, description: TOOL.description, parameters: TOOL.input_schema } }],
-      tool_choice: { type: 'function', function: { name: TOOL.name } },
-    }),
-    signal,
-  })
-  if (!res.ok) {
-    // no LLM scope / no credit on this key: stop trying for the life of the process
-    if (res.status === 401 || res.status === 402 || res.status === 403) evonOff = true
-    throw new Error(`evon ${res.status}: ${(await res.text()).slice(0, 160)}`)
-  }
-  const body = (await res.json()) as { choices?: { message?: { tool_calls?: { function?: { name?: string; arguments?: string } }[] } }[] }
-  const call = body.choices?.[0]?.message?.tool_calls?.find((c) => c.function?.name === TOOL.name)
-  if (!call?.function?.arguments) throw new Error('evon: no tool call')
-  const reading = JSON.parse(call.function.arguments) as Partial<LlmReading>
-  if (typeof reading.intent !== 'string') throw new Error('evon: no intent')
-  return { reading, ms: performance.now() - t0 }
-}
-
-let evonOff = false
-export const evonAvailable = () => !evonOff
-
-export type LlmProvider = 'evon' | 'haiku'
-const PROVIDER: LlmProvider = process.env.LLM_PROVIDER === 'haiku' ? 'haiku' : 'evon'
-
-/**
- * Hard turns: Gnani Evon first, Claude Haiku when Evon errors, times out or returns no usable
- * tool call. Either way the reading still goes through validate() in the session.
- */
-export async function readHard(
-  transcript: string, ctx: LlmContext, provider: LlmProvider = PROVIDER,
-): Promise<{ reading: Partial<LlmReading>; ms: number; model: string; fallback?: string }> {
-  let fallback: string | undefined
-  if (provider === 'evon' && !evonOff) {
-    try {
-      const r = await readWithEvon(transcript, ctx, AbortSignal.timeout(EVON_TIMEOUT_MS))
-      return { ...r, model: EVON_MODEL }
-    } catch (e) {
-      fallback = String(e).slice(0, 120)
-    }
-  }
-  const r = await readWithLlm(transcript, ctx)
-  return { reading: r.reading, ms: r.ms, model: LLM_MODEL, fallback }
-}
-
-/**
- * Fire one tiny request at boot so the prompt cache and TLS connections are warm. Goes through
- * readHard, so Evon is tried too: a key without the LLM scope switches Evon off here instead of
- * costing ~200 ms on the first real hard turn.
- */
+/** Fire one tiny request at boot so the prompt cache and TLS connection are warm. */
 export async function warmUp(): Promise<void> {
   try {
-    await readHard('haan', { lang: 'hi-IN', customers: [] })
-  } catch {
-    /* warm-up is best effort */
+    await readWithLlm('haan', { lang: 'hi-IN', customers: [] })
+  } catch (e) {
+    log.warn('llm_warmup_failed', { error: e }) // best effort
   }
 }
 

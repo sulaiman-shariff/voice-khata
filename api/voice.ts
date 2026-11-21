@@ -1,7 +1,7 @@
 /**
  * Voice Khata session endpoint (Vercel Function, Node, region bom1, WebSocket).
  * Phone <-> this function <-> Gnani Prisma (STT, realtime + REST second reading) / Timbre (TTS),
- * with Gnani Evon (Claude Haiku as fallback) for hard turns. All dialogue logic lives in
+ * with Claude Haiku for hard turns. All dialogue logic lives in
  * server/session.ts.
  */
 import http from 'node:http'
@@ -10,7 +10,8 @@ import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
 import { TtsPool } from '../server/gnani/tts.js'
 import { transcribeRest } from '../server/gnani/rest.js'
-import { readHard, warmUp } from '../server/parse/llm.js'
+import { LLM_MODEL, readWithLlm, warmUp } from '../server/parse/llm.js'
+import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
 
 const server = http.createServer((_req, res) => {
@@ -36,6 +37,7 @@ const alive = new WeakSet<WebSocket>()
 const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
     if (!alive.has(ws)) {
+      log.warn('heartbeat_terminate', { open: wss.clients.size })
       ws.terminate()
       continue
     }
@@ -46,17 +48,23 @@ const heartbeat = setInterval(() => {
 heartbeat.unref?.()
 
 wss.on('connection', (ws, req) => {
+  const opened = Date.now()
   const origin = req.headers.origin
+  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
+  const sid = shortId()
+  const L = log.child({ sid, ip: hashIp(ip) })
   if (origin && !ALLOWED_ORIGIN.test(origin)) {
+    L.warn('conn_rejected', { reason: 'origin', origin })
     ws.close(1008, 'origin not allowed')
     return
   }
-  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? '').split(',')[0].trim()
   const n = (perIp.get(ip) ?? 0) + 1
   if (n > MAX_PER_IP) {
+    L.warn('conn_rejected', { reason: 'too_many_sessions', open: n - 1, limit: MAX_PER_IP })
     ws.close(1013, 'too many sessions')
     return
   }
+  L.info('conn_open', { origin: origin ?? null, ipSessions: n, instanceSessions: wss.clients.size, ua: String(req.headers['user-agent'] ?? '').slice(0, 120), coldInstance: !warmed })
   perIp.set(ip, n)
   let released = false
   const release = () => {
@@ -67,7 +75,10 @@ wss.on('connection', (ws, req) => {
     else perIp.set(ip, left)
   }
   ws.on('close', release)
-  ws.on('error', release)
+  ws.on('error', (e) => {
+    L.error('ws_error', { error: e })
+    release()
+  })
   alive.add(ws)
   ws.on('pong', () => alive.add(ws))
   const key = process.env.GNANI_API_KEY ?? ''
@@ -75,7 +86,7 @@ wss.on('connection', (ws, req) => {
     warmed = true
     void warmUp() // prime the Haiku prompt cache + TLS for this instance
   }
-  const tts = new TtsPool(key, 2)
+  const tts = new TtsPool(key, 2, L.child({ part: 'tts' }))
   const send = (m: ServerMsg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
   const session = new Session({
     openStt: (locale, keyterms, cb) =>
@@ -86,12 +97,13 @@ wss.on('connection', (ws, req) => {
         onFinal: (t, l) => cb.onFinal?.(t, l),
         onError: cb.onError,
         onClose: cb.onClose,
+        onOpen: cb.onOpen,
       }),
     speak: (text, locale, onAudio, signal, speed) => tts.speak(text, locale, onAudio, signal, speed),
-    warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch(() => {}),
+    warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
     llm: async (text, ctx) => {
-      const r = await readHard(text, ctx)
-      if (process.env.VK_DEBUG) console.log('[llm-model]', r.model, Math.round(r.ms), r.fallback ?? '')
+      const r = await readWithLlm(text, ctx)
+      L.info('llm_call', { model: LLM_MODEL, ms: r.ms, cachedTokens: r.cachedTokens })
       return r.reading
     },
     // Prisma REST reading of the turn audio: language rescue always; the noisy-turn amount
@@ -101,28 +113,41 @@ wss.on('connection', (ws, req) => {
     secondReading: process.env.SECOND_READING === 'on',
     send,
     sendAudio: (pcm) => ws.readyState === WebSocket.OPEN && ws.send(pcm),
+    log: L,
   })
+  let audioFrames = 0
   send({ type: 'ready', region: process.env.VERCEL_REGION ?? 'local' })
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
-      session.onAudio(data as Buffer)
+      audioFrames++
+      try {
+        session.onAudio(data as Buffer)
+      } catch (e) {
+        L.error('audio_failed', { error: e })
+      }
       return
     }
     let msg: ClientMsg
     try {
       msg = JSON.parse(data.toString())
     } catch {
+      L.warn('bad_message', { reason: 'not json', bytes: (data as Buffer).length })
       return
     }
-    if (!validMsg(msg)) return
+    if (!validMsg(msg)) {
+      L.warn('bad_message', { reason: 'invalid shape', type: (msg as { type?: unknown })?.type ?? null })
+      return
+    }
     try {
       session.onClient(msg)
     } catch (e) {
+      L.error('client_message_failed', { type: msg.type, error: e })
       send({ type: 'error', message: `bad message: ${String(e).slice(0, 120)}` })
     }
   })
-  ws.on('close', () => {
+  ws.on('close', (code, reason) => {
+    L.info('conn_close', { code, reason: reason.toString().slice(0, 120), durationMs: Date.now() - opened, audioFrames })
     session.close()
     tts.close()
   })

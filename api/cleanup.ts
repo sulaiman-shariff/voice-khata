@@ -1,3 +1,4 @@
+import { log, logged } from '../server/log.js'
 import { ensureSchema, json, sql } from '../server/db.js'
 
 /** Daily cron: delete confirmation links older than 30 days. */
@@ -7,11 +8,12 @@ export async function handle(req: Request): Promise<Response> {
   try {
     await ensureSchema()
     const rows = (await sql`DELETE FROM confirm_links WHERE created_at < now() - interval '30 days' RETURNING token`) as unknown[]
+    log.info('cleanup_done', { fn: 'cleanup', deleted: rows.length })
     return json({ deleted: rows.length })
   } catch (e) {
-    console.error('cleanup error', (e as Error).message)
+    log.error('cleanup_failed', { fn: 'cleanup', error: e })
     return json({ error: 'server error' }, 500)
   }
 }
 
-export default { fetch: handle }
+export default { fetch: logged('cleanup', handle) }

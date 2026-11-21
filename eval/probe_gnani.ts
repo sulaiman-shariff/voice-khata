@@ -123,24 +123,6 @@ for (const vad of [{}, { 'x-min-silence-ms': '300', 'x-min-segment-ms': '100' }]
   check(res.ok, `REST verbatim ${res.status} in ${(performance.now() - t0).toFixed(0)} ms: ${body.slice(0, 200)}`)
 }
 
-// ---- 4. Evon tool call
-{
-  const t0 = performance.now()
-  const res = await fetch('https://api.vachana.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'X-API-Key-ID': KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'evon-v3.5',
-      reasoning_effort: 'none',
-      messages: [{ role: 'system', content: 'Extract the khata entry.' }, { role: 'user', content: 'Utterance: रमेश का 340 रुपये उधार' }],
-      tools: [{ type: 'function', function: { name: 'khata', description: 'record entry', parameters: { type: 'object', properties: { name: { type: 'string' }, amount: { type: 'number' }, direction: { type: 'string', enum: ['credit', 'payment'] } }, required: ['name', 'amount', 'direction'] } } }],
-      tool_choice: { type: 'function', function: { name: 'khata' } },
-    }),
-  })
-  const body = await res.text()
-  check(res.ok && body.includes('tool_calls'), `Evon ${res.status} in ${(performance.now() - t0).toFixed(0)} ms: ${body.slice(0, 400)}`)
-}
-
 // ---- 5. TTS: pauses, speed, voices
 {
   const plain = await tts('रमेश 340, सुरेश 200', 'Shivani', 'hi-IN')

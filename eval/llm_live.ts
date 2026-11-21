@@ -1,8 +1,8 @@
 /**
- * Live check of the slow path (Evon first, Haiku fallback): accuracy on hard utterances, latency.
- * Usage: npx tsx --env-file=.env eval/llm_live.ts   (LLM_PROVIDER=haiku to skip Evon)
+ * Live check of the Haiku slow path: accuracy on hard utterances, latency, cache hits.
+ * Usage: npx tsx --env-file=.env eval/llm_live.ts
  */
-import { readHard, validate } from '../server/parse/llm.js'
+import { readWithLlm, validate } from '../server/parse/llm.js'
 
 type Exp = { type: string; amounts?: number[]; dirs?: (string | null)[]; low?: boolean }
 const CASES: [string, Exp][] = [
@@ -29,7 +29,7 @@ const CASES: [string, Exp][] = [
 let ok = 0
 const lat: number[] = []
 for (const [text, exp] of CASES) {
-  const { reading, ms, model, fallback } = await readHard(text, {
+  const { reading, ms, cachedTokens } = await readWithLlm(text, {
     lang: 'hi-IN', customers: ['Ramesh', 'Suresh', 'Geeta', 'Sharma ji', 'Sunita', 'Mohan', 'Deepak'],
     lastEntry: 'Ramesh credit 340 today',
   })
@@ -42,7 +42,7 @@ for (const [text, exp] of CASES) {
     if (exp.low) pass &&= intent.entries.some((e) => e.confidence === 'low')
   }
   if (pass) ok++
-  console.log(`${pass ? 'OK ' : 'BAD'} ${ms.toFixed(0).padStart(5)}ms ${model}${fallback ? ` (fallback: ${fallback.slice(0, 60)})` : ''} | ${text}\n      ${JSON.stringify(reading)}`)
+  console.log(`${pass ? 'OK ' : 'BAD'} ${ms.toFixed(0).padStart(5)}ms cache=${cachedTokens} | ${text}\n      ${JSON.stringify(reading)}`)
 }
 lat.sort((a, b) => a - b)
 console.log(`\n${ok}/${CASES.length} correct; p50 ${lat[Math.floor(lat.length / 2)].toFixed(0)}ms p90 ${lat[Math.floor(lat.length * 0.9)].toFixed(0)}ms`)

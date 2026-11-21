@@ -33,6 +33,8 @@ export interface SttEvents {
   onFinal?: (text: string, detectedLang?: string) => void
   onError?: (msg: string) => void
   onClose?: (code: number) => void
+  /** the Prisma stream is open (audio queued while connecting is flushed now) */
+  onOpen?: () => void
 }
 
 /** Header-safe JSON: escape everything outside printable ASCII. */
@@ -68,6 +70,7 @@ export class SttStream {
       this.ws.once('open', () => {
         for (const b of this.queue) this.ws.send(b)
         this.queue = []
+        ev.onOpen?.()
         res()
       })
       this.ws.once('error', (e) => rej(e))

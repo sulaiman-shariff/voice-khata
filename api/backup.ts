@@ -1,3 +1,4 @@
+import { log, logged } from '../server/log.js'
 import { ensureSchema, json, randomHex, sql } from '../server/db.js'
 
 export const MAX_BLOB = 4 * 1024 * 1024
@@ -57,9 +58,9 @@ export async function handle(req: Request): Promise<Response> {
     }
     return json({ error: 'method not allowed' }, 405)
   } catch (e) {
-    console.error('backup error', (e as Error).message)
+    log.error('backup_failed', { fn: 'backup', error: e })
     return json({ error: 'server error' }, 500)
   }
 }
 
-export default { fetch: handle }
+export default { fetch: logged('backup', handle) }
