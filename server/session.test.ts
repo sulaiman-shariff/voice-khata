@@ -332,7 +332,7 @@ describe('a heard name not in the ledger is never written without a yes', () => 
 
   // Before the 21 Nov name-guard change this opened "Pinky" without a yes; now the draft's own
   // transcript ("Ramesh ka 340 udhaar") makes Pinky resolve back to Ramesh, and the "no" is ignored.
-  it.fails('BUG: "nahi, Pinky" to "Ramesh 340, correct?" writes Ramesh anyway (or opens Pinky unasked)', async () => {
+  it('"nahi, Pinky" to "Ramesh 340, correct?" writes nothing for Ramesh and reads Pinky back as new', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.turn('Ramesh ka 340 udhaar', true)
     await h.turn('nahi, Pinky')
@@ -340,14 +340,14 @@ describe('a heard name not in the ledger is never written without a yes', () => 
     expect(h.accounts()).toEqual([])
   })
 
-  it.fails('BUG: "nahi, Pinky" after a save moves the entry to a new account without a yes', async () => {
+  it('"nahi, Pinky" after a save reads back before moving the entry to a new account', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.turn('Ramesh ka 340 udhaar')
     await h.turn('nahi, Pinky')
     expect(h.accounts()).toEqual([])
   })
 
-  it.fails('BUG: a model change of the newest entry to an unknown name opens it without a yes', async () => {
+  it('a model change of the newest entry to an unknown name is read back before opening it', async () => {
     const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], {
       recent: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
       llm: () => ({ intent: 'modify', sure: true, modify: { ref: 1, amount: null, direction: null, name: 'Pinky', remove: false } }),
@@ -384,7 +384,7 @@ describe('the model (LLM) never introduces money that was not said', () => {
     expect(h.ops()).toEqual([])
   })
 
-  it.fails('BUG: one spoken amount returned twice by the model is written twice', async () => {
+  it('one spoken amount returned twice by the model is written once', async () => {
     const twice = { intent: 'entries' as const, sure: true, entries: [0, 1].map(() => ({ name: 'Ramesh', amount: 340, direction: 'credit' as const, day_offset: 0, promise: false })) }
     const h = harness([cust('r', 'Ramesh')], { llm: () => twice })
     await h.turn('Ramesh wale 340 ka scene')

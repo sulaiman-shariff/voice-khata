@@ -913,7 +913,10 @@ export class Session {
     }
     switch (intent.type) {
       case 'entries': {
+        // the same line twice in a row (said twice, or returned twice by the model) is one entry
         const drafts = intent.entries.map((e) => this.draftFrom(e, text, snrDb, noisy, path))
+          .filter((d, i, a) => i === 0 || !(d.heardName && d.heardName.toLowerCase() === a[i - 1].heardName?.toLowerCase() &&
+            d.paise === a[i - 1].paise && d.direction === a[i - 1].direction))
         if (drafts.length === 1) drafts[0].single = true
         // "uska 100 aur" / "usko 50 udhaar": the customer we were just talking about
         if (this.focusCid && refersBack(text))
@@ -1043,12 +1046,13 @@ export class Session {
     const dir = amend.direction ?? e.direction
     const done = R.corrected(name, paise / 100, dir)
     const focus = amend.cid ?? e.cid
-    if (intent.ref === 1) {
+    const opens = ops.some((o) => o.op === 'add_customer') && this.turnSrc !== 'tap'
+    if (intent.ref === 1 && !opens) {
       this.focusCid = focus
       return { parts: [done], ops }
     }
-    this.pending = { kind: 'modify', ops, done, focus, view: { kind: 'modify', name, paise, direction: dir } }
-    return { parts: [M.changeAsk(name, paise / 100, dir)], ops: [] }
+    this.pending = { kind: 'modify', ops, done, focus, view: { kind: 'modify', name, paise, direction: dir, newCustomer: opens || undefined } }
+    return { parts: [opens ? R.confirmNew(name, paise / 100, dir) : M.changeAsk(name, paise / 100, dir)], ops: [] }
   }
 
   private duesReply(): Reply {
@@ -1380,11 +1384,15 @@ export class Session {
             d.heardName = intent.name
             d.cid = null
             d.newName = null
+            d.single = false // the name is the one just said, never one from the sentence being corrected
+            d.transcript = text
             const res = this.resolveName(d)
             if (Array.isArray(res)) {
               this.pending = { kind: 'which', draft: d, queue: p.queue, options: res }
               return { parts: [R.askWhich(this.label(res[0]), this.label(res[1]))], ops: [] }
             }
+            // a name not in the ledger: read back as a new customer first
+            if (this.opensAccount(d)) return this.processDrafts([d, ...p.queue], acc)
           }
           this.save(d, acc) // the user just said the right value: no second confirmation
           return this.processDrafts(p.queue, acc)
@@ -1617,8 +1625,17 @@ export class Session {
       }
     }
     ops.push(amend)
-    this.focusCid = amend.cid ?? last.cid
-    return { parts: [R.corrected(name, (amend.paise ?? last.paise) / 100, amend.direction ?? last.direction)], ops }
+    const focus = amend.cid ?? last.cid
+    const paise = amend.paise ?? last.paise
+    const dir = amend.direction ?? last.direction
+    const done = R.corrected(name, paise / 100, dir)
+    if (ops.some((o) => o.op === 'add_customer') && this.turnSrc !== 'tap') {
+      // moving the entry to a name not in the ledger: read back as a new customer first
+      this.pending = { kind: 'modify', ops, done, focus, view: { kind: 'modify', name, paise, direction: dir, newCustomer: true } }
+      return { parts: [R.confirmNew(name, paise / 100, dir)], ops: [] }
+    }
+    this.focusCid = focus
+    return { parts: [done], ops }
   }
 
   private pendingView(): PendingView | null {
