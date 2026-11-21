@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { PendingView, ServerMsg } from '../shared/protocol.js'
-import { MID_LIST_HOLD_MS } from './session.js'
-import { cust, ent, harness, llmEntry } from './test-harness.js'
+import { say } from '../shared/replies.js'
+import { addEntry, callsOf, cust, ent, harness } from './test-harness.js'
 
 const lastCard = (out: ServerMsg[]) => (out.filter((m) => m.type === 'pending').at(-1) as { pending: PendingView | null }).pending
 
@@ -69,22 +69,18 @@ describe('missing parts are asked, and the answer completes the entry', () => {
     expect(h.written()).toEqual([['s', 500, 'payment']])
   })
 
-  it('a name alone asks how much; the answer may carry credit/paid too', async () => {
-    const h = harness([cust('m', 'Mahi')], { lang: 'en' })
-    await h.turn('Mahe')
-    expect(h.asks).toBe('amount')
-    await h.turn('300 credit')
-    await h.turn('yes') // "Mahe" was only close to Mahi: read back once
-    expect(h.written()).toEqual([['m', 300, 'credit']])
-  })
-
-  it('an amount alone asks whose; a bare number word in chatter does not', async () => {
-    const h = harness([cust('s', 'Suresh')], { lang: 'en' })
+  it('an amount alone asks whose; chatter with numbers in it is not a name', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      lang: 'en',
+      agent: (ctx) => ctx.heard[0].text === '300'
+        ? callsOf({ name: 'add_entries', args: { entries: [{ name: null, amount: 300, direction: null }] } })
+        : callsOf({ name: 'not_for_me', args: {} }),
+    })
     await h.turn('One.')
     expect(h.asks).toBeNull()
     await h.turn('300')
     expect(h.asks).toBe('name')
-    await h.turn('26, 23. 23, 26. Hey, 23 is a 26. Yeah.') // numbers in the room are not a name
+    await h.turn('26, 23. 23, 26. Hey, 23 is a 26. Yeah.')
     expect(h.asks).toBe('name')
     expect(h.ops()).toEqual([])
   })
@@ -107,20 +103,8 @@ describe('missing parts are asked, and the answer completes the entry', () => {
     expect(h.written()).toEqual([['b', 500, 'credit']])
   })
 
-  it('a lone name split from its amount by a pause is joined, not asked about', async () => {
-    const h = harness([cust('s', 'Suresh')], { lang: 'kn' })
-    h.cb.onFinal!('ಸುರೇಶ್')
-    await new Promise((r) => setTimeout(r, 100))
-    h.cb.onFinal!('300 ರೂಪಾಯಿ ಸಾಲ.')
-    await h.s.idle()
-    // no mic audio in this test, so the room counts as noisy and the joined line is read back
-    expect(lastCard(h.out)).toMatchObject({ kind: 'confirm', name: 'Suresh', paise: 30000, direction: 'credit' })
-    await h.turn('ಹೌದು')
-    expect(h.written()).toEqual([['s', 300, 'credit']])
-  })
-
   it('talk to someone else while a question is open: the question waits quietly', async () => {
-    const h = harness([cust('s', 'Suleiman')], { lang: 'en' })
+    const h = harness([cust('s', 'Suleiman')], { lang: 'en', agent: (ctx) => callsOf({ name: ctx.pending ? 'not_for_me' : 'add_entries', args: { entries: [{ name: 'Suleiman', amount: 400, direction: null }] } }) })
     await h.turn('Suleiman 400.')
     await h.turn('Should you take it upstairs for testing?')
     await h.turn('Your')
@@ -130,18 +114,6 @@ describe('missing parts are asked, and the answer completes the entry', () => {
     expect(h.written()).toEqual([['s', 400, 'credit']])
   })
 
-  it('a question is asked again once, then waits on screen without nagging', async () => {
-    const h = harness([cust('s', 'Suresh')], { lang: 'en' })
-    await h.turn('Suresh 300.')
-    await h.turn('This side, this side.')
-    expect(h.said).toHaveLength(1)
-    await h.turn('Over there, there.')
-    expect(h.said).toEqual([])
-    expect(h.asks).toBe('direction')
-  })
-})
-
-describe('never a wrong amount silently', () => {
   it('a confusable spoken amount (saath: 60 or 7?) is asked, and the answer decides', async () => {
     const h = harness([cust('d', 'Deepak')])
     await h.turn('Deepak ne saath rupaye diye')
@@ -262,35 +234,8 @@ describe('a heard name not in the ledger is never written without a yes', () => 
     expect(h.written()).toEqual([['id1', 200, 'credit']])
   })
 
-  it('a name said as a name ("ಮಾಹಿ ಹೆಸರಿಂದ") builds the entry across turns, then asks before opening', async () => {
-    const h = harness([cust('s', 'Suresh')], { lang: 'kn' })
-    await h.turn('ಮಾಹಿ ಹೆಸರಿಂದ.')
-    expect(h.asks).toBe('amount')
-    await h.turn('300 ಬರೀ.') // fills the amount, not the name
-    expect(h.asks).toBe('direction')
-    await h.turn('ಸಾಲ')
-    expect(lastCard(h.out)).toMatchObject({ kind: 'confirm', newCustomer: true, name: 'ಮಾಹಿ' })
-    expect(h.ops()).toEqual([])
-    await h.turn('ಹೌದು')
-    expect(h.accounts()).toEqual(['ಮಾಹಿ'])
-    expect(h.written()).toEqual([['id1', 300, 'credit']])
-  })
-
-  it.each([
-    ['"Mahe Talk 300" (from "Mahi took 300")', [cust('m', 'Mahi')], 'Mahe Talk 300.', null, 'm'],
-    ['a model reading "ಸುರೇಶ್ದು" (Suresh\'s)', [cust('s', 'Suresh')], 'Sureshdu 300 rupees sala aite.', llmEntry('ಸುರೇಶ್ದು', 300, 'credit'), 's'],
-    ['a model name containing a customer ("Suresh mele")', [cust('s', 'Suresh')], 'Suresh hesaru mele 300 sala', llmEntry('Suresh mele', 300, 'credit'), 's'],
-  ])('%s is the existing customer, never a new account', async (_label, people, text, reading, cid) => {
-    const h = harness(people, { lang: 'en', llm: reading ? () => reading : undefined })
-    await h.turn(text)
-    if (h.asks === 'direction') await h.turn('udhaar')
-    if (h.asks === 'confirm') await h.turn('yes')
-    expect(h.accounts()).toEqual([])
-    expect(h.written()).toEqual([[cid, 300, 'credit']])
-  })
-
   it('with no Suresh yet, "Sureshdu" opens an account called Suresh (not "Sureshdu") after a yes', async () => {
-    const h = harness([cust('m', 'Mahi')], { lang: 'en', llm: () => llmEntry('ಸುರೇಶ್ದು', 300, 'credit') })
+    const h = harness([cust('m', 'Mahi')], { lang: 'en' })
     await h.turn('Sureshdu 300 rupees sala aite.')
     expect(h.ops()).toEqual([])
     await h.turn('yes')
@@ -333,7 +278,7 @@ describe('a heard name not in the ledger is never written without a yes', () => 
   it('a model change of the newest entry to an unknown name is read back before opening it', async () => {
     const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], {
       entries: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
-      llm: () => ({ intent: 'modify', sure: true, modify: { ref: 1, amount: null, direction: null, name: 'Pinky', remove: false } }),
+      agent: () => callsOf({ name: 'move_entry', args: { ref: 1, to_name: 'Pinky' } }),
     })
     await h.turn('Suresh wali entry galat hai, Pinky ka tha')
     expect(h.accounts()).toEqual([])
@@ -342,19 +287,19 @@ describe('a heard name not in the ledger is never written without a yes', () => 
 
 describe('the model (LLM) never introduces money that was not said', () => {
   it('an amount the model invented is never written', async () => {
-    const h = harness([cust('r', 'Ramesh')], { llm: () => llmEntry('Ramesh', 999, 'credit') })
+    const h = harness([cust('r', 'Ramesh')], { agent: () => addEntry('Ramesh', 999, 'credit') })
     await h.turn('Ramesh wale 340')
     expect(h.entries().filter((e) => e.paise === 99900)).toEqual([])
   })
 
   it('"same for Suresh" may copy a recent amount, but not one neither spoken nor recent', async () => {
     const recent = [ent('e1', 'r', 340, 'credit')]
-    const copy = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: recent, llm: () => llmEntry('Suresh', 340, 'credit') })
+    const copy = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: recent, agent: () => addEntry('Suresh', 340, 'credit') })
     await copy.turn('Suresh ka bhi same')
     expect(copy.asks).toBe('confirm') // credit was never said: read back first
     await copy.turn('haan')
     expect(copy.written()).toEqual([['s', 340, 'credit']])
-    const invent = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: recent, llm: () => llmEntry('Suresh', 777, 'credit') })
+    const invent = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], { entries: recent, agent: () => addEntry('Suresh', 777, 'credit') })
     await invent.turn('Suresh ka bhi same')
     expect(invent.entries()).toEqual([])
   })
@@ -362,7 +307,7 @@ describe('the model (LLM) never introduces money that was not said', () => {
   it('a model change to an older entry with an unspoken amount changes nothing', async () => {
     const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')], {
       entries: [ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit')],
-      llm: () => ({ intent: 'modify', sure: true, modify: { ref: 1, amount: 999, direction: null, name: null, remove: false } }),
+      agent: () => callsOf({ name: 'change_entry', args: { ref: 1, new_amount: 999 } }),
     })
     await h.turn('Suresh wali entry galat hai badlo')
     await h.turn('haan')
@@ -370,8 +315,8 @@ describe('the model (LLM) never introduces money that was not said', () => {
   })
 
   it('one spoken amount returned twice by the model is written once', async () => {
-    const twice = { intent: 'entries' as const, sure: true, entries: [0, 1].map(() => ({ name: 'Ramesh', amount: 340, direction: 'credit' as const, day_offset: 0, promise: false })) }
-    const h = harness([cust('r', 'Ramesh')], { llm: () => twice })
+    const one = { name: 'Ramesh', amount: 340, direction: 'credit', day_offset: 0, promise: false }
+    const h = harness([cust('r', 'Ramesh')], { agent: () => callsOf({ name: 'add_entries', args: { entries: [one, one] } }) })
     await h.turn('Ramesh wale 340 ka scene')
     expect(h.asks).toBe('confirm') // the model guessed credit: read back first
     await h.turn('haan')
@@ -379,14 +324,14 @@ describe('the model (LLM) never introduces money that was not said', () => {
   })
 
   it('a credit/paid the model guessed is read back before writing', async () => {
-    const h = harness([cust('r', 'Ramesh')], { llm: () => llmEntry('Ramesh', 340, 'credit') })
+    const h = harness([cust('r', 'Ramesh')], { agent: () => addEntry('Ramesh', 340, 'credit') })
     await h.turn('Ramesh wale 340 ka scene')
     expect(h.ops()).toEqual([])
     expect(h.asks).toBe('confirm')
   })
 
   it('an unsure model reading of a relation name is read back before writing', async () => {
-    const h = harness([], { llm: () => llmEntry('Pinky ki mummy', 500, 'payment', false) })
+    const h = harness([], { agent: () => addEntry('Pinky ki mummy', 500, 'payment', false) })
     await h.turn('wo jo Pinky ki mummy hai na, unka paanch sau')
     expect(h.ops()).toEqual([])
     expect(h.asks).toBe('confirm')
@@ -395,14 +340,14 @@ describe('the model (LLM) never introduces money that was not said', () => {
   })
 
   it('chatter the model is sure about beats a stray number ("1 second")', async () => {
-    const h = harness([cust('s', 'Suresh')], { lang: 'kn', llm: () => ({ intent: 'chitchat', sure: true }) })
+    const h = harness([cust('s', 'Suresh')], { lang: 'kn', agent: () => callsOf({ name: 'not_for_me', args: {} }) })
     await h.turn('It says, "1 second before you finish saying no."')
     expect(h.ops()).toEqual([])
     expect(h.asks).toBeNull()
   })
 
   it('when the model cannot read it, a bare guess from the fast parser is dropped', async () => {
-    const h = harness([cust('s', 'Suresh')], { lang: 'en', llm: () => ({ intent: 'unclear', sure: false }) })
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: () => callsOf({ name: 'unclear', args: {} }) })
     await h.turn('Mahe teen sukha ka malli')
     expect(h.ops()).toEqual([])
     expect(h.asks).toBeNull()
@@ -462,24 +407,6 @@ describe('lists', () => {
     expect(h.asks).toBeNull()
   })
 
-  it('a list the recogniser split at a breath is handled as one list', async () => {
-    const h = harness([cust('s', 'Suresh'), cust('g', 'Geeta'), cust('m', 'Mohan')])
-    h.cb.onFinal!('सुरेश 200,')
-    await new Promise((r) => setTimeout(r, 200))
-    expect(h.asks).toBeNull() // Suresh is not asked about alone
-    h.cb.onFinal!('गीता 150, मोहन 100 उधार')
-    await h.s.idle()
-    expect(lastCard(h.out)).toMatchObject({ kind: 'batch', options: ['सुरेश ₹200', 'गीता ₹150', 'मोहन ₹100'] })
-  })
-
-  it('a lone "रमेश 340" is not held forever: asked about after the short wait', async () => {
-    const h = harness([cust('r', 'Ramesh')])
-    h.cb.onFinal!('रमेश 340')
-    await new Promise((r) => setTimeout(r, MID_LIST_HOLD_MS + 200))
-    await h.s.idle()
-    expect(h.asks).toBe('direction')
-  })
-
   it('a typed list, one line each, is written like a spoken one', async () => {
     const h = harness([cust('r', 'Ramesh'), cust('s', 'Suresh')])
     await h.typed('Ramesh ka 200 udhaar\nSuresh ne 300 jama kiye')
@@ -503,6 +430,8 @@ describe('corrections and undo target the right entry', () => {
     await h.turn('Ramesh ka 340 udhaar')
     const eid = h.entries()[0].eid
     await h.turn('nahi, Suresh')
+    expect(h.asks).toBe('modify') // moving an entry is always asked first
+    await h.turn('haan')
     expect(h.ops().at(-1)).toEqual({ op: 'amend', eid, cid: 's' })
   })
 
@@ -536,10 +465,12 @@ describe('corrections and undo target the right entry', () => {
     const people = () => [cust('r', 'Ramesh', 340), cust('s', 'Suresh', -200), cust('g', 'Geeta', 150)]
     const recent = () => [ent('e3', 'g', 150, 'credit'), ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit', '2026-11-12')]
     const modify = (m: { ref: number; amount?: number; name?: string; remove?: boolean }) => () =>
-      ({ intent: 'modify' as const, sure: true, modify: { ref: m.ref, amount: m.amount ?? null, direction: null, name: m.name ?? null, remove: !!m.remove } })
+      callsOf(m.remove ? { name: 'remove_entry', args: { ref: m.ref } }
+        : m.name ? { name: 'move_entry', args: { ref: m.ref, to_name: m.name } }
+        : { name: 'change_entry', args: { ref: m.ref, new_amount: m.amount } })
 
     it('removing Suresh\'s entry is read back first, then voids e2 only', async () => {
-      const h = harness(people(), { entries: recent(), llm: modify({ ref: 2, remove: true }) })
+      const h = harness(people(), { entries: recent(), agent: modify({ ref: 2, remove: true }) })
       await h.turn('Suresh wali entry hata do')
       expect(h.ops()).toEqual([])
       expect(h.asks).toBe('modify')
@@ -548,18 +479,18 @@ describe('corrections and undo target the right entry', () => {
     })
 
     it('yesterday\'s amount for Ramesh changes after a yes; "no" changes nothing', async () => {
-      const yes = harness(people(), { entries: recent(), llm: modify({ ref: 3, amount: 430 }) })
+      const yes = harness(people(), { entries: recent(), agent: modify({ ref: 3, amount: 430 }) })
       await yes.turn('Ramesh ka kal wala 340 nahi 430 tha')
       await yes.turn('haan')
       expect(yes.ops()).toEqual([{ op: 'amend', eid: 'e1', paise: 43000 }])
-      const no = harness(people(), { entries: recent(), llm: modify({ ref: 3, amount: 430 }) })
+      const no = harness(people(), { entries: recent(), agent: modify({ ref: 3, amount: 430 }) })
       await no.turn('Ramesh ka kal wala 340 nahi 430 tha')
       await no.turn('nahi')
       expect(no.ops()).toEqual([])
     })
 
     it('moving an entry to another customer keeps both balances right', async () => {
-      const h = harness(people(), { entries: recent(), llm: modify({ ref: 3, name: 'Suresh' }) })
+      const h = harness(people(), { entries: recent(), agent: modify({ ref: 3, name: 'Suresh' }) })
       await h.turn('Ramesh ka kal wala 340 galat hai, Suresh ka tha')
       await h.turn('haan')
       expect(h.ops()).toEqual([{ op: 'amend', eid: 'e1', cid: 's' }])
@@ -567,14 +498,14 @@ describe('corrections and undo target the right entry', () => {
     })
 
     it('a model pointing at an entry that does not exist changes nothing', async () => {
-      const h = harness(people(), { entries: recent(), llm: modify({ ref: 9, amount: 430 }) })
+      const h = harness(people(), { entries: recent(), agent: modify({ ref: 9, amount: 430 }) })
       await h.turn('Ramesh ka kal wala 340 nahi 430 tha')
       await h.turn('haan')
       expect(h.ops()).toEqual([])
     })
 
     it('a change request the model cannot read never falls back to changing the last entry', async () => {
-      const h = harness(people(), { entries: recent(), llm: () => ({ intent: 'unclear', sure: false }) })
+      const h = harness(people(), { entries: recent(), agent: () => callsOf({ name: 'unclear', args: {} }) })
       await h.turn('Suresh wali entry hata do')
       expect(h.ops()).toEqual([])
       expect(h.said).toHaveLength(1) // says it did not catch that
@@ -590,7 +521,9 @@ describe('only a yes deletes everything', () => {
     expect(h.ops()).toEqual([])
     await h.turn('sab data mita do')
     expect(h.ops()).toEqual([])
-    await h.turn('haan')
+    await h.turn('haan') // a spoken yes only arms it
+    expect(h.ops()).toEqual([])
+    await h.tap('yes') // the on-screen button erases
     expect(h.ops()).toEqual([{ op: 'delete_all' }])
   })
 })
@@ -643,7 +576,7 @@ describe('a dropped connection never loses or doubles an entry', () => {
     const h = harness([cust('r', 'Ramesh')], { resend: 'Ramesh ka 340 udhaar' })
     await h.s.idle()
     expect(h.written()).toEqual([['r', 340, 'credit']])
-    expect(h.heard).toMatch(/नेटवर्क.*Ramesh, 340/)
+    expect(h.heard).toMatch(/नेटवर्क.*Ramesh का 340/)
   })
 
   it('a garbled or foreign resume blob is ignored', async () => {
@@ -678,6 +611,7 @@ describe('answers about the ledger', () => {
     await h.turn('Ramesh ko yaad dilao')
     expect(h.out.some((m) => m.type === 'remind')).toBe(false)
     await h.turn('Geeta ko yaad dilao')
+    await h.turn('haan') // each send is confirmed
     expect(h.out.find((m) => m.type === 'remind')).toMatchObject({ cid: 'g', text: expect.stringMatching(/300[\s\S]*Sharma Kirana|Sharma Kirana[\s\S]*300/) })
   })
 
@@ -739,5 +673,87 @@ describe('turn taking', () => {
     expect(await talk((h) => { h.cb.onSpeechStart?.(); h.cb.onPartial?.('nahi ruko') })).toBe(true)
     expect(await talk((h) => { h.cb.onSpeechStart?.(); h.cb.onSpeechEnd?.() })).toBe(false)
     expect(await talk((h) => h.cb.onPartial?.('Ramesh का कुल'))).toBe(false)
+  })
+})
+
+describe('understanding path: instant for a plain entry, the agent for everything else', () => {
+  const people = () => [cust('r', 'Ramesh', 0), cust('s', 'Suresh', 0)]
+
+  it('a plain known entry is written by the instant path without calling the agent', async () => {
+    const h = harness(people(), { agent: () => { throw new Error('the agent must not be called') } })
+    await h.turn('Ramesh ka 340 udhaar')
+    expect(h.agentCalls).toHaveLength(0)
+    expect(h.written()).toEqual([['r', 340, 'credit']])
+  })
+
+  it('anything else goes to the agent and its tools', async () => {
+    const h = harness(people(), { agent: () => callsOf({ name: 'show_customer', args: { name: 'Ramesh' } }) })
+    await h.turn('Ramesh ka hisaab dikhao')
+    expect(h.agentCalls).toHaveLength(1)
+    expect(h.agentCalls[0].ctx.heard[0].text).toBe('Ramesh ka hisaab dikhao')
+    expect(h.out).toContainEqual({ type: 'show', view: 'customer', cid: 'r' })
+    expect(h.said).toHaveLength(1)
+  })
+
+  it('the agent receives every language stream, and the audio', async () => {
+    const heard = [{ locale: 'hi-IN', text: 'रमेश का हिसाब' }, { locale: 'en-IN', text: 'Ramesh ka hisaab' }]
+    const h = harness(people(), { agent: () => callsOf({ name: 'show_customer', args: { name: 'Ramesh' } }) })
+    await h.turn('रमेश का हिसाब', false, heard)
+    expect(h.agentCalls[0].ctx.heard).toEqual(heard)
+    expect(h.agentCalls[0].audio?.length).toBeGreaterThan(0)
+  })
+
+  it('not_for_me writes nothing, says nothing and marks not_entry', async () => {
+    const h = harness(people(), { agent: () => callsOf({ name: 'not_for_me', args: {} }) })
+    await h.turn('bhaiya chai pilao')
+    expect(h.ops()).toEqual([])
+    expect(h.said).toEqual([])
+    expect(h.out).toContainEqual({ type: 'not_entry', text: 'bhaiya chai pilao' })
+  })
+
+  it('several tool calls in one turn run in order and are spoken together', async () => {
+    const h = harness(people(), {
+      agent: () => callsOf(
+        { name: 'add_entries', args: { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit' }] } },
+        { name: 'query_balance', args: { name: 'Ramesh' } },
+      ),
+    })
+    await h.turn('Ramesh ko 200 udhaar likho aur batao kitna hua')
+    expect(h.written()).toEqual([['r', 200, 'credit']])
+    expect(h.heard).toMatch(/200/)
+  })
+
+  it('agent failure: a plain entry still saves; anything else gets didNotCatch in the turn language', async () => {
+    const h = harness(people(), { lang: 'kn', agent: () => { throw new Error('timeout') } })
+    await h.turn('Ramesh ka 340 udhaar')
+    expect(h.written()).toEqual([['r', 340, 'credit']])
+    await h.turn('Suresh ka hisaab dikhao')
+    expect(h.said).toEqual([say('kn').didNotCatch()])
+    expect(h.written()).toHaveLength(1)
+  })
+
+  it('a pending answer the fast parse cannot read goes to the agent, which sees the question', async () => {
+    const h = harness(people(), {
+      agent: (ctx) => ctx.pending
+        ? callsOf({ name: 'answer_question', args: { kind: 'direction', value: 'credit' } })
+        : callsOf({ name: 'add_entries', args: { entries: [{ name: 'Ramesh', amount: 500, direction: null }] } }),
+    })
+    await h.turn('Ramesh paanch sau')
+    expect(h.asks).toBe('direction')
+    await h.turn('bhaiya woh udhaar hi samjho')
+    expect(h.agentCalls.at(-1)!.ctx.pending).toMatchObject({ kind: 'direction' })
+    expect(h.written()).toEqual([['r', 500, 'credit']])
+  })
+
+  it('streams that heard different amounts ask which', async () => {
+    const h = harness(people())
+    await h.turn('Ramesh ka 300 udhaar', false, [
+      { locale: 'hi-IN', text: 'Ramesh ka 300 udhaar' },
+      { locale: 'en-IN', text: 'Ramesh ka 500 udhaar' },
+    ])
+    expect(h.ops()).toEqual([])
+    expect(lastCard(h.out)).toMatchObject({ kind: 'confusable', options: ['300', '500'] })
+    await h.turn('500')
+    expect(h.written()).toEqual([['r', 500, 'credit']])
   })
 })

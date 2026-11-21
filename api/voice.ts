@@ -12,7 +12,8 @@ import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
 import { MultiStt } from '../server/gnani/multi.js'
 import { TtsPool } from '../server/gnani/tts.js'
-import { llmModel, readWithLlm, warmUp } from '../server/parse/llm.js'
+import { decide } from '../server/agent/agent.js'
+import { GEMINI_TOOLS } from '../server/agent/tools.js'
 import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
 
@@ -93,7 +94,8 @@ wss.on('connection', (ws, req) => {
   const key = process.env.GNANI_API_KEY ?? ''
   if (!warmed) {
     warmed = true
-    void warmUp() // fetch the model's token, open TLS for this instance
+    // fetch the model's token and open TLS for this instance (the first call after a cold start is slow)
+    void decide({ lang: 'en', heard: [{ locale: 'en-IN', text: 'hello' }], history: [], screen: 'home', customers: [], recent: [], pending: null }, GEMINI_TOOLS).catch(() => {})
   }
   const tts = new TtsPool(key, 2, L.child({ part: 'tts' }))
   const send = (m: ServerMsg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
@@ -116,10 +118,10 @@ wss.on('connection', (ws, req) => {
     },
     speak: (text, locale, onAudio, signal, speed) => tts.speak(text, locale, onAudio, signal, speed),
     warm: (texts, locale, speed) => void tts.warm(texts, locale, speed).catch((e) => L.warn('tts_warm_failed', { error: e })),
-    llm: async (text, ctx) => {
-      const r = await readWithLlm(text, ctx)
-      L.info('llm_call', { model: llmModel(), ms: r.ms })
-      return r.reading
+    agent: async (ctx, audio) => {
+      const r = await decide(ctx, GEMINI_TOOLS, audio)
+      L.info('agent_call', { ms: r.ms, calls: r.calls.length })
+      return r
     },
     send,
     sendAudio: (pcm) => ws.readyState === WebSocket.OPEN && ws.send(pcm),

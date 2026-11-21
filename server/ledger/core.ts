@@ -34,8 +34,6 @@ export interface Draft {
   spoken: boolean
   /** the turn had only this one line: a known customer named anywhere in it is this line's customer */
   single?: boolean
-  /** times the open question about this line was asked again (once at most, then it waits quietly) */
-  reasked?: number
   paise: number
   alt: number | null // confusable alternative, rupees
   direction: Direction | null
@@ -163,6 +161,11 @@ export class LedgerCore {
     const t = this.writtenAt.get(eid)
     return t !== undefined && this.deps.now() - t <= ms
   }
+  /**
+   * What each language stream heard as an amount this turn (rupees). When they disagree on a
+   * single entry, the other value becomes the draft's `alt` and the shopkeeper is asked which.
+   */
+  heardAmounts: number[] = []
 
   constructor(private deps: LedgerDeps) {}
 
@@ -306,7 +309,15 @@ export class LedgerCore {
     const drafts = intent.entries.map((e) => this.draftFrom(e, text, meta))
       .filter((d, i, a) => i === 0 || !(d.heardName && d.heardName.toLowerCase() === a[i - 1].heardName?.toLowerCase() &&
         d.paise === a[i - 1].paise && d.direction === a[i - 1].direction))
-    if (drafts.length === 1) drafts[0].single = true
+    if (drafts.length === 1) {
+      drafts[0].single = true
+      const d = drafts[0]
+      const other = this.heardAmounts.find((v) => v > 0 && Math.round(v * 100) !== d.paise)
+      if (d.alt === null && other !== undefined) {
+        d.alt = other
+        d.reasons.push('streams-differ')
+      }
+    }
     // "uska 100 aur" / "usko 50 udhaar": the customer we were just talking about
     if (this.focusCid && refersBack(text))
       for (const d of drafts)
@@ -546,6 +557,49 @@ export class LedgerCore {
   }
 
   /**
+   * Can the fast parse alone answer the open question? When not, the agent reads the turn (it sees
+   * `pending`) and may call answer_question. Taps always answer.
+   */
+  canAnswerFast(text: string, intent: Intent): boolean {
+    const p = this.pending
+    if (!p) return true
+    if (this.turnSrc === 'tap') return true
+    if (intent.type === 'yes' || intent.type === 'no' || intent.type === 'undo') return true
+    const words = text.trim().split(/\s+/).filter(Boolean).length
+    const full = intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)
+    switch (p.kind) {
+      case 'choose':
+        return full || LedgerCore.chooseIndex(p.options, text) >= 0
+      case 'modify':
+      case 'delete':
+        return full
+      case 'batch':
+        return full || intent.type === 'entries' || !!directionAnswer(text)
+      case 'confirm':
+        return intent.type === 'entries' || intent.type === 'correct'
+      case 'name': {
+        const n = nameAnswer(text)
+        return !!n && n.split(' ').length <= 2 && words <= 4 && !mentionsMoney(text)
+      }
+      case 'amount':
+        return words <= 4 && parseAmounts(text).some((a) => a.value > 0)
+      case 'direction':
+        return full || (words <= 4 && !!(directionAnswer(text) ?? (intent.type === 'correct' ? intent.direction : null)))
+      case 'which': {
+        if (p.options.some((c) => this.label(c) === text.trim())) return true
+        const n = nameAnswer(text) ?? text
+        const m = matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
+        return words <= 4 && m.length > 0 && m[0].score >= NAME_NEAR && !(m[1] && m[1].score >= m[0].score - 0.01)
+      }
+      case 'confusable': {
+        const heard = parseAmounts(text).map((x) => x.value)
+        return heard.includes(p.draft.alt!) || heard.includes(p.draft.paise / 100) || (heard.length === 1 && words <= 4)
+      }
+    }
+    return false
+  }
+
+  /**
    * Which option an answer picks: the label exactly (a tap), "first / pehla / doosra", the
    * balance ("300 wala"), or the name when only one option has it. -1 when it is not clear.
    */
@@ -669,12 +723,10 @@ export class LedgerCore {
           this.save(d, acc) // the user just said the right value: no second confirmation
           return this.processDrafts(p.queue, acc)
         }
-        return this.quietUnlessShort(text)
+        return { parts: [R.didNotCatch()], ops: [] }
       case 'name': {
         const n = nameAnswer(text)
-        // an answer to "whose name?" is a name: a short reply, whatever numbers are in the room
-        if (LedgerCore.offTopic(text) || text.trim().split(/\s+/).length > 5 || (n && n.split(' ').length > 2)) return null
-        if (!n) return LedgerCore.askedEnough(d) ? null : { parts: [R.askName(d.paise / 100)], ops: [] }
+        if (!n || n.split(' ').length > 2) return { parts: [R.askName(d.paise / 100)], ops: [] }
         d.heardName = n
         this.fillDirection(d, text)
         return this.processDrafts([d, ...p.queue], acc)
@@ -683,7 +735,7 @@ export class LedgerCore {
         // the amount blank: read only the number (and a credit/paid word), whatever else was said
         // ("300 ಬರೀ" = "write 300": ಬರೀ is not a name here, the name is already known)
         const amounts = parseAmounts(text).filter((a) => a.value > 0)
-        if (!amounts.length) return LedgerCore.offTopic(text) || LedgerCore.askedEnough(d) ? null : { parts: [R.askAmount(this.customerName(d))], ops: [] }
+        if (!amounts.length) return { parts: [R.askAmount(this.customerName(d))], ops: [] }
         d.paise = Math.round(amounts[0].value * 100)
         d.reasons = d.reasons.filter((r) => r !== 'no-amount')
         if (amounts.some((a) => a.value !== amounts[0].value)) d.reasons.push('amounts-differ')
@@ -694,8 +746,6 @@ export class LedgerCore {
         const dir = directionAnswer(text) ?? (intent.type === 'correct' ? intent.direction ?? null : null)
         // "yes"/"correct" does not say which: ask the same short question again
         if (!dir) {
-          // a stray word while the question is on screen: keep it, say nothing; otherwise ask it again
-          if (intent.type !== 'yes' && (LedgerCore.offTopic(text) || LedgerCore.askedEnough(d))) return null
           return { parts: [R.askDirection(this.customerName(d), d.paise / 100)], ops: [] }
         }
         d.direction = dir
@@ -716,7 +766,7 @@ export class LedgerCore {
         const n = nameAnswer(text) ?? text
         const m = tapped ? [{ id: tapped.cid, score: 1 }] : matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
         if (!m.length || m[0].score < NAME_NEAR || (m[1] && m[1].score >= m[0].score - 0.01))
-          return LedgerCore.offTopic(text) || LedgerCore.askedEnough(d) ? null : { parts: [R.askWhich(this.label(p.options[0]), this.label(p.options[1]))], ops: [] }
+          return { parts: [R.askWhich(this.label(p.options[0]), this.label(p.options[1]))], ops: [] }
         d.cid = m[0].id
         d.nameSure = true
         return this.processDrafts([d, ...p.queue], acc)
@@ -787,25 +837,6 @@ export class LedgerCore {
     const first = drafts.find((d) => d.direction)
     return { parts: [first ? sayMore(this.lang).batchAsk(this.batchItems(drafts), first.direction!) : R.didNotCatch()], ops: [] }
   }
-  /** One word that answers nothing and has no money in it: recogniser noise, or a word to someone else. */
-  static strayWord(text: string): boolean {
-    return text.trim().split(/\s+/).filter(Boolean).length <= 1 && !mentionsMoney(text)
-  }
-
-  /**
-   * Not an answer to the open question: one stray word, or longer talk with no money in it (the
-   * shopkeeper turned to a customer). The question stays on screen; nothing is said.
-   */
-  static offTopic(text: string): boolean {
-    return LedgerCore.strayWord(text) || (text.trim().split(/\s+/).length > 4 && !mentionsMoney(text))
-  }
-
-  /** True once the question about this line has been asked again; after that it waits on screen. */
-  static askedEnough(d: Draft): boolean {
-    d.reasked = (d.reasked ?? 0) + 1
-    return d.reasked > 1
-  }
-
   /** A credit/paid word in an answer to another question fills that blank too ("Mahi, udhaar"). */
   fillDirection(d: Draft, text: string) {
     if (d.direction) return
@@ -861,12 +892,6 @@ export class LedgerCore {
     return this.processDrafts([d], { parts: [], ops: [] })
   }
 
-  /** Long talk with no answer in it is the shopkeeper talking to someone else: keep the question, stay quiet. */
-  private quietUnlessShort(text: string): Reply | null {
-    if (text.trim().split(/\s+/).length > 4 && !mentionsMoney(text)) return null
-    if (LedgerCore.strayWord(text)) return null
-    return { parts: [say(this.lang).didNotCatch()], ops: [] }
-  }
   correctLast(intent: Extract<Intent, { type: 'correct' }>): Reply {
     const R = say(this.lang)
     const last = this.snap.last

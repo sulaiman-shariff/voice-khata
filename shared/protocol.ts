@@ -148,3 +148,5 @@ export type ServerMsg =
   | { type: 'not_entry'; text: string }
   /** the agent woke (wake word, tap) or went back to sleep (idle timeout) */
   | { type: 'attention'; state: 'asleep' | 'awake' }
+  /** a setting changed by voice: the phone applies it */
+  | SettingMsg

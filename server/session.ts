@@ -7,16 +7,15 @@
  *
  * Dependencies are injected so the dialogue can be tested without the network.
  */
-import { type Intent, dangling, directionAnswer, hasNameWord, mentionsSettle, hasUnplacedWords, mentionsChange, mentionsMoney, midList, nameAnswer, parseFast, refersBack, turnComplete } from '../shared/intent.js'
-import { NAME_SURE, matchName } from '../shared/names.js'
+import { type Intent, mentionsSettle, mentionsMoney, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { parseAmounts } from '../shared/numbers.js'
-import type { ClientMsg, ServerMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
+import type { ClientMsg, ServerMsg, SettingMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
 import { type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { type Logger, nullLogger } from './log.js'
-import { type Draft, LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta } from './ledger/core.js'
-import type { LlmContext, LlmReading } from './parse/llm.js'
-import { validate } from './parse/llm.js'
+import { type AgentContext, type ToolCall } from './agent/agent.js'
+import { attachTools, runTool } from './agent/tools.js'
+import { LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta } from './ledger/core.js'
 
 export interface SttLike {
   send(pcm: Buffer): void
@@ -41,7 +40,8 @@ export interface SessionDeps {
   speak: (text: string, locale: string, onAudio: (pcm: Buffer) => void, signal: AbortSignal, speed?: 0.8 | 1 | 1.2) => Promise<{ firstAudioMs: number | null; bytes: number; cached?: boolean }>
   /** Pre-synthesize fixed phrases so speak() replays them without a TTS round trip. */
   warm?: (texts: string[], locale: string, speed: 0.8 | 1 | 1.2) => void
-  llm: (text: string, ctx: LlmContext) => Promise<Partial<LlmReading>>
+  /** The understanding model: reads every transcript (and the audio) and answers with tool calls. */
+  agent?: (ctx: AgentContext, audio?: Buffer) => Promise<{ calls: ToolCall[]; ms: number }>
   send: (msg: ServerMsg) => void
   sendAudio: (pcm: Buffer) => void
   /** Structured logger for this session (server/log.ts); silent when absent. */
@@ -54,10 +54,6 @@ export interface SessionDeps {
 
 /** Pause after speech before an early commit, when the words already form a complete turn. */
 export const EARLY_COMMIT_PAUSE_MS = 300
-/** How long a line the recogniser closed mid-list waits for the rest of the list. */
-export const MID_LIST_HOLD_MS = 1400
-/** Longest wait while the shopkeeper is still speaking the rest of the list. */
-export const MID_LIST_MAX_MS = 6000
 /** Ledger words per language, given to the recogniser as hints (see keyterms()). */
 const LEDGER_TERMS: Record<string, string[]> = {
   en: ['credit', 'paid', 'udhaar', 'jama', 'rupees', 'clear'],
@@ -72,15 +68,11 @@ const LEDGER_TERMS: Record<string, string[]> = {
   pa: ['ਉਧਾਰ', 'ਜਮ੍ਹਾ', 'ਰੁਪਏ', 'ਦਿੱਤੇ'],
 }
 const TTS_TIMEOUT_MS = 10_000
-/** words that point at an entry already written */
-const POINTS_BACK = /wal[aei]\b|वाल[ाीे]|badl|बदल|change|galat|गलत|asal|असल|actually|instead|entry|एंट्री|\bkal\b|कल|yesterday|parso|परसों/i
-
-type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean; pcm?: Buffer; lang?: string; heardAt?: number | null }
+type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number; early: boolean; snrDb: number | null; noisy: boolean; pcm?: Buffer; lang?: string; heardAt?: number | null; heard?: { text: string; locale: string }[] }
 /** Audio kept for the turn (16 kHz s16le): the last 20 s at most. */
 const UTT_AUDIO_MAX = 20 * 16000 * 2
 /** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
 const STT_REFRESH_MS = 14 * 60_000
-const minSnr = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b))
 
 export class Session {
   lang: Lang = 'hi'
@@ -105,8 +97,6 @@ export class Session {
   private commitAt: number | null = null
   private earlyCommit = false
   private lastSpeechAt = 0
-  /** a final that stopped mid-list, waiting to be joined with the next one */
-  private held: { text: string; t: TurnTiming; since: number; timer: ReturnType<typeof setTimeout> } | null = null
   /** the last utterance as heard in each language (MultiStt), for the turn record */
   private lastHeard: { text: string; locale: string }[] | null = null
   /** what we said last and until when it may echo back through the mic */
@@ -136,6 +126,8 @@ export class Session {
       lang: () => this.lang, now: this.now, newId: this.newId, log: this.log,
       onCustomerAdded: () => this.stt?.setKeyterms(this.keyterms()),
     })
+    attachTools(this.ledger) // a tapped "which one" answer finishes the original tool
+    this.ledger.sayBalance = true // a save says the customer's new balance
     this.ledger.dispatch = (intent, text, meta) => this.dispatch(intent, text, meta)
   }
 
@@ -295,7 +287,7 @@ export class Session {
   /** Prisma ends every stream at 15 min (close 1001): swap to a fresh one at a quiet moment before that. */
   private maybeRefreshStt() {
     if (this.now() - this.sttOpenedAt < STT_REFRESH_MS || this.closed) return
-    if (this.energy.inUtterance || this.committed || this.held || this.lastPartial) return
+    if (this.energy.inUtterance || this.committed || this.lastPartial) return
     this.openStt('refresh')
   }
 
@@ -413,26 +405,9 @@ export class Session {
       text, detectedLang, snrDb, noisy, early, pending: this.pending?.kind ?? null,
       finalAfterSpeechMs: finalAt - speechEnd, commitAfterSpeechMs: commitAt === null ? null : commitAt - speechEnd,
     })
-    let t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang, heardAt }
-    if (this.held) {
-      // the rest of a list the recogniser split at a breath: one turn, as spoken
-      clearTimeout(this.held.timer)
-      // a list continues after a comma; a sentence cut after "रमेश का" continues with a space
-      const heldText = this.held.text.replace(/[।.]\s*$/, '')
-      const sep = dangling(heldText) || this.loneName(heldText) ? ' ' : ', '
-      text = `${this.held.text.trim().replace(/[।.]$/, '')}${sep}${text.trim()}`
-      const both = this.held.t.pcm && pcm ? Buffer.concat([this.held.t.pcm, pcm]) : pcm
-      t = { ...t, noisy: t.noisy || this.held.t.noisy, snrDb: minSnr(t.snrDb, this.held.t.snrDb), pcm: both }
-      this.log.info('held_joined', { text, heldMs: this.now() - this.held.since })
-      this.held = null
-    } else if (commitAt === null && !this.ptt && !this.pending && (midList(text) || dangling(text) || this.loneName(text))) {
-      const since = this.now()
-      this.held = { text, t, since, timer: setTimeout(() => this.releaseHeld(), MID_LIST_HOLD_MS) }
-      this.held.timer.unref?.()
-      this.log.info('held', { text, why: midList(text) ? 'mid_list' : dangling(text) ? 'dangling' : 'lone_name' })
-      this.deps.send({ type: 'partial', text })
-      return
-    }
+    const heard = this.lastHeard ?? undefined
+    this.lastHeard = null
+    const t: TurnTiming = { speechEnd, commitAt, finalAt, early, snrDb, noisy, pcm, lang: detectedLang, heardAt, heard }
     this.dispatchFinal(text, t)
   }
 
@@ -473,20 +448,6 @@ export class Session {
     this.enqueue(() => this.handleText(text, t, 'voice'))
   }
 
-  /** Nothing more came after a mid-list line: handle it as it is (unless the rest is still being spoken). */
-  private releaseHeld() {
-    const h = this.held
-    if (!h || this.closed) return
-    if (this.energy.inUtterance && this.now() - h.since < MID_LIST_MAX_MS) {
-      h.timer = setTimeout(() => this.releaseHeld(), 300)
-      h.timer.unref?.()
-      return
-    }
-    this.log.info('held_released', { text: h.text, heldMs: this.now() - h.since })
-    this.held = null
-    this.dispatchFinal(h.text, h.t)
-  }
-
   private isEcho(text: string): boolean {
     const said = this.speaking?.text ?? (this.lastSaid && this.now() < this.lastSaid.until ? this.lastSaid.text : null)
     if (!said) return false
@@ -505,6 +466,13 @@ export class Session {
   }
 
   // ------------------------------------------------------------------ the turn
+  /**
+   * One turn. Always treated as addressed (attention is decided before this). Three ways in:
+   *  - the open question, when the fast parse can answer it;
+   *  - the instant path, for a plain entry about a known customer (no model, no wait);
+   *  - the agent: it reads every transcript and the audio and answers with tool calls, each of
+   *    which runs through the ledger safety layer.
+   */
   async handleText(
     text: string,
     t: TurnTiming | null,
@@ -512,78 +480,60 @@ export class Session {
   ): Promise<void> {
     const t0 = this.now()
     this.ledger.turnSrc = _src
-    let intent: Intent = parseFast(text)
-    let path: 'fast' | 'llm' | 'none' = 'fast'
-    let llmMs: number | undefined
-    const snrDb = t?.snrDb ?? null
-    const noisy = t?.noisy ?? false
+    const heard = t?.heard?.length ? t.heard : [{ locale: LOCALE[this.lang], text }]
     // a question left hanging (shopkeeper turned to a customer) expires instead of catching a later "haan"
     if (this.pending && this.now() - this.ledger.pendingAt > PENDING_TTL_MS) {
       this.log.info('pending_expired', { kind: this.pending.kind, ageMs: this.now() - this.ledger.pendingAt })
       this.pending = null
     }
+    const before = this.pending
     const turn = ++this.turnNo
-    let unsureChange = false
-    if (!this.pending && this.needsLlm(text, intent)) {
-      const change = this.isChangeTalk(text, intent)
-      const l0 = this.now()
-      try {
-        const ctx = this.llmContext()
-        const reading = await this.deps.llm(text, ctx)
-        const v = validate(text, reading, ctx.contextAmounts, ctx.recent?.length ?? 0)
-        this.log.info('llm', { turn, text, ms: this.now() - l0, reading, validated: v.type })
-        // a model "no"/"unknown" never overrides a usable fast reading - unless the model is sure it
-        // is chatter and the fast reading is only a stray number ("it says 1 second...": no rupee
-        // word, no direction)
-        const weakFast = intent.type === 'entries' && intent.entries.every((e) => !e.direction && !e.amount.hasCurrency)
-        if ((v.type !== 'unknown' && v.type !== 'no') || intent.type === 'unknown') intent = v
-        else if (weakFast && reading.intent === 'chitchat' && reading.sure) {
-          this.log.info('chatter_over_number', { turn, text })
-          intent = { type: 'unknown' }
-        }
-        // the model could not read it either, and the fast reading has no credit/paid word and no
-        // customer we know ("Sukha, 3 rupees" from "teen sau"; "So, 1300"): a guess, not an entry
-        else if (reading.intent === 'unclear' && intent.type === 'entries' &&
-          intent.entries.every((e) => !e.direction && !(e.name && this.ledger.lookup(e.name))) &&
-          !(intent.entries.length === 1 && this.ledger.knownWithin(text))) {
-          this.log.info('unclear_over_guess', { turn, text })
-          intent = { type: 'unknown' }
-        }
-        else if (change) unsureChange = true
-        path = 'llm'
-      } catch (e) {
-        this.log.error('llm_failed', { turn, text, ms: this.now() - l0, error: e })
-        unsureChange = change
-      }
-      // a change to an older entry that could not be read must not fall back to changing the last one
-      if (unsureChange && intent.type !== 'modify') intent = { type: 'unknown' }
-      llmMs = this.now() - l0
+    const intent: Intent = parseFast(text)
+    const snrDb = t?.snrDb ?? null
+    const noisy = t?.noisy ?? false
+    let path: 'fast' | 'llm' | 'none' = 'fast'
+    let llmMs: number | undefined
+    let notForMe = false
+    let applied = false
+    let extra: ServerMsg[] = []
+    this.ledger.heardAmounts = this.streamAmounts(heard)
+    const meta: TurnMeta = { snrDb, noisy, path: 'fast' }
+    let reply: Reply | null = null
+    try {
+      if (this.pending) {
+        if (this.ledger.canAnswerFast(text, intent)) reply = this.ledger.answerPending(text, intent, meta)
+        else ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
+      } else if (intent.type === 'entries' && this.isInstant(intent)) reply = this.dispatch(intent, text, meta)
+      // "Suresh wali entry hata do" names an older entry: only the agent can pick it
+      else if (intent.type === 'undo' && !this.ledger.candidates(text).length) reply = this.dispatch(intent, text, meta)
+      else if (intent.type === 'yes' || intent.type === 'no') reply = null // nothing pending: a stray haan/nahi
+      else ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
+      if (llmMs !== undefined) { path = 'llm'; applied = true }
+    } finally {
+      this.ledger.heardAmounts = []
     }
     if (!this.pending) this.followDetectedLang(t?.lang, intent)
     const parseMs = this.now() - t0
-
-    const meta: TurnMeta = { snrDb, noisy, path: path === 'llm' ? 'llm' : 'fast' }
-    const before = this.pending
-    let reply = this.pending
-      ? this.ledger.answerPending(text, intent, meta)
-      : this.dispatch(intent, text, meta)
-    if (!reply && unsureChange) reply = { parts: [say(this.lang).didNotCatch()], ops: [] }
-    // one confident save: the screen shows name and amount, so a short "noted" is enough
-    if (reply && _src !== 'resend' && !this.readBackAll && reply.saved === 1 && reply.ackable === 1 && reply.parts.length === 1)
-      reply.parts = [say(this.lang).ack()]
     // a turn lost to a dropped connection, handled again: say so, then the full read-back
     if (reply && _src === 'resend') reply.parts.unshift(say(this.lang).resent())
     if (this.pending && this.pending !== before) this.ledger.pendingAt = this.now()
-    if (!reply) path = 'none'
+    if (!reply || notForMe) path = path === 'llm' ? 'llm' : 'none'
     this.remember(`Shopkeeper: ${text}`)
     if (reply?.parts.length) this.remember(`Agent: ${reply.parts.join(' ')}`)
 
     if (reply?.ops.length) {
-      for (const op of reply.ops) this.ledger.applyLocal(op)
+      if (!applied) for (const op of reply.ops) this.ledger.applyLocal(op)
       const seq = ++this.opsSeq
       this.unacked.set(seq, reply.ops.length)
       this.deps.send({ type: 'ops', ops: reply.ops, seq })
     }
+    if (reply?.show && path !== 'llm') extra.push(reply.show)
+    if (reply?.setting && path !== 'llm') {
+      this.applySetting(reply.setting)
+      extra.push(reply.setting)
+    }
+    if (reply?.ready?.kind === 'whatsapp' && reply.ready.cid && reply.ready.text) extra.push({ type: 'remind', cid: reply.ready.cid, text: reply.ready.text })
+    for (const m of extra) this.deps.send(m)
     this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
 
     let firstAudioAt: number | null = null
@@ -614,7 +564,7 @@ export class Session {
       this.deps.send({ type: 'metrics', turn: m })
     }
     this.log.info('turn', {
-      turn, src: _src, text, lang: this.lang, intent: intent.type, path,
+      turn, src: _src, text, lang: this.lang, intent: notForMe ? 'not_for_me' : intent.type, path,
       reply: reply?.parts.join(' ') ?? null,
       ops: reply?.ops.map((o) => (o.op === 'entry' ? { op: o.op, cid: o.cid, paise: o.paise, direction: o.direction, promise: o.promise, dayOffset: o.dayOffset } : { op: o.op })) ?? [],
       pending: this.pending?.kind ?? null,
@@ -629,16 +579,15 @@ export class Session {
         : {}),
       parseMs, llmMs, replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0, cached: spoken?.cached ?? false,
     })
-    const heardAll = _src === 'voice' ? this.lastHeard : null
-    this.lastHeard = null
+    const heardAll = _src === 'voice' ? t?.heard ?? null : null
     this.deps.record?.({
-      turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, heardAll, intent: intent.type, path,
+      turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, heardAll, intent: notForMe ? 'not_for_me' : intent.type, path,
       reply: reply?.parts.join(' ') ?? null, pending: this.pending?.kind ?? null,
       ops: reply?.ops ?? [], snrDb: t?.snrDb ?? null, noisy: t?.noisy ?? null,
       finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null,
     }, t?.pcm)
     // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
-    if (_src === 'voice' && !reply && !this.pending) this.deps.send({ type: 'not_entry', text })
+    if (_src === 'voice' && (notForMe || (!reply && !this.pending))) this.deps.send({ type: 'not_entry', text })
     this.deps.send({ type: 'turn_done', resume: this.ledger.exportState() })
   }
 
@@ -648,66 +597,92 @@ export class Session {
     if (this.ledger.history.length > 8) this.ledger.history.splice(0, this.ledger.history.length - 8)
   }
 
-  /** Known customers named in the text (sure matches only). */
-  private namedCids(text: string): string[] {
-    const known = this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] }))
-    const out = new Set<string>()
-    for (const raw of text.split(/[\s,.;:!?।]+/)) {
-      const w = raw.replace(/['’]s$/i, '') // "Geeta's"
-      if (w.length < 3) continue
-      const m = matchName(w, known)[0]
-      if (m && m.score >= NAME_SURE) out.add(m.id)
+  /** Instant path: every line names a known customer, says the direction and was read with full confidence. */
+  private isInstant(intent: Extract<Intent, { type: 'entries' }>): boolean {
+    return intent.entries.every((e) => !!e.name && !!this.ledger.lookup(e.name) && (!!e.direction || e.promise) && e.confidence === 'high')
+  }
+
+  /** The one amount each language stream heard (streams with several amounts are left out). */
+  private streamAmounts(heard: { text: string }[]): number[] {
+    const out: number[] = []
+    for (const h of heard) {
+      const vals = [...new Set(parseAmounts(h.text).map((a) => a.value).filter((v) => v > 0))]
+      if (vals.length === 1) out.push(vals[0])
     }
-    return [...out]
+    return out
   }
 
-  /**
-   * Changing or removing something already written, about a named customer ("Geeta wali entry hata do",
-   * "Ramesh ka kal wala 340 asal mein 430"): the model picks which entry from the numbered list.
-   */
-  private isChangeTalk(text: string, intent: Intent): boolean {
-    const recent = this.snap.entries ?? []
-    if (recent.length < 2 || !mentionsChange(text)) return false
-    // a new entry with an in-breath slip ("Ramesh ko 500 nahi 300") is not a change; "kal wala", "galat tha" are
-    if (intent.type === 'entries' && !POINTS_BACK.test(text)) return false
-    const named = this.namedCids(text)
-    return named.some((cid) => cid !== this.snap.last?.cid) || (named.length > 0 && POINTS_BACK.test(text))
-  }
-
-  private needsLlm(text: string, intent: Intent): boolean {
-    const recent = this.snap.entries ?? []
-    if (this.isChangeTalk(text, intent)) return true
-    if (intent.type === 'entries') {
-      const unsure = intent.entries.some((e) => e.reasons.includes('no-name') || e.reasons.includes('no-direction-cue'))
-      // "uska 100 aur udhaar": the conversation already says who
-      if (this.ledger.focusCid && refersBack(text) && !intent.entries.some((e) => e.reasons.includes('no-direction-cue'))) return false
-      // "Ramesh, 300": nothing for a model to read; asking the missing part is faster
-      return unsure && hasUnplacedWords(text, intent.entries.map((e) => e.name))
-    }
-    if (intent.type === 'query' && !intent.name && this.ledger.focusCid && refersBack(text)) return false
-    if (intent.type !== 'unknown') return false
-    // "same for Suresh", "him too": only the conversation can say what that means
-    if (refersBack(text) && (this.ledger.focusCid || recent.length)) return true
-    // only spend an LLM call when the words look like ledger talk
-    if (mentionsMoney(text)) return true
-    const known = this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] }))
-    return text.split(/\s+/).some((w) => w.length > 2 && (matchName(w, known)[0]?.score ?? 0) >= NAME_SURE)
-  }
-
-  private llmContext(): LlmContext {
-    const recent = (this.snap.entries ?? []).slice(0, 12)
+  private agentContext(heard: { text: string; locale: string }[]): AgentContext {
+    // numbered newest first, in the order the tools index entries (`ref`: 1 = newest)
     const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10) // shops are in IST
     const when = (e: SnapEntry) => {
       const d = e.day ? Math.round((Date.parse(e.day) - Date.parse(today)) / 86_400_000) : 0
       return d === 0 ? 'today' : d === -1 ? 'yesterday' : d === 1 ? 'tomorrow' : e.day
     }
-    const focus = this.ledger.focusCid ? this.ledger.nameOf(this.ledger.focusCid) : null
+    const recent = (this.snap.entries ?? []).slice(0, 12)
+      .map((e, i) => `#${i + 1} ${this.ledger.nameOf(e.cid)} ${e.promise ? 'promise' : e.direction} ${e.paise / 100} ${when(e)}`)
     return {
-      lang: LOCALE[this.lang],
-      customers: this.snap.customers.flatMap((x) => [x.name, ...x.aliases]),
-      recent: recent.map((e, i) => `#${i + 1} ${this.ledger.nameOf(e.cid)} ${e.promise ? 'promise' : e.direction} ${e.paise / 100} ${when(e)}`),
-      history: focus ? [...this.ledger.history.slice(-6), `(customer being discussed: ${focus})`] : this.ledger.history.slice(-6),
-      contextAmounts: recent.map((e) => e.paise / 100),
+      lang: this.lang,
+      heard,
+      history: this.ledger.history.slice(-6),
+      screen: 'home',
+      customers: this.snap.customers.map((c) => c.name),
+      recent,
+      pending: this.ledger.pendingView(),
+    }
+  }
+
+  /**
+   * Hand the turn to the agent and run its tool calls in order, each through the safety layer,
+   * merged into one reply. Ops are applied locally after each call so a later call sees them.
+   * Failure (no agent, timeout, error): the shopkeeper hears didNotCatch in the turn language.
+   */
+  private async askAgent(
+    text: string, heard: { text: string; locale: string }[], t: TurnTiming | null, meta: TurnMeta,
+  ): Promise<{ reply: Reply | null; notForMe: boolean; ms: number | undefined; extra: ServerMsg[] }> {
+    const R = say(this.lang)
+    const fail = (): { reply: Reply | null; notForMe: boolean; ms: number | undefined; extra: ServerMsg[] } =>
+      ({ reply: { parts: [meta.noisy ? R.noisyRepeat() : R.didNotCatch()], ops: [] }, notForMe: false, ms: undefined, extra: [] })
+    const l0 = this.now()
+    let calls: ToolCall[]
+    try {
+      if (!this.deps.agent) throw new Error('no agent')
+      const r = await this.deps.agent(this.agentContext(heard), t?.pcm)
+      calls = r.calls
+      this.log.info('agent', { text, ms: r.ms, calls: calls.map((c) => c.name) })
+    } catch (e) {
+      this.log.error('agent_failed', { text, ms: this.now() - l0, error: e })
+      return fail()
+    }
+    if (!calls.length) return fail()
+    // the sentence, and every language stream's reading of it: an amount heard in any may be written
+    const spoken = heard.map((h) => h.text).filter((x) => x !== text)
+    const merged: Reply = { parts: [], ops: [] }
+    const extra: ServerMsg[] = []
+    for (const call of calls) {
+      const r = runTool(this.ledger, call, { ...meta, transcript: text, heard: spoken })
+      merged.parts.push(...r.parts)
+      for (const op of r.ops) this.ledger.applyLocal(op)
+      merged.ops.push(...r.ops)
+      if (r.saved) merged.saved = (merged.saved ?? 0) + r.saved
+      if (r.show) extra.push(r.show)
+      if (r.setting) {
+        this.applySetting(r.setting)
+        extra.push(r.setting)
+      }
+      if (r.ready) merged.ready = r.ready
+      if (this.pending) break // a question is open: nothing after it runs until it is answered
+    }
+    const notForMe = calls.every((c) => c.name === 'not_for_me')
+    return { reply: notForMe ? null : merged, notForMe, ms: this.now() - l0, extra }
+  }
+
+  private applySetting(m: SettingMsg) {
+    if (m.key === 'lang' && typeof m.value === 'string') this.switchLang(m.value as Lang)
+    else if (m.key === 'readBack') this.readBackAll = m.value === true
+    else if (m.key === 'fastSpeech') {
+      this.speed = m.value === true ? 1.2 : 1
+      this.warmPhrases()
     }
   }
 
@@ -778,15 +753,8 @@ export class Session {
       case 'delete_all':
         this.pending = { kind: 'delete' }
         return { parts: [R.deleteAsk()], ops: [] }
-      case 'unknown': {
-        // Part of an entry, said on its own: start the entry and ask for what is missing.
-        // Only a name ("ಮಾಹಿ ಹೆಸರಿಂದ"): ask how much. Only an amount ("300"): ask whose.
-        const part = this.partialDraft(text, meta)
-        if (part) return this.ledger.processDrafts([part], { parts: [], ops: [] })
-        // background talk to a customer is ignored; only speak up if it sounded like ledger talk
-        if (mentionsMoney(text)) return { parts: [meta.noisy ? R.noisyRepeat() : R.didNotCatch()], ops: [] }
-        return null
-      }
+      case 'unknown':
+        return null // the agent reads anything the fast parse cannot
     }
   }
 
@@ -796,19 +764,6 @@ export class Session {
     this.deps.send({ type: 'show', view: 'dues' })
     if (!owing.length) return { parts: [R.noDues()], ops: [] }
     return { parts: [R.dues(owing.length, owing.reduce((s, c) => s + c.balancePaise, 0) / 100)], ops: [] }
-  }
-
-  /** A turn that is only a known customer's name ("ಸುರೇಶ್", then a pause, then "300 ರೂಪಾಯಿ ಸಾಲ"). */
-  private loneName(text: string): boolean {
-    if (text.trim().split(/\s+/).length > 4) return false // a name said on its own is short
-    if (parseFast(text).type !== 'unknown') return false
-    const n = nameAnswer(text)
-    if (!n || n.split(' ').length > 3) return false
-    // "ಮಾಹಿ ಹೆಸರಿಂದ" / "Mahi ke naam se": said as a name, even one not in the ledger yet
-    if (hasNameWord(text)) return true
-    if (this.ledger.knownWithin(n)) return true
-    const best = matchName(n, this.snap.customers.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))[0]
-    return !!best && best.score >= NAME_SURE
   }
 
   /**
@@ -842,30 +797,6 @@ export class Session {
       default:
         return 2
     }
-  }
-
-  /**
-   * One part of an entry said on its own, as the start of an entry: a name alone (a customer we
-   * know, or said as a name: "ಮಾಹಿ ಹೆಸರಿಂದ"), or an amount alone ("300", "300 rupees"). Anything
-   * else is not ledger talk.
-   */
-  private partialDraft(text: string, meta: TurnMeta): Draft | null {
-    const amounts = parseAmounts(text).filter((a) => a.value > 0)
-    const blank = (name: string | null, rupees: number, reasons: string[]): Draft => ({
-      heardName: name, cid: null, newName: null, nameSure: false, paise: Math.round(rupees * 100), alt: null,
-      direction: directionAnswer(text), dayOffset: 0, promise: false, confidence: 'low', reasons, path: meta.path, transcript: text,
-      snrDb: meta.snrDb, noisy: meta.noisy, spoken: this.ledger.turnSrc !== 'tap',
-    })
-    if (!amounts.length) {
-      const n = nameAnswer(text)
-      const shortWithDir = !!directionAnswer(text) && !!n && n.split(' ').length <= 2 && text.trim().split(/\s+/).length <= 5
-      if (!this.loneName(text) && !shortWithDir) return null
-      return blank(n, 0, ['no-amount'])
-    }
-    // only the amount: every word is a number, currency or filler ("300", "300, 300", "300 rupees")
-    const same = amounts.every((a) => a.value === amounts[0].value)
-    if (same && mentionsMoney(text) && !hasUnplacedWords(text, [])) return blank(null, amounts[0].value, ['no-name'])
-    return null
   }
 
   // ------------------------------------------------------------------ speech out
@@ -924,8 +855,6 @@ export class Session {
     if (this.unacked.size) this.log.warn('ops_unacked', { batches: this.unacked.size, ops: [...this.unacked.values()].reduce((a, b) => a + b, 0), seqs: [...this.unacked.keys()] })
     this.log.info('session_end', { turns: this.turnNo, lang: this.lang, durationMs: this.now() - this.startedAt, pendingLeft: this.pending?.kind ?? null })
     this.closed = true
-    if (this.held) clearTimeout(this.held.timer)
-    this.held = null
     this.speaking?.ac.abort()
     this.stt?.close()
   }

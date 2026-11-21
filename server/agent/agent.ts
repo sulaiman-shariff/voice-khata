@@ -19,7 +19,7 @@ export interface AgentContext {
   screen: string
   /** Names of the customers in the ledger. */
   customers: string[]
-  /** Customers touched most recently, newest first. */
+  /** The latest entries, numbered newest first ("#1 Ramesh credit 340 today"): tools point at one by its number. */
   recent: string[]
   /** A question the app is waiting on, or null. */
   pending: PendingView | null
@@ -34,7 +34,7 @@ Each turn you get:
 - history: the last few exchanges, oldest first.
 - screen: which screen the shopkeeper is on.
 - customers: the names in the ledger. A customer can be referred to by name in any script (Latin, Devanagari, Tamil, etc.) or spelling; match it to the ledger name.
-- recent: customers touched most recently, newest first, for "him", "her", "that one".
+- recent: the latest ledger entries, numbered, #1 the newest. Use the number as "ref" to change or remove an entry; the customers in it answer "him", "her", "that one".
 - pending: a question the app is waiting on (confirm, name, amount, direction, which, delete, batch, modify), or none. If pending is set, an answer like yes, no, a name or an amount usually answers it.
 
 Rules:

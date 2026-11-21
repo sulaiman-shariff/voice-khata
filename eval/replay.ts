@@ -1,8 +1,11 @@
 /**
  * Replay real conversations (from production logs) through the Session and score the outcome.
- * No audio, no network: the model's answers are the ones logged for the same text.
+ * No audio. The agent's answers come from eval/corpus/agent_cache.json (keyed by the sha1 of the
+ * agent request), so a replay is offline and repeatable. Every session is replayed AS AWAKE
+ * throughout: the point is what the understanding path does with what was heard.
  *
  *   npx tsx eval/replay.ts [eval/corpus/prod.json] [--label name] [-v]
+ *   npx tsx --env-file=.env eval/replay.ts --record     # call Gemini live and refresh the cache
  *
  * Scores, summed over sessions:
  *   wrong     entries written that the shopkeeper did not mean (worst)
@@ -13,16 +16,18 @@
  * A read-back the logged user never answered (often one the old code never asked, like "new
  * customer X?") is answered from the labels: yes only for an entry they meant. Counted as `oracle`.
  */
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { mentionsMoney } from '../shared/intent.js'
 import type { LedgerOp, PendingView, ServerMsg, SnapCustomer, Snapshot } from '../shared/protocol.js'
-import type { LlmReading } from '../server/parse/llm.js'
+import { type AgentContext, type ToolCall, decide } from '../server/agent/agent.js'
+import { GEMINI_TOOLS } from '../server/agent/tools.js'
 import { Session } from '../server/session.js'
 
 type Step = { say: string } | { tap: 'yes' | 'no' | 'undo' } | { answer: string } | { type: string }
 type Line = [string, number, 'credit' | 'payment']
 interface Conv {
-  sid: string; lang: string; steps: Step[]; llm: Record<string, Partial<LlmReading>>
+  sid: string; lang: string; steps: Step[]
   customers: string[]; saves: Line[]; allow: Line[]; names: Record<string, string[]>
 }
 
@@ -30,6 +35,12 @@ const args = process.argv.slice(2)
 const file = args.find((a) => a.endsWith('.json')) ?? 'eval/corpus/prod.json'
 const label = args.includes('--label') ? args[args.indexOf('--label') + 1] : null
 const verbose = args.includes('-v')
+const record = args.includes('--record')
+const CACHE = 'eval/corpus/agent_cache.json'
+type Cached = { calls: ToolCall[]; ms: number }
+const cache: Record<string, Cached> = fs.existsSync(CACHE) ? JSON.parse(fs.readFileSync(CACHE, 'utf8')) : {}
+const agentMs: number[] = []
+const requestKey = (ctx: AgentContext) => crypto.createHash('sha1').update(JSON.stringify(ctx)).digest('hex')
 const only = args.includes('--sid') ? args[args.indexOf('--sid') + 1] : null
 const convs: Conv[] = JSON.parse(fs.readFileSync(file, 'utf8'))
 
@@ -37,8 +48,8 @@ const norm = (s: string) => s.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{
 const cust = (cid: string, name: string): SnapCustomer =>
   ({ cid, name, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 0, typicalPaise: null })
 
-interface Score { wrong: number; junk: number; missed: number; silent: number; questions: number; oracle: number; llmMissing: number }
-const zero = (): Score => ({ wrong: 0, junk: 0, missed: 0, silent: 0, questions: 0, oracle: 0, llmMissing: 0 })
+interface Score { wrong: number; junk: number; missed: number; silent: number; questions: number; oracle: number; agentMissing: number }
+const zero = (): Score => ({ wrong: 0, junk: 0, missed: 0, silent: 0, questions: 0, oracle: 0, agentMissing: 0 })
 
 async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
   const score = zero()
@@ -62,11 +73,26 @@ async function run(c: Conv): Promise<{ score: Score; notes: string[] }> {
       onAudio(Buffer.alloc(3200))
       return { firstAudioMs: 1, bytes: 3200 }
     },
-    llm: async (text) => {
-      const r = c.llm[text]
-      if (r) return r
-      score.llmMissing++
-      return { intent: 'unclear', sure: false }
+    agent: async (ctx) => {
+      const key = requestKey(ctx)
+      if (record) {
+        let r: Cached
+        try {
+          r = await decide(ctx, GEMINI_TOOLS)
+        } catch (e) {
+          // a failed call is not cached: the replay sees it as missing, like the session sees a failure
+          console.log(`agent failed for "${ctx.heard[0].text}": ${String(e).slice(0, 120)}`)
+          throw e
+        }
+        agentMs.push(r.ms)
+        cache[key] = { calls: r.calls, ms: r.ms }
+      }
+      const hit = cache[key]
+      if (!hit) {
+        score.agentMissing++
+        throw new Error('agent request not in the cache (run with --record)')
+      }
+      return hit
     },
     send: (m) => out.push(m),
     sendAudio: () => {},
@@ -179,7 +205,13 @@ for (const c of convs.filter((x) => !only || x.sid === only)) {
 }
 const meant = convs.reduce((n, c) => n + c.saves.length, 0)
 console.log(`\n${convs.length} conversations, ${convs.reduce((n, c) => n + c.steps.length, 0)} steps, ${meant} entries meant`)
-console.log(`wrong ${total.wrong} | junk accounts ${total.junk} | missed ${total.missed} | silent ${total.silent} | questions ${total.questions} | oracle answers ${total.oracle} | model readings not in log ${total.llmMissing}`)
+console.log(`wrong ${total.wrong} | junk accounts ${total.junk} | missed ${total.missed} | silent ${total.silent} | questions ${total.questions} | oracle answers ${total.oracle} | agent answers not in cache ${total.agentMissing}`)
+if (record) {
+  fs.writeFileSync(CACHE, JSON.stringify(cache, null, 1))
+  const sorted = [...agentMs].sort((a, b) => a - b)
+  const q = (f: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * f))]
+  if (sorted.length) console.log(`agent calls ${sorted.length} | ms p50 ${q(0.5).toFixed(0)} p90 ${q(0.9).toFixed(0)} max ${sorted.at(-1)!.toFixed(0)}`)
+}
 if (label) {
   fs.mkdirSync('eval/results', { recursive: true })
   fs.writeFileSync(`eval/results/replay_${label}.json`, JSON.stringify({ file, total, rows }, null, 1))
