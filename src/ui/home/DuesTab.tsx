@@ -122,11 +122,11 @@ export function DuesTab({ t, lang, state, name, q, setQ, sort, setSort, party, s
                 leading={<Avatar name={name(d.cid)} id={d.cid} />}
                 title={name(d.cid)}
                 subtitle={
-                  <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                     {a && <AgePill days={a.days} lang={lang} />}
                     {state.plans.has(d.cid) && <span role="img" aria-label={f.plan} title={f.plan} className="inline-grid size-6 shrink-0 place-items-center rounded-full bg-primary/8 text-primary"><CalendarClock className="size-3.5" aria-hidden /></span>}
                     {a?.pastDue && <span className="shrink-0 text-xs font-semibold text-credit">{f.overdue}</span>}
-                    {!a?.pastDue && lastDay.get(d.cid) && <span className="truncate">{ago(lastDay.get(d.cid)!, t)}</span>}
+                    {!a?.pastDue && lastDay.get(d.cid) && <span className="whitespace-nowrap">{ago(lastDay.get(d.cid)!, t)}</span>}
                   </span>
                 }
                 trailing={

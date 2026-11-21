@@ -56,7 +56,7 @@ export function RemindSheet({ store, open, t, onClose, onChanged }: {
           {rows.length === 0 && <EmptyState icon={PartyPopper} title={t.allClear} hint={t.noneDue} />}
           <ul className="space-y-2">
             {rows.map(({ c, owed }) => (
-              <Row key={c.cid} store={store} t={t} cid={c.cid} owed={owed} busy={busy === c.cid || busy === '*'} onSend={() => void send(c.cid)} onChanged={onChanged} name={displayName(s, c.cid)} />
+              <Row key={`${c.cid}:${c.phone ?? ''}`} store={store} t={t} cid={c.cid} owed={owed} busy={busy === c.cid || busy === '*'} onSend={() => void send(c.cid)} onChanged={onChanged} name={displayName(s, c.cid)} />
             ))}
           </ul>
 
@@ -76,8 +76,8 @@ function Row({ store, t, cid, name, owed, busy, onSend, onChanged }: {
   store: KhataStore; t: UiStrings; cid: string; name: string; owed: number; busy: boolean; onSend: () => void; onChanged: () => void
 }) {
   const c = store.state.customers.get(cid)!
+  // the row is keyed by the saved phone, so a phone saved elsewhere remounts it with the new value
   const [phone, setPhone] = useState(c.phone ?? '')
-  useEffect(() => setPhone(c.phone ?? ''), [c.phone])
   const phoneOk = !phone.trim() || phone.replace(/\D/g, '').length >= 10
   const save = (p: Partial<{ phone: string; consent: boolean }>) =>
     store.setConsent(cid, {

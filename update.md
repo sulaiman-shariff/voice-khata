@@ -1,6 +1,6 @@
-# Updates on `dev`
+# Updates
 
-Changes made on the `dev` branch, newest first. Each item lists what changed, why, the files touched and how it was tested. `main` is untouched.
+Changes to KhataBhai, newest first. Each item lists what changed, why, the files touched and how it was tested. Everything here is merged into `main`.
 
 **Run locally** (two terminals, from the repo root):
 
@@ -10,7 +10,7 @@ npm run server      # voice function on ws://localhost:8787 (reads .env, restart
 npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (597 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (667 pass, 11 skipped) and `npx tsc -b` (clean).
 
 ---
 
