@@ -14,7 +14,7 @@ import { API_BASE, voiceUrl } from '@/lib/api'
 import { ago, dayOfTs, initials, relDay, rs, rsShort, today } from '@/ui/format'
 import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
 import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
-import { isNative, keepAwake, onBackButton } from '@/lib/native'
+import { isNative, keepAwake, onBackButton, openAppSettings } from '@/lib/native'
 import { useOnline } from '@/lib/online'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
@@ -264,7 +264,7 @@ function Home({ store }: { store: KhataStore }) {
   if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto })} />
   if (!settings.profileDone) {
     return (
-      <div className="mx-auto h-full max-w-md overflow-y-auto px-5 pt-8 pb-8">
+      <div className="mx-auto h-full max-w-md overflow-y-auto px-5 pb-8" style={{ paddingTop: SAFE_TOP }}>
         <Brand />
         <h1 className="mt-6 font-display text-3xl font-semibold">{t.signupTitle}</h1>
         <div className="gold-rule mt-3 mb-5" />
@@ -273,7 +273,7 @@ function Home({ store }: { store: KhataStore }) {
     )
   }
 
-  if (!settings.micAsked) return <MicStep t={t} onDone={() => void store.updateSettings({ micAsked: true })} />
+  if (isNative && !settings.micAsked) return <MicStep t={t} onDone={() => void store.updateSettings({ micAsked: true })} />
 
   const day = daySummary(state, today())
   const all = state.order.map((id) => state.entries.get(id)!)
@@ -462,10 +462,14 @@ function Home({ store }: { store: KhataStore }) {
       <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onImport={() => setSheet('import')} onRemindAll={() => void remindAll()}
         onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
-      <Toaster position="top-center" />
+      <Toaster position="top-center" offset={{ top: 'calc(env(safe-area-inset-top) + 16px)' }} />
     </div>
   )
 }
+
+/** Page top padding that clears the status bar when the app draws edge-to-edge (Android 15+). */
+const SAFE_TOP = 'max(2rem, calc(env(safe-area-inset-top) + 1rem))'
+const SAFE_TOP_LG = 'max(3.5rem, calc(env(safe-area-inset-top) + 1.5rem))'
 
 const UNDO_STYLE = { minHeight: 44, minWidth: 64, fontSize: 16, fontWeight: 700 } as const
 
@@ -515,7 +519,7 @@ function MicStep({ t, onDone }: { t: ReturnType<typeof ui>; onDone: () => void }
     } catch { setDenied(true); setBusy(false) }
   }
   return (
-    <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pt-8 pb-8">
+    <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pb-8" style={{ paddingTop: SAFE_TOP }}>
       <Brand />
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <span className="grid size-20 place-items-center rounded-full bg-primary/10 text-primary"><Mic className="size-10" /></span>
@@ -524,9 +528,10 @@ function MicStep({ t, onDone }: { t: ReturnType<typeof ui>; onDone: () => void }
         <p className="text-lg text-muted-foreground">{t.micBody}</p>
         {denied && <p role="alert" className="mt-5 rounded-xl bg-amber-500/15 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">{t.micDenied}</p>}
       </div>
-      {denied ? (
+      {denied ? (<>
+        {isNative && <button onClick={openAppSettings} className="mt-8 flex h-14 w-full items-center justify-center rounded-lg border border-primary text-lg font-semibold text-primary active:scale-[.98]">{t.micSettings}</button>}
         <button onClick={onDone} className="mt-8 flex h-14 w-full items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground shadow-md active:scale-[.98]">{t.micAnyway}</button>
-      ) : (
+      </>) : (
         <>
           <button disabled={busy} onClick={() => void allow()} className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-lg font-semibold text-primary-foreground shadow-md active:scale-[.98] disabled:opacity-60"><Mic className="size-5" />{t.micAllow}</button>
           <button onClick={onDone} className="mt-3 min-h-11 text-sm text-muted-foreground underline">{t.micSkip}</button>
@@ -544,7 +549,7 @@ function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => void }) {
 
   if (step === 'welcome') {
     return (
-      <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pt-14 pb-8">
+      <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-6 pb-8" style={{ paddingTop: SAFE_TOP_LG }}>
         <div className="flex flex-1 flex-col items-center text-center">
           <Logo size={96} className="drop-shadow-md" />
           <div className="mt-6 text-sm font-medium tracking-[0.2em] text-gold uppercase">Welcome to · स्वागत है</div>

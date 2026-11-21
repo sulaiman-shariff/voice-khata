@@ -38,10 +38,8 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/*
 
 **Build and install** (needs Android Studio installed once, for its Java and SDK; phone with USB debugging on):
 ```
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
-$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
-npm run apk           # build:android → cap sync → gradlew assembleDebug
-npm run apk:install   # adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+npm run apk           # cap sync, then gradlew assembleDebug; sets JAVA_HOME / ANDROID_HOME / local.properties itself
+npm run apk:install   # adb install -r, with adb found under the Android SDK
 ```
 Debug the app's WebView from the PC at `chrome://inspect`.
 

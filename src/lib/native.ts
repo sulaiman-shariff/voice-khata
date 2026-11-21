@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { KeepAwake } from '@capacitor-community/keep-awake'
+import { AndroidSettings, NativeSettings } from 'capacitor-native-settings'
 
 /** True inside the Android app; every call below is a no-op (or the plain web behaviour) on the web. */
 export const isNative = Capacitor.isNativePlatform()
@@ -60,4 +61,10 @@ export function onBackButton(handler: () => boolean): () => void {
 export function hideSplash(): void {
   if (!isNative) return
   try { SplashScreen.hide().catch(() => {}) } catch { /* plugin missing */ }
+}
+
+/** Open this app's Android settings page (to re-enable a denied permission). */
+export function openAppSettings(): void {
+  if (!isNative) return
+  try { NativeSettings.openAndroid({ option: AndroidSettings.ApplicationDetails }).catch(() => {}) } catch { /* plugin missing */ }
 }
