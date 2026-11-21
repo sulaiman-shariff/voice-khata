@@ -96,11 +96,12 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
           {big && <div className="num text-4xl font-extrabold">{rs(p.paise!)}</div>}
         </div>
       )}
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className={cn('mt-4 grid gap-2', p.kind === 'direction' ? 'grid-cols-3' : 'grid-cols-2')}>
         {p.kind === 'direction' ? (
           <>
             <Answer className="bg-credit text-white" onClick={() => onAnswer('udhaar')}>{t.credit}</Answer>
             <Answer className="bg-payment text-white" onClick={() => onAnswer('jama')}>{t.payment}</Answer>
+            <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.wrong}</Answer>
           </>
         ) : (p.kind === 'which' || p.kind === 'confusable') && p.options ? (
           p.options.map((o) => (

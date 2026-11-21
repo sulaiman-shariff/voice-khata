@@ -832,3 +832,56 @@ describe('one entry built across turns (21 Nov evening production logs)', () => 
     expect(h.out.some((m) => m.type === 'not_entry')).toBe(true)
   })
 })
+
+describe('question card taps and quiet questions (21 Nov local run)', () => {
+  it('tapping credit on the card saves at once, new customer included', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('Zaid 300.')
+    expect(h.s.pending?.kind).toBe('direction')
+    h.s.onClient({ type: 'answer', text: 'udhaar' })
+    await h.s.idle()
+    expect(h.ops().find((o) => o.op === 'add_customer')).toMatchObject({ name: 'Zaid' })
+    expect(h.entries()).toEqual([expect.objectContaining({ paise: 30000, direction: 'credit' })])
+    expect(h.s.pending).toBeNull()
+  })
+
+  it('"wrong" on the card writes nothing', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('Zaid 300.')
+    h.s.onClient({ type: 'answer', text: 'nahi' })
+    await h.s.idle()
+    expect(h.ops()).toHaveLength(0)
+    expect(h.s.pending).toBeNull()
+  })
+
+  it('a sentence full of numbers is not taken as the answer to "whose name?"', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('300')
+    expect(h.s.pending?.kind).toBe('name')
+    await h.turn('26, 23. 23, 26. Hey, 23 is a 26. Yeah.')
+    expect(h.said).toHaveLength(0)
+    expect(h.s.pending?.kind).toBe('name')
+  })
+
+  it('a question is asked again once, then waits quietly', async () => {
+    const h = harness([cust('s', 'Suresh')])
+    h.s.lang = 'en'
+    await h.turn('Suresh 300.')
+    await h.turn('This side, this side.')
+    expect(h.said.join(' ')).toMatch(/Credit, or paid\?/)
+    await h.turn('Over there, there.')
+    expect(h.said).toHaveLength(0)
+    expect(h.s.pending?.kind).toBe('direction')
+  })
+
+  it('when the model cannot read it and the fast reading is a bare guess, nothing is read back', async () => {
+    const h = harness([cust('s', 'Suresh')], { llm: () => ({ intent: 'unclear', sure: false }) })
+    h.s.lang = 'en'
+    await h.turn('Mahe teen sukha ka malli')
+    expect(h.s.pending).toBeNull()
+    expect(h.said.join(' ')).not.toMatch(/Sukha/)
+  })
+})

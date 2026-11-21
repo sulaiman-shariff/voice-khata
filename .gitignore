@@ -17,3 +17,6 @@ eval/results/*.wav
 .DS_Store
 *.log
 .playwright-mcp/
+
+# local test-run audio (KB_RECORD_DIR)
+eval/recordings/

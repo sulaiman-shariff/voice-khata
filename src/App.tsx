@@ -46,6 +46,10 @@ function Home({ store }: { store: KhataStore }) {
   /** ledger writes in order; feedback no longer waits for them */
   const writes = useRef<Promise<unknown>>(Promise.resolve())
   const [heard, setHeard] = useState('')
+  /** hands-free mic paused by a tap: the connection stays open */
+  const [muted, setMuted] = useState(false)
+  /** a tap that cut a reply short: a second tap right after it must not also mute */
+  const lastBargeAt = useRef(0)
   /** the heard line was taken as talk to someone else (shown dimmed, marked "not an entry") */
   const [heardIgnored, setHeardIgnored] = useState(false)
   const [said, setSaid] = useState('')
@@ -151,7 +155,8 @@ function Home({ store }: { store: KhataStore }) {
     })
   }
 
-  const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setStatus('idle'); setPending(null) }
+  const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setMuted(false); setStatus('idle'); setPending(null) }
+  const mute = (m: boolean) => { voice.current?.setMuted(m); setMuted(m) }
 
   // keep the screen awake while the khata is listening
   useEffect(() => {
@@ -175,7 +180,7 @@ function Home({ store }: { store: KhataStore }) {
   const shownDues = due
     .filter((d) => { const c = state.customers.get(d.cid); return !needle || !!c && (c.name.toLowerCase().includes(needle) || c.aliases.some((a) => a.toLowerCase().includes(needle))) })
     .sort((a, b) => (sort === 'name' ? name(a.cid).localeCompare(name(b.cid), t.loc) : b.paise - a.paise))
-  const statusText = !on ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : settings.handsFree ? t.listening : t.hold
+  const statusText = !on || muted ? (settings.handsFree ? t.tapToTalk : t.hold) : status === 'offline' ? t.offline : status === 'thinking' ? t.thinking : status === 'speaking' ? t.speaking : status === 'connecting' ? '…' : settings.handsFree ? t.listening : t.hold
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
@@ -291,12 +296,17 @@ function Home({ store }: { store: KhataStore }) {
             <div className="flex items-center justify-center gap-5">
               <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-black/10 active:scale-95"><Keyboard className="size-6" /></button>
               <MicButton
-                status={status} levelSource={levelSource} on={on} handsFree={settings.handsFree} t={t}
+                status={status} levelSource={levelSource} on={on && !muted} handsFree={settings.handsFree} t={t}
                 onPress={() => {
                   if (!on) void start(settings.lang!)
                   else if (!settings.handsFree) voice.current?.pttDown() // push-to-talk: hold
-                  else if (status === 'speaking') voice.current?.bargeIn() // tap while it talks: cut the reply short, keep listening
-                  else stop() // tap the same button again: mute
+                  else if (muted) mute(false) // unmute: instant, the connection never closed
+                  else if (status === 'speaking') {
+                    // tap while it talks: cut the reply short, keep listening
+                    lastBargeAt.current = Date.now()
+                    voice.current?.bargeIn()
+                  }
+                  else if (Date.now() - lastBargeAt.current > 1500) mute(true) // a quick second tap is part of the interrupt
                 }}
                 onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
               />

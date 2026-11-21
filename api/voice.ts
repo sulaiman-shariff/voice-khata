@@ -4,7 +4,9 @@
  * with Claude Haiku for hard turns. All dialogue logic lives in
  * server/session.ts.
  */
+import fs from 'node:fs'
 import http from 'node:http'
+import path from 'node:path'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { ClientMsg, ServerMsg } from '../shared/protocol.js'
 import { SttStream } from '../server/gnani/stt.js'
@@ -121,6 +123,7 @@ wss.on('connection', (ws, req) => {
     send,
     sendAudio: (pcm) => ws.readyState === WebSocket.OPEN && ws.send(pcm),
     log: L,
+    record: process.env.KB_RECORD_DIR ? recorder(process.env.KB_RECORD_DIR, sid) : undefined,
   })
   let audioFrames = 0
   // replayed speech (and live audio that arrives meanwhile) goes through a paced queue, in order
@@ -236,5 +239,29 @@ function validMsg(m: unknown): m is ClientMsg {
       return true
     default:
       return false
+  }
+}
+
+/** 16 kHz mono s16le PCM as a WAV file. */
+function wav(pcm: Buffer): Buffer {
+  const h = Buffer.alloc(44)
+  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8); h.write('fmt ', 12)
+  h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22); h.writeUInt32LE(16000, 24)
+  h.writeUInt32LE(32000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40)
+  return Buffer.concat([h, pcm])
+}
+
+/** Local test runs: every turn's audio and what the session made of it, for later analysis. Never set on Vercel. */
+function recorder(root: string, sid: string) {
+  const dir = path.join(root, `${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}_${sid}`)
+  fs.mkdirSync(dir, { recursive: true })
+  return (turn: Record<string, unknown>, pcm?: Buffer) => {
+    try {
+      const n = String(turn.turn).padStart(3, '0')
+      if (pcm?.length) fs.writeFileSync(path.join(dir, `${n}.wav`), wav(pcm))
+      fs.appendFileSync(path.join(dir, 'turns.jsonl'), JSON.stringify({ ...turn, audio: pcm?.length ? `${n}.wav` : null, at: new Date().toISOString() }) + '\n')
+    } catch (e) {
+      log.warn('record_failed', { error: e })
+    }
   }
 }

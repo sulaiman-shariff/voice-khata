@@ -50,6 +50,8 @@ export interface SessionDeps {
   sendAudio: (pcm: Buffer) => void
   /** Structured logger for this session (server/log.ts); silent when absent. */
   log?: Logger
+  /** Local test runs only (KB_RECORD_DIR): keep each turn's audio and what was made of it. */
+  record?: (turn: Record<string, unknown>, pcm?: Buffer) => void
   now?: () => number
   newId?: () => string
 }
@@ -91,6 +93,8 @@ interface Draft {
   readBack?: boolean
   /** heard, not typed: a name in it may be a mishearing, so a new account is read back first */
   spoken: boolean
+  /** times the open question about this line was asked again (once at most, then it waits quietly) */
+  reasked?: number
   paise: number
   alt: number | null // confusable alternative, rupees
   direction: Direction | null
@@ -666,6 +670,13 @@ export class Session {
           this.log.info('chatter_over_number', { turn, text })
           intent = { type: 'unknown' }
         }
+        // the model could not read it either, and the fast reading has no credit/paid word and no
+        // customer we know ("Sukha, 3 rupees" from "teen sau"; "So, 1300"): a guess, not an entry
+        else if (reading.intent === 'unclear' && intent.type === 'entries' &&
+          intent.entries.every((e) => !e.direction && !(e.name && this.lookup(e.name)))) {
+          this.log.info('unclear_over_guess', { turn, text })
+          intent = { type: 'unknown' }
+        }
         else if (change) unsureChange = true
         path = 'llm'
       } catch (e) {
@@ -750,6 +761,12 @@ export class Session {
         : {}),
       parseMs, llmMs, replyAudioMs: spoken ? Math.round(spoken.bytes / 32) : 0, cached: spoken?.cached ?? false,
     })
+    this.deps.record?.({
+      turn, src: _src, text, lang: this.lang, detectedLang: t?.lang ?? null, intent: intent.type, path,
+      reply: reply?.parts.join(' ') ?? null, pending: this.pending?.kind ?? null,
+      ops: reply?.ops ?? [], snrDb: t?.snrDb ?? null, noisy: t?.noisy ?? null,
+      finalAfterSpeechMs: t ? t.finalAt - t.speechEnd : null, parseMs, llmMs: llmMs ?? null,
+    }, t?.pcm)
     // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
     if (_src === 'voice' && !reply && !this.pending) this.deps.send({ type: 'not_entry', text })
     this.deps.send({ type: 'turn_done', resume: this.exportState() })
@@ -1313,8 +1330,9 @@ export class Session {
         return this.quietUnlessShort(text)
       case 'name': {
         const n = nameAnswer(text)
-        if (Session.offTopic(text)) return null
-        if (!n) return { parts: [R.askName(d.paise / 100)], ops: [] }
+        // an answer to "whose name?" is a name: a short reply, whatever numbers are in the room
+        if (Session.offTopic(text) || text.trim().split(/\s+/).length > 5 || (n && n.split(' ').length > 2)) return null
+        if (!n) return Session.askedEnough(d) ? null : { parts: [R.askName(d.paise / 100)], ops: [] }
         d.heardName = n
         this.fillDirection(d, text)
         return this.processDrafts([d, ...p.queue], acc)
@@ -1323,7 +1341,7 @@ export class Session {
         // the amount blank: read only the number (and a credit/paid word), whatever else was said
         // ("300 ಬರೀ" = "write 300": ಬರೀ is not a name here, the name is already known)
         const amounts = parseAmounts(text).filter((a) => a.value > 0)
-        if (!amounts.length) return Session.offTopic(text) ? null : { parts: [R.askAmount(this.customerName(d))], ops: [] }
+        if (!amounts.length) return Session.offTopic(text) || Session.askedEnough(d) ? null : { parts: [R.askAmount(this.customerName(d))], ops: [] }
         d.paise = Math.round(amounts[0].value * 100)
         d.reasons = d.reasons.filter((r) => r !== 'no-amount')
         if (amounts.some((a) => a.value !== amounts[0].value)) d.reasons.push('amounts-differ')
@@ -1335,10 +1353,16 @@ export class Session {
         // "yes"/"correct" does not say which: ask the same short question again
         if (!dir) {
           // a stray word while the question is on screen: keep it, say nothing; otherwise ask it again
-          if (intent.type !== 'yes' && Session.offTopic(text)) return null
+          if (intent.type !== 'yes' && (Session.offTopic(text) || Session.askedEnough(d))) return null
           return { parts: [R.askDirection(this.customerName(d), d.paise / 100)], ops: [] }
         }
         d.direction = dir
+        if (this.turnSrc === 'tap') {
+          // tapped on the card that shows the name and the amount: that is the yes, new customer included
+          d.confirmed = true
+          d.readBack = true
+          d.nameSure = true
+        }
         // the shopkeeper just stated the direction: only doubts about the amount itself remain
         d.reasons = d.reasons.filter((r) => AMOUNT_FLAGS.has(r))
         d.confidence = d.reasons.length ? 'low' : 'high'
@@ -1431,6 +1455,12 @@ export class Session {
    */
   static offTopic(text: string): boolean {
     return Session.strayWord(text) || (text.trim().split(/\s+/).length > 4 && !mentionsMoney(text))
+  }
+
+  /** True once the question about this line has been asked again; after that it waits on screen. */
+  static askedEnough(d: Draft): boolean {
+    d.reasked = (d.reasked ?? 0) + 1
+    return d.reasked > 1
   }
 
   /** A credit/paid word in an answer to another question fills that blank too ("Mahi, udhaar"). */

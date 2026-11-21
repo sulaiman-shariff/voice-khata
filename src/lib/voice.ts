@@ -162,6 +162,9 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     }
   }
 
+  /** muted: the mic is not sent, the connection and any open question stay */
+  let muted = false
+
   function onMicFrame(e: MessageEvent<{ buf: ArrayBuffer; level: number }>) {
     const { buf, level } = e.data
     micLevel = level
@@ -170,7 +173,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       lastLevelAt = now
       ev.level(level)
     }
-    if (micDead || !(handsFree || pttHeld)) return
+    if (micDead || muted || !(handsFree || pttHeld)) return
     speech.push(buf, level, now) // kept a few seconds so speech during a drop can be replayed
     if (!ws || ws.readyState !== WebSocket.OPEN || swapping) return // not sent now; replayed after reconnect
     ws.send(buf)
@@ -811,6 +814,11 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },
     setHandsFree,
+    setMuted(on: boolean) {
+      if (muted === on) return
+      log.info('setting', { muted: on })
+      muted = on
+    },
     setReadBackAll(on: boolean) {
       log.info('setting', { readBackAll: on })
       if (opts) opts.readBackAll = on

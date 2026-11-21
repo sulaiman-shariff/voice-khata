@@ -99,6 +99,8 @@ export interface VoiceClient {
   /** Send a fresh snapshot after local (non-voice) ledger changes. */
   sendSnapshot(): void
   setHandsFree(on: boolean): void
+  /** Stop sending the mic without closing the connection (the open question and the session stay). */
+  setMuted(on: boolean): void
   setFastSpeech(on: boolean): void
   setReadBackAll(on: boolean): void
   /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
