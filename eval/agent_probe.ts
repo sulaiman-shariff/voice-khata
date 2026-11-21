@@ -18,7 +18,7 @@ const cases: [string, AgentContext][] = [
   ['two things', { ...base, heard: h(['hi-IN', 'सुरेश से पांच सौ मिले और मीना का हिसाब बताओ']) }],
   ['aside', { ...base, heard: h(['hi-IN', 'भैया यह तीन किलो चीनी ले लो'], ['en-IN', 'bhaiya yeh teen kilo chini le lo']) }],
   ['garbled', { ...base, heard: h(['hi-IN', 'ज़ क्ष त्र'], ['en-IN', 'zed kay']) }],
-  ['pending yes', { ...base, heard: h(['hi-IN', 'हाँ']), pending: { kind: 'confirm', name: 'Ramesh', paise: 20000, direction: 'gave' } }],
+  ['pending yes', { ...base, heard: h(['hi-IN', 'हाँ']), pending: { kind: 'confirm', name: 'Ramesh', paise: 20000, direction: 'credit' } }],
 ]
 
 for (let round = 0; round < 2; round++) {

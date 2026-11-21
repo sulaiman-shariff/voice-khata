@@ -21,7 +21,7 @@ const s = new Session({
   openStt: () => ({ send() {}, commit() {}, setKeyterms() {}, close() {} }),
   speak: async () => ({ firstAudioMs: 0, bytes: 0 }), llm: async () => ({}), send() {}, sendAudio() {},
 })
-s.onClient({ type: 'hello', lang: 'en', firstRun: false, ptt: false, snapshot: { shopName: 'S', last: null,
+s.onClient({ type: 'hello', lang: 'en', firstRun: false, ptt: false, snapshot: { shopName: 'S', last: null, entries: [],
   customers: names.map((n, i) => ({ cid: `c${i}`, name: n, aliases: [], householdId: null, remindersOptIn: false, adult: false, balancePaise: 20000, typicalPaise: null })),
   today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 } } })
 const terms = [...names, 'credit', 'paid', 'udhaar', 'jama', 'rupees', 'clear', 'उधार', 'जमा', 'ಸಾಲ', 'ಜಮಾ']
