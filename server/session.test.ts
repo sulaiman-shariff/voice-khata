@@ -354,6 +354,73 @@ describe('the model (LLM) never introduces money that was not said', () => {
   })
 })
 
+describe('audio for unclear moments', () => {
+  const unclear = () => callsOf({ name: 'unclear', args: {} })
+
+  it('unclear text is retried once with the audio and the audio reading is used (read back)', async () => {
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: (_c, audio) => (audio ? addEntry('Suresh', 300, 'credit') : unclear()) })
+    await h.turn('mumble mumble')
+    expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false, true])
+    expect(h.ops()).toEqual([]) // nothing written until the shopkeeper says yes
+    expect(h.asks).toBe('confirm')
+    await h.turn('haan')
+    expect(h.written()).toEqual([['s', 300, 'credit']])
+  })
+
+  it('audio retry over budget asks the shopkeeper', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      lang: 'en',
+      agent: (_c, audio) => (audio ? addEntry('Suresh', 300, 'credit') : { ms: 2600, calls: unclear().calls }),
+    })
+    await h.turn('mumble mumble')
+    expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false])
+    expect(h.ops()).toEqual([])
+    expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+  })
+
+  it('an audio call slower than the remaining budget is cut off and the shopkeeper is asked', async () => {
+    vi.useFakeTimers()
+    try {
+      const h = harness([cust('s', 'Suresh')], {
+        lang: 'en',
+        agent: (_c, audio) => (audio ? new Promise(() => {}) : unclear()), // the audio call never answers
+      })
+      const p = h.turn('mumble mumble')
+      await vi.advanceTimersByTimeAsync(2600)
+      await p
+      expect(h.agentCalls.map((c) => !!c.audio)).toEqual([false, true])
+      expect(h.ops()).toEqual([])
+      expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+    } finally { vi.useRealTimers() }
+  })
+
+  it('an audio call that throws asks the shopkeeper', async () => {
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: (_c, audio) => { if (audio) throw new Error('boom'); return unclear() } })
+    await h.turn('mumble mumble')
+    expect(h.ops()).toEqual([])
+    expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+  })
+
+  it('an audio reading never answers an open question', async () => {
+    const h = harness([cust('s', 'Suresh')], {
+      lang: 'en',
+      agent: (c, audio) => (c.pending ? (audio ? callsOf({ name: 'answer_question', args: { kind: 'direction', value: 'credit' } }) : unclear()) : addEntry('Suresh', 300, null)),
+    })
+    await h.turn('Suresh 300')
+    expect(h.asks).toBe('direction')
+    await h.turn('mumble mumble')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('direction')
+  })
+
+  it('still unclear with the audio asks the shopkeeper', async () => {
+    const h = harness([cust('s', 'Suresh')], { lang: 'en', agent: unclear })
+    await h.turn('mumble mumble')
+    expect(h.agentCalls.length).toBe(2)
+    expect(h.said.join(' ')).toContain(say('en').didNotCatch())
+  })
+})
+
 describe('lists', () => {
   const three = () => [cust('r', 'Ramesh'), cust('s', 'Suresh'), cust('g', 'Geeta')]
 
@@ -513,17 +580,19 @@ describe('corrections and undo target the right entry', () => {
   })
 })
 
-describe('only a yes deletes everything', () => {
-  it('"sab data mita do" asks; no keeps the data, yes deletes', async () => {
+describe('only the typed word deletes everything', () => {
+  it('"sab data mita do" asks; no keeps the data, yes (spoken or tapped) does not delete, the typed word does', async () => {
     const h = harness([cust('r', 'Ramesh')])
     await h.turn('sab data mita do')
     await h.turn('nahi')
     expect(h.ops()).toEqual([])
     await h.turn('sab data mita do')
     expect(h.ops()).toEqual([])
-    await h.turn('haan') // a spoken yes only arms it
+    await h.turn('haan') // a spoken yes never erases
     expect(h.ops()).toEqual([])
-    await h.tap('yes') // the on-screen button erases
+    await h.tap('yes') // nor does a tapped yes
+    expect(h.ops()).toEqual([])
+    await h.answer('मिटाओ') // only the typed word erases
     expect(h.ops()).toEqual([{ op: 'delete_all' }])
   })
 })
@@ -609,10 +678,10 @@ describe('answers about the ledger', () => {
   it('reminders go only to opted-in adults, with the right customer, amount and shop', async () => {
     const h = harness([cust('r', 'Ramesh', 500), cust('g', 'Geeta', 300, { remindersOptIn: true, adult: true })])
     await h.turn('Ramesh ko yaad dilao')
-    expect(h.out.some((m) => m.type === 'remind')).toBe(false)
+    expect(h.out.some((m) => m.type === 'ready')).toBe(false)
     await h.turn('Geeta ko yaad dilao')
     await h.turn('haan') // each send is confirmed
-    expect(h.out.find((m) => m.type === 'remind')).toMatchObject({ cid: 'g', text: expect.stringMatching(/300[\s\S]*Sharma Kirana|Sharma Kirana[\s\S]*300/) })
+    expect(h.out.find((m) => m.type === 'ready')).toMatchObject({ kind: 'whatsapp', cid: 'g', text: expect.stringMatching(/300[\s\S]*Sharma Kirana|Sharma Kirana[\s\S]*300/) })
   })
 
   it('the first run discloses that this is an AI', async () => {
@@ -695,12 +764,12 @@ describe('understanding path: instant for a plain entry, the agent for everythin
     expect(h.said).toHaveLength(1)
   })
 
-  it('the agent receives every language stream, and the audio', async () => {
+  it('the agent receives every language stream (audio only on the unclear retry)', async () => {
     const heard = [{ locale: 'hi-IN', text: 'रमेश का हिसाब' }, { locale: 'en-IN', text: 'Ramesh ka hisaab' }]
     const h = harness(people(), { agent: () => callsOf({ name: 'show_customer', args: { name: 'Ramesh' } }) })
     await h.turn('रमेश का हिसाब', false, heard)
     expect(h.agentCalls[0].ctx.heard).toEqual(heard)
-    expect(h.agentCalls[0].audio?.length).toBeGreaterThan(0)
+    expect(h.agentCalls[0].audio).toBeUndefined()
   })
 
   it('not_for_me writes nothing, says nothing and marks not_entry', async () => {
@@ -925,5 +994,98 @@ describe('attention: the window and the sleep word', () => {
     await h.typed('Ramesh 300')
     expect(h.asks).not.toBeNull()
     expect(states(h.out).at(-1)).toBe('awake')
+  })
+})
+
+describe('save anyway', () => {
+  const text = 'bhaiya do kilo cheeni dena'
+  it('force{text} after a not_for_me goes to the agent for the identical text, and is never silent', async () => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en', agent: () => { calls++; return callsOf({ name: 'not_for_me', args: {} }) } })
+    await h.turn(text)
+    expect(calls).toBe(1)
+    expect(h.out.some((m) => m.type === 'not_entry')).toBe(true)
+    h.said.length = 0
+    h.s.onClient({ type: 'force', text })
+    await h.s.idle()
+    expect(calls).toBe(2)
+    expect(h.said.length).toBe(1) // the agent still said not for me: the app says so instead of staying silent
+  })
+
+  it('force{text} after the agent took a line for chatter writes the entry after the read-back', async () => {
+    const line = 'wo Ramesh ke do sau likh dena kya'
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh', 0)], {
+      lang: 'en',
+      agent: () => (++calls === 1 ? callsOf({ name: 'not_for_me', args: {} }) : addEntry('Ramesh', 200, 'credit')),
+    })
+    await h.turn(line)
+    expect(h.ops()).toEqual([])
+    h.s.onClient({ type: 'force', text: line })
+    await h.s.idle()
+    expect(calls).toBe(2)
+    expect(h.asks).toBe('confirm') // addressed to the app: read back (no credit word was said), not dropped
+    await h.tap('yes')
+    expect(h.written()).toEqual([['r', 200, 'credit']])
+  })
+
+  it('a forced line while a question is open is a new instruction, not the answer', async () => {
+    const h = harness([cust('r', 'Ramesh', 0), cust('s', 'Suresh', 0)], { lang: 'en' })
+    await h.turn('Ramesh 340')
+    expect(h.asks).toBe('direction')
+    h.s.onClient({ type: 'force', text: 'Suresh 100 credit' })
+    await h.s.idle()
+    expect(h.written()).toEqual([['s', 100, 'credit']])
+    expect(h.asks).toBeNull()
+  })
+
+  it('a tool reply with a show and a ready card reaches the phone', async () => {
+    const h = harness([cust('r', 'Ramesh', 0)], {
+      lang: 'en',
+      agent: () => callsOf({ name: 'show_today', args: {} }, { name: 'backup', args: {} }),
+    })
+    await h.turn('show me everything and back it up')
+    expect(h.out).toContainEqual({ type: 'show', view: 'today' })
+    expect(h.out).toContainEqual({ type: 'ready', kind: 'backup' })
+  })
+})
+
+describe('erase needs the typed word', () => {
+  const setup = () => {
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en' })
+    h.s.pending = { kind: 'delete', requireType: 'DELETE' }
+    return h
+  }
+  it('a spoken haan and a yes tap do not erase', async () => {
+    const h = setup()
+    await h.turn('haan')
+    await h.tap('yes')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('delete')
+  })
+  it('answer(word) erases', async () => {
+    const h = setup()
+    await h.answer('delete')
+    expect(h.ops()).toEqual([{ op: 'delete_all' }])
+  })
+  it('answer(wrong word) does not erase', async () => {
+    const h = setup()
+    await h.answer('DELETED')
+    expect(h.ops()).toEqual([])
+  })
+})
+
+describe('the fast-path "delete all" also needs the typed word', () => {
+  it('a spoken delete-all then haan does not erase; the typed word does', async () => {
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'hi' })
+    // the legacy fast-path reading (delete_all) opens the question without the agent
+    ;(h.s as unknown as { dispatch(i: unknown, t: string, m: unknown): unknown }).dispatch({ type: 'delete_all' }, 'sab data mita do', { snrDb: null, noisy: false, path: 'fast' })
+    expect(h.s.pending).toEqual({ kind: 'delete', requireType: 'मिटाओ' })
+    await h.turn('haan')
+    await h.tap('yes')
+    expect(h.ops()).toEqual([])
+    expect(h.asks).toBe('delete')
+    await h.answer('मिटाओ')
+    expect(h.ops()).toEqual([{ op: 'delete_all' }])
   })
 })

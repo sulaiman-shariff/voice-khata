@@ -1,4 +1,4 @@
-import { Check, Mic, Pencil, Sparkles, Square, X } from 'lucide-react'
+import { Check, Mic, Pencil, Sparkles, Square, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
@@ -86,7 +86,10 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
   return (
     <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
       {p.kind === 'delete' ? (
-        <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
+        <div>
+          <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
+          {p.requireType && <div className="mt-1 text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{p.requireType}</b></div>}
+        </div>
       ) : (
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
@@ -110,7 +113,23 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
             </Answer>
           ))
         ) : p.kind === 'name' ? (
-          <Answer className="col-span-2 bg-secondary" onClick={() => onAnswer('nahi')}>{t.no}</Answer>
+          <>
+            <TextAnswer label={t.typeName} send={t.send} onSubmit={onAnswer} />
+            <Answer className="col-span-2 bg-secondary" onClick={() => onAnswer('nahi')}>{t.no}</Answer>
+          </>
+        ) : p.kind === 'amount' ? (
+          <>
+            {(p.amounts ?? []).map((a) => (
+              <Answer key={a} className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer(String(a))}><span className="num">₹{a}</span></Answer>
+            ))}
+            {!p.amounts?.length && <TextAnswer label={t.amount} send={t.send} numeric onSubmit={onAnswer} />}
+            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+          </>
+        ) : p.kind === 'delete' && p.requireType ? (
+          <>
+            <EraseTyped word={p.requireType} t={t} onErase={onAnswer} />
+            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+          </>
         ) : (
           <>
             <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
@@ -119,6 +138,49 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
         )}
       </div>
     </div>
+  )
+}
+
+/** Erase confirmation: the button stays disabled until the word is typed; it submits the word. */
+export function EraseTyped({ word, t, onErase, className }: { word: string; t: UiStrings; onErase: (w: string) => void; className?: string }) {
+  const [v, setV] = useState('')
+  const ok = v.normalize('NFC').trim().toLowerCase() === word.normalize('NFC').toLowerCase()
+  return (
+    <form className={cn('col-span-full flex gap-2', className)} onSubmit={(e) => { e.preventDefault(); if (ok) onErase(word) }}>
+      <input
+        value={v} onChange={(e) => setV(e.target.value)} aria-label={word} placeholder={word} maxLength={20} autoComplete="off" autoCapitalize="off"
+        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+      />
+      <button type="submit" disabled={!ok} className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-2xl bg-destructive px-4 text-lg font-semibold text-white disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
+    </form>
+  )
+}
+
+/** A tool made something ready: one big button does it (nothing is sent or saved before the tap). */
+export function ReadyCard({ label, text, to, onGo, onDismiss, t }: { label: string; text?: string; to?: string; onGo: () => void; onDismiss: () => void; t: UiStrings }) {
+  return (
+    <div className="stamp rounded-3xl border-2 border-payment/40 bg-card p-4 shadow-lg">
+      {to && <div className="mb-1 text-base font-semibold">{t.toWho}: {to}</div>}
+      {text && <pre className="mb-3 max-h-40 overflow-y-auto whitespace-pre-wrap font-sans text-sm text-muted-foreground">{text}</pre>}
+      <button onClick={onGo} className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-payment text-xl font-bold text-white active:scale-[.97]">{label}</button>
+      <button onClick={onDismiss} className="mt-2 min-h-11 w-full rounded-2xl text-base text-muted-foreground">{t.dismiss}</button>
+    </div>
+  )
+}
+
+/** A text answer to the open question (a name, an amount), submitted with the keyboard or the button. */
+function TextAnswer({ label, send, numeric, onSubmit }: { label: string; send: string; numeric?: boolean; onSubmit: (v: string) => void }) {
+  const [v, setV] = useState('')
+  const go = () => { const x = v.trim(); if (x) { onSubmit(x); setV('') } }
+  return (
+    <form className="col-span-full flex gap-2" onSubmit={(e) => { e.preventDefault(); go() }}>
+      <input
+        value={v} onChange={(e) => setV(e.target.value)} aria-label={label} placeholder={label} maxLength={40}
+        inputMode={numeric ? 'numeric' : 'text'} enterKeyHint="send"
+        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+      />
+      <button type="submit" disabled={!v.trim()} className="h-14 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground disabled:opacity-50">{send}</button>
+    </form>
   )
 }
 

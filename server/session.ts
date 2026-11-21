@@ -10,7 +10,7 @@
 import { type Intent, mentionsSettle, mentionsMoney, parseFast, refersBack, turnComplete } from '../shared/intent.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, ServerMsg, SettingMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
+import { type Lang, LOCALE, eraseWord, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { isSleepWord, spotWake } from '../shared/wake.js'
 import { Attention } from './attention.js'
@@ -75,6 +75,9 @@ type TurnTiming = { speechEnd: number; commitAt: number | null; finalAt: number;
 const UTT_AUDIO_MAX = 20 * 16000 * 2
 /** Reopen the STT stream after this long, at a quiet moment (Prisma's cap is 15 min). */
 const STT_REFRESH_MS = 14 * 60_000
+
+/** Total time the agent may take for one turn, the audio retry included. */
+const AUDIO_BUDGET_MS = 2500
 
 export class Session {
   lang: Lang = 'hi'
@@ -286,6 +289,11 @@ export class Session {
       case 'answer':
         this.log.info('input', { kind: 'answer', text: msg.text })
         if (msg.text.length <= 60) this.enqueue(() => this.typedTurn(msg.text))
+        break
+      case 'force':
+        // "Save anyway" on a not-an-entry line: addressed to the app, never dropped as talk to someone else
+        this.log.info('input', { kind: 'force', text: msg.text })
+        if (msg.text.trim() && msg.text.length <= 2000) this.enqueue(() => this.handleText(msg.text.trim(), null, 'tap', true))
         break
       case 'barge':
         this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
@@ -509,7 +517,8 @@ export class Session {
 
   private takeUttAudio(): Buffer | undefined {
     if (!this.uttAudio.length) return undefined
-    const pcm = Buffer.concat(this.uttAudio)
+    let pcm = Buffer.concat(this.uttAudio)
+    if (pcm.length > UTT_AUDIO_MAX) pcm = pcm.subarray(pcm.length - UTT_AUDIO_MAX) // the latest 20 s
     this.uttAudio = []
     this.uttBytes = 0
     return pcm
@@ -577,10 +586,14 @@ export class Session {
     text: string,
     t: TurnTiming | null,
     _src: 'voice' | 'tap' | 'resend',
+    /** "Save anyway": handled as addressed to the app; the model may not answer not_for_me */
+    forced = false,
   ): Promise<void> {
     const t0 = this.now()
     this.ledger.turnSrc = _src
     const heard = t?.heard?.length ? t.heard : [{ locale: LOCALE[this.lang], text }]
+    // "Save anyway" is a new instruction to the app, never the answer to a question left open
+    if (forced) this.pending = null
     // a question left hanging (shopkeeper turned to a customer) expires instead of catching a later "haan"
     if (this.pending && this.now() - this.ledger.pendingAt > PENDING_TTL_MS) {
       this.log.info('pending_expired', { kind: this.pending.kind, ageMs: this.now() - this.ledger.pendingAt })
@@ -603,7 +616,8 @@ export class Session {
       if (this.pending) {
         if (this.ledger.canAnswerFast(text, intent)) reply = this.ledger.answerPending(text, intent, meta)
         else ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
-      } else if (intent.type === 'entries' && this.isInstant(intent)) reply = this.dispatch(intent, text, meta)
+      } else if (forced) ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
+      else if (intent.type === 'entries' && this.isInstant(intent)) reply = this.dispatch(intent, text, meta)
       // "Suresh wali entry hata do" names an older entry: only the agent can pick it
       else if (intent.type === 'undo' && !this.ledger.candidates(text).length) reply = this.dispatch(intent, text, meta)
       else if (intent.type === 'yes' || intent.type === 'no') reply = null // nothing pending: a stray haan/nahi
@@ -612,6 +626,8 @@ export class Session {
     } finally {
       this.ledger.heardAmounts = []
     }
+    // forced: the shopkeeper said this is for the app, so it is never answered with silence
+    if (forced && (notForMe || !reply)) { notForMe = false; reply = { parts: [say(this.lang).didNotCatch()], ops: [] } }
     if (!this.pending) this.followDetectedLang(t?.lang, intent)
     const parseMs = this.now() - t0
     // a turn lost to a dropped connection, handled again: say so, then the full read-back
@@ -632,7 +648,7 @@ export class Session {
       this.applySetting(reply.setting)
       extra.push(reply.setting)
     }
-    if (reply?.ready?.kind === 'whatsapp' && reply.ready.cid && reply.ready.text) extra.push({ type: 'remind', cid: reply.ready.cid, text: reply.ready.text })
+    if (reply?.ready) extra.push({ type: 'ready', ...reply.ready })
     for (const m of extra) this.deps.send(m)
     this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
 
@@ -691,6 +707,7 @@ export class Session {
     this.deps.send({ type: 'turn_done', resume: this.ledger.exportState() })
   }
 
+
   // ------------------------------------------------------------------ continuity across reconnects
   private remember(line: string) {
     this.ledger.history.push(line.slice(0, 300))
@@ -745,11 +762,33 @@ export class Session {
       ({ reply: { parts: [meta.noisy ? R.noisyRepeat() : R.didNotCatch()], ops: [] }, notForMe: false, ms: undefined, extra: [] })
     const l0 = this.now()
     let calls: ToolCall[]
+    let fromAudio = false
     try {
       if (!this.deps.agent) throw new Error('no agent')
-      const r = await this.deps.agent(this.agentContext(heard), t?.pcm)
+      const ctx = this.agentContext(heard)
+      const r = await this.deps.agent(ctx, undefined) // the words first: the audio only when they are unclear
       calls = r.calls
       this.log.info('agent', { text, ms: r.ms, calls: calls.map((c) => c.name) })
+      // unclear words, a spoken turn: let the model hear the audio, if the budget still allows
+      if (calls.length && calls.every((c) => c.name === 'unclear') && t?.pcm?.length) {
+        const left = AUDIO_BUDGET_MS - Math.max(r.ms, this.now() - l0)
+        if (left > 0) {
+          let timer: ReturnType<typeof setTimeout> | undefined
+          try {
+            const a = await Promise.race([
+              this.deps.agent(ctx, t.pcm),
+              new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error('audio budget')), left) }),
+            ])
+            this.log.info('agent_audio', { text, ms: a.ms, calls: a.calls.map((c) => c.name) })
+            calls = a.calls
+            fromAudio = true
+          } catch (e) {
+            this.log.warn('agent_audio_failed', { text, error: e })
+          } finally {
+            clearTimeout(timer)
+          }
+        }
+      }
     } catch (e) {
       this.log.error('agent_failed', { text, ms: this.now() - l0, error: e })
       return fail()
@@ -760,7 +799,7 @@ export class Session {
     const merged: Reply = { parts: [], ops: [] }
     const extra: ServerMsg[] = []
     for (const call of calls) {
-      const r = runTool(this.ledger, call, { ...meta, transcript: text, heard: spoken })
+      const r = runTool(this.ledger, call, { ...meta, transcript: text, heard: spoken, fromAudio })
       merged.parts.push(...r.parts)
       for (const op of r.ops) this.ledger.applyLocal(op)
       merged.ops.push(...r.ops)
@@ -844,15 +883,14 @@ export class Session {
         if (!c.remindersOptIn || !c.adult) return { parts: [R.remindNotAllowed(c.name)], ops: [] }
         const msg = guardReply(R.reminderText(c.name, c.balancePaise / 100, this.snap.shopName))
         if (!msg) return { parts: [R.didNotCatch()], ops: [] }
-        this.deps.send({ type: 'remind', cid: c.cid, text: msg })
-        return { parts: [R.remindReady(c.name)], ops: [] }
+        return { parts: [R.remindReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text: msg } }
       }
       case 'privacy':
         this.deps.send({ type: 'show', view: 'privacy' })
         return { parts: [R.privacy()], ops: [] }
       case 'delete_all':
-        this.pending = { kind: 'delete' }
-        return { parts: [R.deleteAsk()], ops: [] }
+        this.pending = { kind: 'delete', requireType: eraseWord(this.lang) }
+        return { parts: [R.eraseType(eraseWord(this.lang))], ops: [] }
       case 'unknown':
         return null // the agent reads anything the fast parse cannot
     }

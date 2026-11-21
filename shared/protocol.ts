@@ -90,6 +90,8 @@ export type ClientMsg =
   | { type: 'wake'; source: 'tap' | 'hold' | 'phone' } // the shopkeeper woke the agent without the wake word
   | { type: 'sleep' } // tapped while awake: go back to sleep now
   | { type: 'hold_end' } // the mic button held for 'wake' was released
+  /** "Save anyway" on a dimmed not-an-entry line: handled as addressed to the agent, never not_for_me */
+  | { type: 'force'; text: string }
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
@@ -102,8 +104,10 @@ export interface PendingView {
   paise?: number
   direction?: Direction | null
   options?: string[]
-  /** delete: a spoken yes is not enough, the on-screen button must be tapped */
-  requireTap?: boolean
+  /** amount: the amounts to choose from (rupees), shown as buttons */
+  amounts?: number[]
+  /** delete: only typing this word (an answer / typed text) erases; a spoken or tapped yes never does */
+  requireType?: string
 }
 
 /** A setting the agent changed by voice; the phone applies and stores it. */
@@ -145,8 +149,14 @@ export type ServerMsg =
   | { type: 'unduck' } // false alarm: restore volume
   | { type: 'stop_audio' } // real barge-in: stop playback now
   | { type: 'pending'; pending: PendingView | null }
-  | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' }
-  | { type: 'remind'; cid: string; text: string }
+  | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' | 'today' | 'settings' | 'close' }
+  | { type: 'show'; view: 'top_debtors'; count?: number }
+  /** entries between two days (YYYY-MM-DD, inclusive) */
+  | { type: 'show'; view: 'history'; from: string; to: string; cid?: string }
+  | { type: 'show'; view: 'search'; text: string; cids?: string[]; eids?: string[] }
+  | SettingMsg
+  /** one big button on the phone: open WhatsApp with `text` (to `cid`'s number) or start the backup */
+  | { type: 'ready'; kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */

@@ -15,8 +15,8 @@ import { EntrySheet, TypeSheet, type EntryMode } from '@/ui/EntrySheet'
 import { heardFeedback, primeFeedback, savedFeedback, sleepChime, wakeChime } from '@/ui/feedback'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
-import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
-import { CustomerSheet, PrivacySheet, SettingsSheet, remindLink } from '@/ui/Sheets'
+import { MicButton, PendingCard, ReadyCard, Waterfall } from '@/ui/parts'
+import { CustomerSheet, ListSheet, type ListView, PrivacySheet, SettingsSheet, remindLink, shareWhatsApp } from '@/ui/Sheets'
 import { ui } from '@/ui/strings'
 
 const ConfirmPage = lazy(() => import('@/pages/ConfirmPage'))
@@ -56,6 +56,10 @@ function Home({ store }: { store: KhataStore }) {
   const [tab, setTab] = useState<'today' | 'dues'>('today')
   const [cid, setCid] = useState<string | null>(null)
   const [sheet, setSheet] = useState<'settings' | 'privacy' | null>(null)
+  /** a spoken "show ..." list: a day's entries, a search, the biggest dues */
+  const [listView, setListView] = useState<ListView | null>(null)
+  /** a tool's one-tap card: send this on WhatsApp, or open the backup */
+  const [ready, setReady] = useState<{ kind: 'whatsapp' | 'backup'; cid?: string; text?: string } | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const [on, setOn] = useState(false)
   const [net, setNet] = useState<'good' | 'slow' | 'offline'>('good')
@@ -125,12 +129,12 @@ function Home({ store }: { store: KhataStore }) {
         if (lastStatus.current !== 'speaking') setSaid('')
         if (ignoredTimer.current) clearTimeout(ignoredTimer.current)
         // "not an entry" stays readable for a few seconds, a normal heard line goes with the turn
-        if (ignoredRef.current) ignoredTimer.current = setTimeout(() => { setHeard(''); markIgnored(false) }, 3000)
+        if (ignoredRef.current) ignoredTimer.current = setTimeout(() => { setHeard(''); markIgnored(false) }, 6000)
         else setHeard('')
       },
       micError: () => { setMicReady(false); toast.error(t.micError) },
       partial: (x) => { newTurn(); setHeard(x); markIgnored(false) },
-      final: (x) => { newTurn(); setHeard(x); markIgnored(false) },
+      final: (x) => { setReady(null); newTurn(); setHeard(x); markIgnored(false) },
       notEntry: () => markIgnored(true),
       say: (x) => setSaid(x),
       ops: (ops) => onOps(ops),
@@ -138,15 +142,30 @@ function Home({ store }: { store: KhataStore }) {
       resent: (text) => toast(`${t.resent}: “${text.length > 60 ? `${text.slice(0, 60)}…` : text}”`, { duration: 6000 }),
       pending: (p) => {
         setPending(p)
-        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false) } // the question card must be visible
+        if (p) { setCid(null); setSheet(null); setEntry(null); setTyping(false); setListView(null); setReady(null) } // the question card must be visible
       },
       show: (s) => {
-        if (s.view === 'customer') setCid(s.cid)
-        else if (s.view === 'dues') setTab('dues')
-        else if (s.view === 'summary') setTab('today')
+        // one view at a time: the new one replaces whatever was open
+        setReady(null) // a card from an earlier turn must not stay tappable
+        if (s.view !== 'customer') setCid(null)
+        if (s.view !== 'history' && s.view !== 'search' && s.view !== 'top_debtors') setListView(null)
+        if (s.view === 'customer') { setListView(null); setSheet(null); setCid(s.cid) }
+        else if (s.view === 'dues') { setSheet(null); setTab('dues') }
+        else if (s.view === 'summary' || s.view === 'today') { setSheet(null); setTab('today') }
         else if (s.view === 'privacy') setSheet('privacy')
+        else if (s.view === 'settings') setSheet('settings')
+        else if (s.view === 'history') { setSheet(null); setListView({ k: 'history', from: s.from, to: s.to, cid: s.cid }) }
+        else if (s.view === 'search') { setSheet(null); setListView({ k: 'search', text: s.text, cids: s.cids, eids: s.eids }) }
+        else if (s.view === 'top_debtors') { setSheet(null); setListView({ k: 'top', count: s.count }) }
+        else if (s.view === 'close') { setSheet(null); setListView(null); setEntry(null); setTyping(false); setReady(null) }
       },
-      remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { clientLog.warn('remind_failed', { error: String(e) }) } },
+      // settings changed by voice: stored here, and the voice client told (the language is applied by `lang`, the mic stays on)
+      setting: (m) => {
+        if (m.key === 'readBack') { const on = m.value === true; void store.updateSettings({ readBackAll: on }); voice.current?.setReadBackAll(on) }
+        else if (m.key === 'fastSpeech') { const on = m.value === true; void store.updateSettings({ fastSpeech: on }); voice.current?.setFastSpeech(on) }
+        else if (m.key === 'shopName' && typeof m.value === 'string') void store.updateSettings({ shopName: m.value })
+      },
+      ready: (m) => setReady({ kind: m.kind, cid: m.cid, text: m.text }),
       metrics: setMetrics,
       error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),
@@ -167,6 +186,12 @@ function Home({ store }: { store: KhataStore }) {
     }
   }, [onOps, store, t])
 
+  /** who a WhatsApp card goes to: the customer's name and number, or a note that WhatsApp will ask */
+  const recipient = (c?: string) => {
+    const cu = c ? store.state.customers.get(c) : undefined
+    if (!cu) return t.noNumber
+    return cu.phone ? `${cu.name} · ${cu.phone}` : `${cu.name} · ${t.noNumber}`
+  }
   const sendTyped = async (text: string) => {
     if (!voice.current) await start(store.settings.lang!, false)
     if (!voice.current) return false
@@ -305,6 +330,21 @@ function Home({ store }: { store: KhataStore }) {
 
       <footer className="pointer-events-none fixed inset-x-0 bottom-0 mx-auto max-w-md bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-10 pb-5">
         <div className="pointer-events-auto space-y-3">
+          {ready && !pending && (
+            <ReadyCard
+              t={t} text={ready.kind === 'whatsapp' ? ready.text : undefined}
+              to={ready.kind === 'whatsapp' ? recipient(ready.cid) : undefined}
+              label={ready.kind === 'whatsapp' ? t.sendWhatsApp : t.openBackup}
+              onDismiss={() => setReady(null)}
+              onGo={() => {
+                try {
+                  if (ready.kind === 'backup') setSheet('privacy')
+                  else if (ready.text) { if (ready.cid) remindLink(store, ready.cid, ready.text); else shareWhatsApp(ready.text) }
+                } catch (e) { clientLog.warn('ready_failed', { error: String(e) }) }
+                setReady(null)
+              }}
+            />
+          )}
           {pending && <PendingCard p={pending} t={t} onAnswer={(a) => {
             if (a === 'haan') voice.current?.tap('yes')
             else if (a === 'nahi') voice.current?.tap('no')
@@ -318,8 +358,9 @@ function Home({ store }: { store: KhataStore }) {
           {(heard || said) && on && (
             <div className="space-y-1 text-center">
               {heard && (
-                <div className={cn('truncate text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
-                  “{heard}”{heardIgnored && <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
+                <div className={cn('flex items-center justify-center gap-1.5 text-sm text-muted-foreground', heardIgnored && 'opacity-60')}>
+                  <span className="min-w-0 truncate">“{heard}”</span>{heardIgnored && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs">{t.notEntry}</span>}
+                  {heardIgnored && <button onClick={() => { const x = heard; markIgnored(false); setHeard(''); voice.current?.force(x) }} className="min-h-11 shrink-0 rounded-full px-3 text-xs font-semibold text-primary ring-1 ring-primary/30">{t.saveAnyway}</button>}
                 </div>
               )}
               {said && <div className="text-base font-medium">{said}</div>}
@@ -363,6 +404,8 @@ function Home({ store }: { store: KhataStore }) {
 
       <CustomerSheet store={store} cid={cid} t={t} backup={backup} onClose={() => setCid(null)} onChanged={() => voice.current?.sendSnapshot()} onEntry={openEntry} />
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
+      <ListSheet store={store} view={listView} t={t} onClose={() => setListView(null)}
+        onCustomer={(c) => { setListView(null); setCid(c) }} onEntry={(eid) => { setListView(null); setEntry({ kind: 'edit', eid }) }} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
         onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll); if (p.lang) voice.current?.setLang(p.lang) }} />

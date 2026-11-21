@@ -7,8 +7,8 @@
  *    are dropped, and direction-guessed / name-changed lead to confirm.
  *  - Remove, move, merge, settle and erase always go through a pending question. undo_last is
  *    instant only for a heard "hata do" within 60 s of this session writing that entry.
- *  - erase_all creates pending.kind === 'delete' with view.requireTap = true: a spoken yes only
- *    arms it, the on-screen button tap erases.
+ *  - erase_all creates pending.kind === 'delete' with requireType = the localized word: only
+ *    typing it erases; a spoken or tapped yes never does.
  *  - send_reminder refuses unless remindersOptIn && adult, and asks for confirmation; nothing is
  *    sent by the server, the phone gets a `ready` card and the shopkeeper taps to send.
  *  - A heard name not in the ledger is never written without a yes (add_customer asks; a near
@@ -27,7 +27,7 @@ import { parseFast } from '../../shared/intent.js'
 import { NAME_SURE, matchName } from '../../shared/names.js'
 import { formatINR } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { LANGS, LANG_NAME, type Lang, guardReply, say, sayMore } from '../../shared/replies.js'
+import { LANGS, LANG_NAME, type Lang, eraseWord, guardReply, say, sayMore } from '../../shared/replies.js'
 import { type ChooseOption, LedgerCore, type Reply, type TurnMeta } from '../ledger/core.js'
 import type { GeminiTool } from '../parse/gemini.js'
 import { type LlmReading, validate } from '../parse/llm.js'
@@ -99,7 +99,7 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
   { name: 'set_shop_name', description: 'Set the shop\'s name.', parameters: obj({ name: STR }, ['name']) },
   { name: 'open_privacy', description: 'Where the data goes, is this an AI, how it works.', parameters: obj({}) },
   { name: 'backup', description: 'Make a backup file of the ledger.', parameters: obj({}) },
-  { name: 'erase_all', description: 'Erase all data (needs a spoken yes and then a tap).', parameters: obj({}) },
+  { name: 'erase_all', description: 'Erase all data (the shopkeeper must then type the word on screen; a spoken yes never erases).', parameters: obj({}) },
   {
     name: 'answer_question',
     description: 'Answer the question the app is waiting on (pending).',
@@ -124,7 +124,12 @@ const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase())
 const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
 
 /** The sentence the tool was called for, and every language stream's reading of it (when there are several). */
-export type ToolMeta = TurnMeta & { transcript: string; heard?: string[] }
+/**
+ * `fromAudio`: the reading came from the model hearing the audio, not from the transcripts. Honoured by
+ * add_entries (read back, amounts may come from the audio), change_entry (asked first) and
+ * answer_question (refused: an open question is answered only from heard text).
+ */
+export type ToolMeta = TurnMeta & { transcript: string; heard?: string[]; fromAudio?: boolean }
 
 /** Args only our own "which one" continuations may set (`<slot>__cid`, `_new`): never taken from the model. */
 const internalKey = (k: string) => k.startsWith('_') || k.includes('__')
@@ -255,8 +260,11 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         entries: (Array.isArray(a.entries) ? a.entries : []) as LlmReading['entries'],
         sure: a.sure !== false,
       }
-      const intent = validate(text, raw, contextAmounts, recent.length)
+      // an audio reading may carry amounts no transcript has; it is read back (hard reason) before any write
+      const known = meta.fromAudio ? [...contextAmounts, ...(raw.entries ?? []).map((e) => e?.amount).filter((v): v is number => typeof v === 'number')] : contextAmounts
+      const intent = validate(text, raw, known, recent.length)
       if (intent.type !== 'entries') return notCaught()
+      if (meta.fromAudio) for (const e of intent.entries) { e.reasons = [...e.reasons, 'from-audio']; e.confidence = 'low' }
       return core.addEntries(intent, text, tm)
     }
     case 'change_entry': {
@@ -267,9 +275,10 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         modify: { ref, amount: num(a.new_amount), direction: a.new_direction === 'credit' || a.new_direction === 'payment' ? a.new_direction : null, name: null, remove: false },
       }
       // the new amount must have been heard, like any amount
-      const intent = validate(text, reading, contextAmounts, entries.length)
+      const newAmount = num(a.new_amount)
+      const intent = validate(text, reading, meta.fromAudio && newAmount != null ? [...contextAmounts, newAmount] : contextAmounts, entries.length)
       if (intent.type !== 'modify') return notCaught()
-      return core.modifyEntry(intent)
+      return core.modifyEntry(intent, meta.fromAudio ? { ask: true } : undefined)
     }
     case 'remove_entry': {
       const ref = findRef()
@@ -388,9 +397,9 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       return { parts: [R.statementReady(c.name)], ops: [], ready: { kind: 'whatsapp', cid: c.cid, text: body } }
     }
     case 'erase_all':
-      // a spoken yes arms it, then only the on-screen button erases (LedgerCore.answerPending)
-      core.pending = { kind: 'delete', requireTap: true }
-      return speak(R.eraseAsk())
+      // only the typed word erases (LedgerCore.answerPending)
+      core.pending = { kind: 'delete', requireType: eraseWord(lang) }
+      return speak(R.eraseType(eraseWord(lang)))
 
     // ------------------------------------------------------------------ show and ask
     case 'show_customer':
@@ -421,12 +430,14 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const dayStr = day !== null ? istDay(day) : null
       const list = entries.filter((e) => (!c || e.cid === c.cid) && (!dayStr || e.day === dayStr))
       const label = c ? c.name : dayStr ?? istDay(0)
-      const show = c ? { type: 'show', view: 'customer', cid: c.cid } as const : { type: 'show', view: 'summary' } as const
+      // a customer alone: their page; a day (with or without a customer): the entries of that day
+      const show: Reply['show'] = c && !dayStr ? { type: 'show', view: 'customer', cid: c.cid }
+        : { type: 'show', view: 'history', from: dayStr ?? istDay(0), to: dayStr ?? istDay(0), ...(c ? { cid: c.cid } : {}) }
       return { parts: [R.showHistory(label, list.length)], ops: [], show }
     }
     case 'show_today': {
       const t = core.snap.today
-      return { parts: [R.showToday(t.creditPaise / 100, t.paymentPaise / 100)], ops: [], show: { type: 'show', view: 'summary' } }
+      return { parts: [R.showToday(t.creditPaise / 100, t.paymentPaise / 100)], ops: [], show: { type: 'show', view: 'today' } }
     }
     case 'search': {
       const q = str(a.text)
@@ -434,19 +445,18 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const found = core.candidates(q).map((x) => x.c)
       const amounts = (q.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
       // "Ramesh 200": Ramesh's 200 entries; "200": every 200 entry; "Ramesh": the customer
-      const count = amounts.length
-        ? entries.filter((e) => amounts.includes(e.paise) && (!found.length || found.some((c) => c.cid === e.cid))).length
-        : found.length
+      const hits = amounts.length ? entries.filter((e) => amounts.includes(e.paise) && (!found.length || found.some((c) => c.cid === e.cid))) : []
+      const count = amounts.length ? hits.length : found.length
       const reply: Reply = { parts: [R.searchResult(q, count)], ops: [] }
-      if (found.length === 1) reply.show = { type: 'show', view: 'customer', cid: found[0].cid }
+      reply.show = found.length === 1 && !hits.length ? { type: 'show', view: 'customer', cid: found[0].cid } : { type: 'show', view: 'search', text: q, cids: found.map((x) => x.cid), eids: hits.map((e) => e.eid) }
       return reply
     }
     case 'top_debtors': {
       const n = Math.min(5, Math.max(1, int(a.count) ?? 3))
-      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'dues' } }
+      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'top_debtors', count: n } }
     }
     case 'close_view':
-      return speak(R.closed())
+      return { parts: [R.closed()], ops: [], show: { type: 'show', view: 'close' } }
 
     // ------------------------------------------------------------------ settings
     case 'set_language': {
@@ -477,6 +487,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     case 'answer_question': {
       // nothing open (or it expired): say so rather than stay silent
       if (!core.pending) return notCaught()
+      if (meta.fromAudio) return notCaught() // the audio reading never answers a question; the card stays open
       const kind = a.kind
       const value = str(a.value)
       const view = core.pendingView()
