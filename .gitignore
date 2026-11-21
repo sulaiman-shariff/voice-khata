@@ -18,3 +18,21 @@ eval/results/*.wav
 .DS_Store
 *.log
 .playwright-mcp/
+
+# local test-run audio (KB_RECORD_DIR)
+eval/recordings/
+
+.vercel
+.env*
+
+# subagent-driven development scratch (ledger, briefs, reviews)
+.superpowers/
+
+# parallel agents' worktrees
+.claude/worktrees/
+
+# wake-word training
+wakeword/.venv/
+wakeword/data/
+wakeword/work/
+wakeword/.cache/

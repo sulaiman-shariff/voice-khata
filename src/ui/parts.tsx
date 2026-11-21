@@ -1,5 +1,5 @@
-import { Check, Mic, Pencil, MicOff, Sparkles, Square, WifiOff, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Check, Mic, Pencil, Sparkles, Square, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '../../shared/ledger.js'
 import type { PendingView, TurnMetrics } from '../../shared/protocol.js'
 import { cn } from '@/lib/utils'
@@ -111,7 +111,10 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
   return (
     <div className="stamp rounded-3xl border-2 border-primary/30 bg-card p-4 shadow-lg">
       {p.kind === 'delete' ? (
-        <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
+        <div>
+          <div className="text-lg font-semibold text-destructive">{t.deleteAll}?</div>
+          {p.requireType && <div className="mt-1 text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{p.requireType}</b></div>}
+        </div>
       ) : (
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
@@ -121,11 +124,12 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
           {big && <div className="num text-4xl font-semibold">{rs(p.paise!)}</div>}
         </div>
       )}
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className={cn('mt-4 grid gap-2', p.kind === 'direction' ? 'grid-cols-3' : 'grid-cols-2')}>
         {p.kind === 'direction' ? (
           <>
             <Answer className="bg-credit text-white" onClick={() => onAnswer('udhaar')}>{t.credit}</Answer>
             <Answer className="bg-payment text-white" onClick={() => onAnswer('jama')}>{t.payment}</Answer>
+            <Answer className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.wrong}</Answer>
           </>
         ) : (p.kind === 'which' || p.kind === 'confusable') && p.options ? (
           p.options.map((o) => (
@@ -134,7 +138,23 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
             </Answer>
           ))
         ) : p.kind === 'name' ? (
-          <Answer className="col-span-2 bg-secondary" onClick={() => onAnswer('nahi')}>{t.no}</Answer>
+          <>
+            <TextAnswer label={t.typeName} send={t.send} onSubmit={onAnswer} />
+            <Answer className="col-span-2 bg-secondary" onClick={() => onAnswer('nahi')}>{t.no}</Answer>
+          </>
+        ) : p.kind === 'amount' ? (
+          <>
+            {(p.amounts ?? []).map((a) => (
+              <Answer key={a} className="bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer(String(a))}><span className="num">₹{a}</span></Answer>
+            ))}
+            {!p.amounts?.length && <TextAnswer label={t.amount} send={t.send} numeric onSubmit={onAnswer} />}
+            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+          </>
+        ) : p.kind === 'delete' && p.requireType ? (
+          <>
+            <EraseTyped word={p.requireType} t={t} onErase={onAnswer} />
+            <Answer className="col-span-full bg-secondary text-secondary-foreground ring-1 ring-black/10" onClick={() => onAnswer('nahi')}><X className="size-5" />{t.no}</Answer>
+          </>
         ) : (
           <>
             <Answer className="bg-payment text-white" onClick={() => onAnswer('haan')}><Check className="size-5" />{t.yes}</Answer>
@@ -143,6 +163,49 @@ export function PendingCard({ p, t, onAnswer }: { p: PendingView; t: UiStrings; 
         )}
       </div>
     </div>
+  )
+}
+
+/** Erase confirmation: the button stays disabled until the word is typed; it submits the word. */
+export function EraseTyped({ word, t, onErase, className }: { word: string; t: UiStrings; onErase: (w: string) => void; className?: string }) {
+  const [v, setV] = useState('')
+  const ok = v.normalize('NFC').trim().toLowerCase() === word.normalize('NFC').toLowerCase()
+  return (
+    <form className={cn('col-span-full flex gap-2', className)} onSubmit={(e) => { e.preventDefault(); if (ok) onErase(word) }}>
+      <input
+        value={v} onChange={(e) => setV(e.target.value)} aria-label={word} placeholder={word} maxLength={20} autoComplete="off" autoCapitalize="off"
+        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+      />
+      <button type="submit" disabled={!ok} className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-2xl bg-destructive px-4 text-lg font-semibold text-white disabled:opacity-40"><Trash2 className="size-5" />{t.tapToErase}</button>
+    </form>
+  )
+}
+
+/** A tool made something ready: one big button does it (nothing is sent or saved before the tap). */
+export function ReadyCard({ label, text, to, onGo, onDismiss, t }: { label: string; text?: string; to?: string; onGo: () => void; onDismiss: () => void; t: UiStrings }) {
+  return (
+    <div className="stamp rounded-3xl border-2 border-payment/40 bg-card p-4 shadow-lg">
+      {to && <div className="mb-1 text-base font-semibold">{t.toWho}: {to}</div>}
+      {text && <pre className="mb-3 max-h-40 overflow-y-auto whitespace-pre-wrap font-sans text-sm text-muted-foreground">{text}</pre>}
+      <button onClick={onGo} className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-payment text-xl font-bold text-white active:scale-[.97]">{label}</button>
+      <button onClick={onDismiss} className="mt-2 min-h-11 w-full rounded-2xl text-base text-muted-foreground">{t.dismiss}</button>
+    </div>
+  )
+}
+
+/** A text answer to the open question (a name, an amount), submitted with the keyboard or the button. */
+function TextAnswer({ label, send, numeric, onSubmit }: { label: string; send: string; numeric?: boolean; onSubmit: (v: string) => void }) {
+  const [v, setV] = useState('')
+  const go = () => { const x = v.trim(); if (x) { onSubmit(x); setV('') } }
+  return (
+    <form className="col-span-full flex gap-2" onSubmit={(e) => { e.preventDefault(); go() }}>
+      <input
+        value={v} onChange={(e) => setV(e.target.value)} aria-label={label} placeholder={label} maxLength={40}
+        inputMode={numeric ? 'numeric' : 'text'} enterKeyHint="send"
+        className="h-14 min-w-0 flex-1 rounded-2xl border bg-background px-3 text-lg"
+      />
+      <button type="submit" disabled={!v.trim()} className="h-14 rounded-2xl bg-primary px-5 text-lg font-semibold text-primary-foreground disabled:opacity-50">{send}</button>
+    </form>
   )
 }
 
@@ -155,12 +218,21 @@ function Answer({ className, children, onClick }: { className?: string; children
 }
 
 /**
- * Big mic: ONE control. Hands-free: tap = start listening, tap again = stop (mute); while the app is
- * speaking the tap cuts the reply short instead (square icon). Push-to-talk: hold to talk.
+/** Press-and-hold longer than this is a hold (wake while held); shorter is a tap. */
+const HOLD_MS = 350
+
+/**
+ * Big mic: ONE control. Asleep (dim ring): tap wakes. Awake: tap puts it to sleep; while the app is
+ * speaking the tap cuts the reply short instead (square icon). Hold = awake while held.
  * Rings breathe with the input level; colour shows who is talking.
  */
-export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRelease }: {
-  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; handsFree: boolean; t: UiStrings; onPress: () => void; onRelease: () => void
+export function MicButton({ status, levelSource, on, handsFree, t, onTap, onHoldStart, onHoldEnd }: {
+  status: VoiceStatus; levelSource: Set<(v: number) => void>; on: boolean; handsFree: boolean; t: UiStrings
+  /** short press: wake / cut the reply short / go to sleep (the caller decides by state) */
+  onTap: () => void
+  /** pressed for a while (or any press in push-to-talk): awake while held */
+  onHoldStart: () => void
+  onHoldEnd: () => void
 }) {
   // the ~30 Hz mic level lives here, so it re-renders only this button, not the whole screen
   const [level, setLevel] = useState(0)
@@ -168,10 +240,30 @@ export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRe
     levelSource.add(setLevel)
     return () => { levelSource.delete(setLevel) }
   }, [levelSource])
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 'down' = pressed, not yet a hold; 'hold' = hold started; null = not pressed */
+  const press = useRef<'down' | 'hold' | null>(null)
+  const down = () => {
+    if (press.current) return
+    if (!handsFree) { press.current = 'hold'; onHoldStart(); return } // push-to-talk: every press is a hold
+    press.current = 'down'
+    holdTimer.current = setTimeout(() => { holdTimer.current = null; press.current = 'hold'; onHoldStart() }, HOLD_MS)
+  }
+  const up = () => {
+    const p = press.current
+    press.current = null
+    if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null }
+    if (p === 'hold') onHoldEnd()
+    else if (p === 'down') onTap()
+  }
+  useEffect(() => () => { if (holdTimer.current) clearTimeout(holdTimer.current) }, [])
+
   const s = 1 + Math.min(level * 3, 0.6)
   const live = on && status !== 'offline'
-  const interrupt = handsFree && live && status === 'speaking'
-  const label = !on ? (handsFree ? t.micStart : t.hold) : interrupt ? t.interrupt : handsFree ? t.micStop : t.hold
+  const asleep = !on || status === 'asleep'
+  const dim = asleep || status === 'offline' // offline: awake in name only, nothing is heard
+  const interrupt = live && status === 'speaking'
+  const label = asleep ? t.micStart : interrupt ? t.interrupt : t.micStop
   return (
     <div className="relative grid size-28 place-items-center">
       {live && status === 'listening' && (
@@ -185,20 +277,21 @@ export function MicButton({ status, levelSource, on, handsFree, t, onPress, onRe
       <button
         type="button"
         aria-label={label}
-        // a toggle in hands-free mode (pressed = listening); push-to-talk is a hold button, not a toggle
-        aria-pressed={handsFree ? on && !interrupt : undefined}
-        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); onPress() } }}
-        onKeyUp={(e) => { if (e.key === 'Enter' || e.key === ' ') onRelease() }}
-        onPointerDown={(e) => { e.preventDefault(); onPress() }}
-        onPointerUp={onRelease}
-        onPointerLeave={onRelease}
+        // one toggle: pressed = awake
+        aria-pressed={!dim && !interrupt}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); if (handsFree) onTap(); else down() } }}
+        onKeyUp={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !handsFree) up() }}
+        onPointerDown={(e) => { e.preventDefault(); down() }}
+        onPointerUp={up}
+        onPointerCancel={up}
+        onPointerLeave={up}
         onContextMenu={(e) => e.preventDefault()}
         className={cn(
           'relative grid size-24 touch-none select-none place-items-center rounded-full shadow-xl transition-colors',
-          !on ? 'bg-card text-primary ring-4 ring-primary/40' : status === 'speaking' ? 'bg-payment text-white' : status === 'offline' ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground',
+          dim ? 'bg-card text-primary/60 ring-4 ring-primary/20' : status === 'speaking' ? 'bg-payment text-white' : 'bg-primary text-primary-foreground',
         )}
       >
-        {status === 'offline' && on ? <WifiOff className="size-9" /> : interrupt ? <Square className="size-8 fill-current" /> : on ? <Mic className="size-10" /> : <MicOff className="size-10" />}
+        {interrupt ? <Square className="size-8 fill-current" /> : <Mic className="size-10" />}
       </button>
     </div>
   )

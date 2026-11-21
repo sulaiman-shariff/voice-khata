@@ -1,13 +1,13 @@
 # KhataBhai
 
-KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice in under a second. The ledger lives encrypted on the phone.
+KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice. The ledger lives encrypted on the phone. Version 2 replaced the rule-and-LLM turn loop with a Gemini agent that picks one of 29 tools, each of which runs through the same ledger safety layer, and with a wake word so the app only acts when called.
 
-**Hosted prototype:** https://voice-khata-delta.vercel.app
+**Hosted prototype:** https://khatabhai-nine.vercel.app
 
 **Try it**
 1. Open the link on a phone and pick your language on the tile screen.
-2. Tap the mic and allow microphone access. The assistant introduces itself as an AI.
-3. Say "Ramesh ka 340 udhaar", then ask "Ramesh ka total?".
+2. Tap the mic and allow microphone access. The assistant introduces itself as an AI. It starts asleep.
+3. Say "KhataBhai" (or tap the mic), then "Ramesh ka 340 udhaar", then ask "Ramesh ka total?". It stays awake for 15 s after each exchange; "bas" or "that's all" puts it to sleep.
 
 ## What it does well
 
@@ -17,11 +17,11 @@ KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, buil
 | Credit or payment | Decided from case markers ("ne" means payment, "ko" means credit) and, in Kannada, Tamil and Telugu, from the verb person. When direction cannot be read, the agent asks. |
 | Corrections and undo | "Nahi, 430", "galat, jama tha", "Ramesh nahi Suresh" amend the last entry. "Hata do" voids it. Nothing is erased; an amend or void is a new event in the log. |
 | Noise | A server-side energy tracker estimates the shop's noise floor and each utterance's SNR. When the SNR is below 11 dB, or cannot be estimated, the agent reads the entry back and waits for a yes or no before saving. In a quiet shop it saves, speaks a read-back and shows an undo toast. |
-| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A confident save is confirmed with a short cached "लिख दिया" (name and amount are on screen) instead of a 3 s read-back. The chime, highlight and toast no longer wait for the encrypted write. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
+| Latency and barge-in | A soft tick and buzz about 300 ms after the shopkeeper stops, long before the reply. When the last partial is already a complete sentence, Prisma's `commit` frame is sent after a short pause instead of waiting for the silence timer. A save is confirmed in one spoken sentence with the customer's new balance, so the screen and the voice always agree. The chime, highlight and toast no longer wait for the encrypted write. If the shopkeeper speaks over the agent, audio ducks at once and stops if it was real speech. TTS sockets are pre-opened. A latency waterfall is shown for every turn. |
 | Languages | Hindi, English, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Gujarati, Punjabi. Reply templates exist for all 10. Hindi, Kannada, Tamil, Telugu and English have the deepest number and direction coverage. |
 | Responsible AI | AI disclosure on the first turn, on-device encrypted ledger, opt-in reminders for adults, no customer scoring. See below. |
 
-The deterministic parser handles most turns with no LLM call. Claude Haiku is called only for hard turns, and its output is validated: an amount that is not among the candidates found in the transcript is rejected.
+A plain entry about a known customer (name, amount and a spoken credit or payment word) takes the instant path: the deterministic parser writes it with no model call. Everything else goes to the agent: Gemini and Claude Haiku 5.5 are asked at the same time and the first good answer is used. The agent only picks tools and fills arguments; the tools validate it (an amount that was not said is refused, a direction nobody said is read back).
 
 ## Architecture
 
@@ -37,18 +37,16 @@ flowchart LR
   end
   STT["Gnani Prisma v3.0 STT"]
   TTS["Gnani Timbre v3.0 TTS"]
-  REST["Gnani Prisma REST STT<br/>(noisy or unreadable turns)"]
-  LLM["Claude Haiku<br/>(hard turns only)"]
+  LLM["Gemini on Vertex AI (asia-south1 + global)<br/>raced with Claude Haiku 5.5<br/>agent: first good answer wins, 29 tools"]
   NEON[("Neon Postgres<br/>backup ciphertext,<br/>confirmation tokens")]
   UI <-- "WebSocket: 16 kHz PCM up,<br/>PCM and JSON ops down" --> S
   S <-- WebSocket --> STT
   S <-- WebSocket --> TTS
-  S -. fallback .-> LLM
-  S -. second reading .-> REST
+  S -- "agent turns<br/>(audio only when unclear)" --> LLM
   UI -. "optional PIN-encrypted backup<br/>and customer confirmation link" .-> NEON
 ```
 
-The server keeps no ledger. On every (re)connect the phone sends a snapshot of customers, aliases, balances and the last entry; the server replies with ledger operations that the phone applies and writes to its encrypted store. Vercel functions run at most 300 s, so the client reconnects transparently.
+The phone also runs a small wake-word detector (see Attention). The server keeps no ledger. On every (re)connect the phone sends a snapshot of customers, aliases, balances and the last entry; the server replies with ledger operations that the phone applies and writes to its encrypted store. Vercel functions run at most 300 s, so the client reconnects transparently.
 
 ### One turn, with measured latency
 
@@ -66,7 +64,7 @@ sequenceDiagram
   Note over V: commit early if the last partial is a complete sentence
   V->>S: commit
   S-->>V: final_transcript
-  Note over V: fast-path parse (0 ms; LLM only if needed)
+  Note over V: instant path (0 ms) or agent call (Gemini raced with Haiku)
   V->>P: ledger ops (chime, card, toast) and say text
   V->>T: text (pooled, pre-opened socket)
   T-->>V: PCM audio
@@ -91,6 +89,43 @@ On Vercel (bom1, measured from the same machine, same suite): production before 
 
 Where a clean turn's time goes: Prisma's final transcript arrives about 800 ms after the shopkeeper stops, parsing takes 0 ms, and Timbre starts in about 150 ms (0 ms for cached phrases). Timbre's time to first audio does not grow with text length (a 300-character paragraph starts as fast as "लिख दिया"), so replies are not split into pieces. The end of turn is left as it is: Prisma's partials lag about one word, and committing on `speech_end` was measured and did not help.
 
+## Attention: when it listens
+
+The app is asleep until it is called, so a shop's chatter is not acted on.
+
+- **Waking:** a tap on the mic, a hold of the mic (stays awake while held), or the wake word "KhataBhai". The phone runs the trained wake-word model `public/wakeword/khatabhai.onnx` (`src/lib/wake/`, onnxruntime-web in a worker, threshold 0.6). While asleep behind it, no audio leaves the phone; on a detection the last 2 s are sent and the server confirms the word in the transcript (`shared/wake.ts`, phonetic match across scripts: "खाता भाई", "Khata Bhai"), or goes back to sleep. If the model cannot load, the phone falls back to streaming and the server spots the word itself. Misheard forms ("Hata bhai", "Khadha bhai") wake only a sleeping app, and "aata bhai" (aata is flour) only confirms a phone detection; while awake they are ordinary words ("hata bhai" is an undo).
+- **Wake model, measured** (`npx tsx eval/wake_detector.ts`, the app's own inference path on onnxruntime-web WASM in Node): the trainer's held-out positives 21/21 woke; addressed synthetic counter lines 30/30; about 14.5 false wakes per hour from a bare "khata" (no "bhai") in the synthetic counter scenes, which the server's transcript check sends back to sleep; pure shop noise 0 false wakes per hour; about 2 ms of inference per 80 ms chunk.
+- **Awake:** 15 s after the app last answered (a reply, a write or a question; `server/attention.ts`). It never goes back to sleep while a question is open and younger than 45 s, nor in the middle of an utterance. Speech that is not for the app makes the agent call `not_for_me`, which shows the line dimmed, writes nothing and does not extend the 15 s, so talk to customers lets the app fall asleep. Going to sleep drops a question that has expired.
+- **Sleep words:** "bas", "that's all", "go to sleep" and equivalents.
+- **Listening languages:** the session's language plus `LISTEN_LANGS` (default `en-IN,hi-IN,kn-IN`) at once, one Prisma stream each on the same audio (`server/gnani/multi.ts`). The agent sees every transcript.
+
+## The agent and its tools
+
+`server/agent/agent.ts` asks the model once per turn with the transcripts of all streams, the last few exchanges, the screen, the customer names, the latest numbered entries and the open question. It answers only with tool calls (several per turn are allowed). If the transcripts cannot be trusted it calls `unclear`; the utterance audio (up to 20 s) is then sent in one second call to a model that hears audio (`AGENT_AUDIO_MODEL`), inside a 2 500 ms budget.
+
+**Two models race on every text turn.** `decide()` starts the Gemini race (Mumbai plus two `global` requests, `server/parse/gemini.ts`) and one Claude Haiku 5.5 call (`claude-haiku-5-5`, `server/parse/haiku.ts`) at the same moment, with the same prompt and tools. The first answer that names a tool we have wins and the other leg is cancelled. One deadline covers both (`LLM_TIMEOUT_MS`, 3 s, plus the session's own cut-off): if one side fails (an outage, a 429, a bad key, a refusal, no tool call) the other still has the rest of it; if both fail the turn ends in "didn't catch that", as before. Which model answers depends on timing, and `agent_call` in the logs says which one did (`model=`). Haiku runs with thinking off at effort `low`, a forced tool choice, no retries, and a cached system prompt. The audio second call stays Gemini only. Both models go through the same tools and the same safety rules below, so neither can write anything the other could not. `AGENT_HAIKU=off`, or no `ANTHROPIC_API_KEY`, turns Haiku off.
+
+The 29 tools (`server/agent/tools.ts`):
+- Entries: `add_entries`, `change_entry`, `remove_entry`, `undo_last`, `move_entry`, `settle`.
+- Show and ask: `show_customer`, `show_dues`, `show_history`, `show_today`, `search`, `top_debtors`, `close_view`, `query_balance`.
+- Customers: `add_customer`, `rename_customer`, `merge_customers`, `set_phone`, `send_reminder`, `send_statement`.
+- Settings: `set_language`, `set_speed` (slower, normal, faster), `set_shop_name`, `open_privacy`, `backup`, `erase_all`. Every save is spoken in full with the customer's new balance; there is no setting to shorten it.
+- Dialogue: `answer_question`, `not_for_me`, `unclear`.
+
+### Safety rules (enforced in code, not in the prompt)
+
+- An amount that was not in what was heard is dropped; an entry is never written from an amount the model made up.
+- A direction (credit or payment) nobody said is read back before saving, as is a name that differs from what was heard.
+- A heard name that is not in the ledger is never written without a yes. Two customers that fit a name give a "which one" question.
+- Remove, move, merge, settle and erase always ask first. `undo_last` is instant only for an entry written in this session in the last 60 s.
+- `erase_all` erases only when the shopkeeper types the word shown on screen; a spoken or tapped yes never does.
+- `send_reminder` needs opt-in and an adult customer, and only prepares a WhatsApp share; the shopkeeper taps send.
+- `answer_question` takes yes, no or an amount only from what was heard, never from the model. An on-screen option the model picks counts only when what was heard picks it too (the amount was said, or the name, "doosra" or "300 wala" points at it).
+- A spoken undo ("hata do") is instant only for an entry this session wrote in the last 60 s; an older one is read back first.
+- "Save anyway" on a dimmed line is handled as addressed to the app, but its words are still speech: a new name in it is read back first.
+- The same entry is never written twice within 60 s, and every write from an audio reading is read back.
+- If the agent call fails or times out, a plain entry still saves through the parser; anything else gets "did not catch that" in the turn language.
+
 ## Gnani services used
 
 Every claim below was checked against the live API with the probe scripts `eval/probe_gnani*.ts`.
@@ -109,12 +144,6 @@ Every claim below was checked against the live API with the probe scripts `eval/
 - `commit` frame: once the transcript is a complete khata sentence and the speaker has paused, we send `commit` rather than wait for Prisma's silence timer.
 - Finding: the `x-partials: true` header is not in the public docs. With it, Prisma streams `partial_transcript` events plus `speech_start` and `speech_end` events, and ends the turn with `final_transcript`. Without it you only get `processing` and `transcript`. Partials are what let us parse before the sentence ends.
 
-**Prisma v3.0 STT, REST** (`POST https://api.vachana.ai/stt/v3`), used for a second reading of the same turn audio
-- On REST, `language_code` is a hint, not a lock. Kannada speech sent with `hi-IN` comes back in Kannada script tagged `kn-IN`. The realtime stream, with Shivani-voiced Kannada, wrote it in Hindi script instead.
-- **Noisy turns (opt-in, `SECOND_READING=on`):** the audio is also sent with `format=verbatim`, so numbers come back as words and our own number parser reads the amount. When the two readings disagree, the agent asks "70 ya 17?" instead of a plain yes/no read-back. `previous_text` carries what the agent just asked. In the e2e suite the two readings agreed 57 times out of 65 and the cross-check caught no error, while adding 0.4–0.65 s per noisy turn, so it is off by default.
-- **Unreadable turns in another language:** when realtime text does not read as a ledger turn, or has money but no direction, the REST reading is used if it is in another supported language and does read. The session switches to that language.
-- Both uses share one REST call per turn, because REST allows one active request at a time. Latency was 180–450 ms warm. Any error or timeout (1.2–1.5 s) leaves the turn as it would have been.
-- v3.0 vs v2.5: both read 7 of 7 amounts correctly across hi/kn/ta/te/en/mr, so we stay on v3.0. The comparison found a gap in our own parser: Kannada "ಏಳುನೂರ ಐವತ್ತು" was read as 50. The joined hundreds forms for 600–900 are now handled in Kannada, Tamil and Malayalam.
 
 **Timbre v3.0 TTS** (`wss://api.vachana.ai/api/v1/tts`, WebSocket only)
 - One female voice per language, each from Gnani's recommended list for that language: Shivani (hi/mr/bn/gu), Sunaina (en/ml), Sneha (kn), Kalpana (ta/te/pa). 16 kHz PCM. `eval/tts_roundtrip.ts` speaks each language's saved-entry reply with an amount and reads it back through Prisma. For Malayalam we tried Tarika, Rajni, Shubham, Sunaina and Shivani, and Sunaina came back most exactly. Spoken 17 is sometimes heard as 15 (പതിനഞ്ച്) with every voice.
@@ -124,7 +153,7 @@ Every claim below was checked against the live API with the probe scripts `eval/
 
 - No voice cloning is used anywhere.
 
-Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our own code in `server/` and `shared/`.
+Orchestration (attention, turn detection, the agent's tools, validation, dialogue, barge-in) is our own code in `server/` and `shared/`. The agent models are Gemini on Vertex AI and Claude Haiku 5.5 on the Anthropic API, not Gnani services.
 
 ## Responsible AI and privacy
 
@@ -137,7 +166,8 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 - **Customer confirmation link.** Neon stores only a random token, the shop display name, amount, direction, date and the customer's response. No customer name and no phone number. Tokens expire after 30 days.
 - **Reminders are opt-in.** A reminder is a WhatsApp share link that the shopkeeper sends. It is offered only for customers marked as opted in and as adults, and uses polite template text. A spoken request for a customer who has not opted in is declined.
 - **No scoring.** The app does not rank, rate or comment on customers. It records what was said.
-- **LLM boundaries.** Haiku is instructed never to judge a customer, and open-ended replies go through a guardrail filter with a template fallback.
+- **LLM boundaries.** The agent can only call tools, never speak free text; replies are our templates, and the model is told never to judge a customer. The transcripts are sent to Google Vertex AI: to asia-south1 (Mumbai) and, to hold the latency budget, at the same time to the Vertex `global` endpoint, whose serving region Google chooses (each agent turn sends about 3 requests, one Mumbai and two global; `AGENT_HEDGE_MS=off` sends Mumbai only). For an unclear turn the utterance audio is sent once more, to Mumbai only. Each text agent turn is also sent to Anthropic (Claude Haiku 5.5, one request), so an agent turn makes about 4 model requests in all, roughly four times the cost of a single call; `AGENT_HAIKU=off` stops the Anthropic request. Instant-path turns make no call.
+- **Asleep means not acted on.** With the on-phone wake model loaded, no audio leaves the phone while asleep (only the 2 s around a detection, for the server to confirm). If the model cannot load, the phone falls back to streaming and the server discards the audio until it hears the wake word.
 - **Test data.** Only Gnani stock voices, public datasets and public noise recordings. No real customer data and no team voice recordings.
 - **DPDP alignment.** The design follows the notice, consent, erasure, security and children's-data duties of India's Digital Personal Data Protection Rules (notified 14 Nov 2025; core duties apply from about May 2027). This is an engineering alignment, not a legal opinion.
 
@@ -150,8 +180,47 @@ Orchestration (turn detection, parsing, validation, dialogue, barge-in) is our o
 | Hindi conversation on production, correct turns | 7 / 7 |
 | Speech end to first reply audio | p50 729 ms, max 774 ms (Vercel bom1) |
 | Early commit | fires about 280 ms after the pause when the sentence is complete |
-| Haiku 5.5 parse (hard turns only) | p50 about 1.2 s; most turns use the deterministic parser with 0 ms LLM |
-| Unit tests | 540 passing |
+| Agent eval (46 sentences x 2 passes) | 84 / 92 correct, silent wrong 0, p50 550 ms, p90 1 126 ms (see below) |
+| Live agent turns (production, 22 Nov) | `eval/text_dialogue.ts` against the live site: 13 / 13 passed; the 5 agent calls it made took 374 to 604 ms inside the function (`agent_call` log line); instant-path turns made no call |
+| Unit tests (`npx vitest run`, 22 Nov) | 439 passing, 6 skipped |
+
+### Agent eval
+
+`npx tsx --env-file=.env eval/agent_eval.ts` runs 16 hard sentences (ones the parser cannot settle, noisy or mixed-language, asides, corrections) and 30 control sentences (show, settings, customers, queries) through `decide` with the real tool list, then runs the calls through the app's own tools (`runTool`) on a fresh ledger. **Silent wrong** means those tools wrote or changed an entry at once, with no question, and it was not what the sentence meant.
+
+22 Nov, Vertex asia-south1, gemini-3.5-flash-lite, 2 passes, 15 s timeout per call (the 3 s production default is too tight from a distant dev machine: a first run at 3 s lost 51 of 92 calls to timeouts and one 429):
+
+| Measure | Result |
+|---|---|
+| Correct tool and arguments | 84 / 92 |
+| Silent wrong | 0 |
+| Failed calls | 0 |
+| Latency p50 / p90 (text only, from the dev machine) | 550 ms / 1 126 ms |
+
+The 8 misses are 4 sentences, twice each, and all safe: "Ramesh 340" (the agent chose `undo_last` or `show_customer`; `undo_last` asks because nothing was written this session), and three promise or "add 200" lines where the agent left direction null, so the app asks instead of writing. An earlier scoring on the raw tool arguments flagged 4 silent wrongs ("Deepak ne saath rupaye diye" read as 60 payment, "Sunitu dobar 1,000 on credit"); the app's own tools turn those into read-backs, which is why silent wrong is scored on what the tools actually write.
+
+**Gemini, Haiku and the race** (`--model gemini|haiku|race`; 22 Nov, from the dev machine, 1 pass of the 46 sentences each; `gemini` and `haiku` alone with a 15 s timeout, `race` exactly as the app runs it, with the 3 s deadline):
+
+| Model | Correct | Silent wrong | Failed | p50 / p90 | Answer used |
+|---|---|---|---|---|---|
+| Gemini race alone | 44 / 46 | 0 | 0 | 1 708 ms / 5 329 ms | Gemini 46 |
+| Haiku 5.5 alone | 39 / 46 | 0 | 0 | 934 ms / 1 159 ms | Haiku 46 |
+| Both raced (the app) | 39 / 46 | 0 | 0 | 950 ms / 1 112 ms | Haiku 45, Gemini 1 |
+
+In this run Gemini was in a slow spell, so Haiku won almost every race; the race took the tail from 5.3 s to 1.1 s but scored 5 fewer sentences right. Haiku's extra misses are all safe (nothing written): "speak in Kannada" (`unclear`), "normal speed mein bolo" and "Pinky ki mummy aayi thi, paanch sau de gayi" (`not_for_me`), "nahi nahi, wo Suresh tha Ramesh nahi" (`unclear`), and "Sharma ji wale ka hisaab mein do sau aur jod do" (direction left open, so the app asks). It shares Gemini's two promise misses. Silent wrong stays 0 for all three: the tools hold the safety line whichever model answers. When Gemini is quick (its p50 has been about 0.5 s) it wins more races; the live `agent_call` lines show the split.
+
+**Against the 3 s budget.** The product budget is 3 s from the end of speech to the reply. With the race (Mumbai plus two `global` requests, first answer wins; Task 16 bench, `eval/agent_latency.ts`, real contexts) the agent call is p50 about 1.4 s and p90 about 2.3 s, against Mumbai alone at p50 2.2 s and p90 5.5 s in a congested spell. Earlier, the agent call took 374 to 604 ms inside the function on the live site (5 calls), but a typed turn through the WebSocket took 1.0 to 3.6 s end to end (13 turns, the 3.6 s one a three-entry read-back), and earlier measurements of agent turns with speech put the p90 at about 3.5 to 4 s. That is over the 3 s budget at p90. The instant path (no model call) is well inside it. These are small samples.
+
+### Audio for unclear moments
+
+The agent first reads the words (all streams' transcripts). Only when it answers `unclear` is the utterance audio (up to 20 s) sent in a second call, and only inside a 2 500 ms budget counted from the start of the first call; over budget or still unclear, the shopkeeper is asked to repeat. Every write from an audio reading is read back (`from-audio` is a hard reason). Measured with `eval/audio_latency.ts` (20 synthetic addressed lines, about 3 s each, Vertex asia-south1, three live runs; the first two runs ignored failed calls, the third counts a failed or timed-out call as the 15 s timeout and prints the error rate):
+
+| Model | Cold first call | Warm p50 | Warm p95 (n=20) | Errors |
+|---|---|---|---|---|
+| gemini-3.5-flash-lite | 3.2 s, 7.7 s, or timeout | 1.34 - 1.54 s | 2.3 s, 7.1 s, 9.1 s | 0/20 in the counted run (one warm-up timeout in run 2) |
+| gemini-3.5-flash | 1.5 - 2.5 s | 1.84 - 2.08 s | 3.9 s, 6.9 s, 14.5 s | 0/20 in the counted run |
+
+Latency varies a lot from run to run (occasional multi-second spikes), so the 2 500 ms cut-off in the session is what protects the reply time. `AGENT_AUDIO_MODEL` selects the model; the default is `gemini-3.5-flash-lite` (best p50, and the only one that met p95 <= 2 500 ms, in one of three runs). flash-lite's cold first call is about 3 to 8 s or a timeout, so the first audio retry after a cold start is usually cut off and the shopkeeper is asked to repeat.
 
 ### Replaying real conversations
 
@@ -163,7 +232,7 @@ Every production session in the logs becomes a replayable conversation: `eval/lo
 - turns with a name or an amount that got no reply;
 - questions asked.
 
-A read-back the logged user never got to answer is answered from the labels (yes only for an entry they meant).
+A read-back the logged user never got to answer is answered from the labels (yes only for an entry they meant). The logged model answers are from before v2; the v2 agent's answers are supplied from that cache or an oracle, so the replay checks the session's rules, not the model.
 
 28 sessions from 21 Nov (105 steps, 30 entries meant):
 
@@ -199,10 +268,6 @@ With no added noise, 12/12.
 
 Plainly: amounts stay exact down to 0 dB for steady shop noise. Competing speech is harder: at 0 dB babble, 75% are right, and at lower SNR the speech is mostly not recoverable. That is why the agent reads back and asks when its SNR estimate is low. These runs test STT plus amount extraction, not the full dialogue, and 12 utterances per cell is a small sample.
 
-### Multilingual noisy end to end
-
-TODO: filled from eval/results/e2e_*.json
-
 ### End-of-turn model we measured and dropped
 
 Smart Turn v3.2 on 37 khata utterances scored 64 to 72% accuracy and took 300 to 800 ms per call in WASM on Vercel, longer than the silence it would save. We use transcript completeness plus Prisma's `commit` instead. Details: `eval/TURN_DETECTION.md`.
@@ -219,12 +284,16 @@ npm run dev              # frontend (Vite)
 
 Environment variables (names only; `.env` is gitignored):
 - `GNANI_API_KEY`
-- `ANTHROPIC_API_KEY`
+- `VERTEX_PROJECT`, `GOOGLE_VERTEX_KEY` (Gemini on Vertex AI; `GOOGLE_VERTEX_KEY` is the base64 service-account JSON)
+- `ANTHROPIC_API_KEY` (Claude Haiku 5.5, raced against Gemini on every text agent turn; without it the agent is Gemini only), `AGENT_HAIKU` (`off` turns the Haiku leg off even with a key)
 - `DATABASE_URL` (optional; enables backup and confirmation links, set by the Neon integration on Vercel)
 - `CRON_SECRET` (optional; protects the cleanup cron)
 - `LOG_LEVEL` (optional; `debug`, `info` (default), `warn` or `error`)
-- `SECOND_READING` (optional; `on` adds the noisy-turn amount cross-check, `off` also disables the language rescue)
+- `VERTEX_LOCATION` (default `asia-south1`), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`), `AGENT_AUDIO_MODEL` (model for the audio second call, default `gemini-3.5-flash-lite`), `LLM_TIMEOUT_MS` (agent call timeout, default 3000; it covers an access-token refresh too)
+- `AGENT_HEDGE_MS` (delay before the extra agent requests start; default 0, all at once; `off` sends Mumbai only), `AGENT_HEDGE_LOCATION` (where the extra requests go, comma-separated, one request each; default `global,global`)
+- `LISTEN_LANGS` (default `en-IN,hi-IN,kn-IN`; languages heard in every session, `off` for the session language only)
 - `STT_MIN_SILENCE_MS`, `STT_VAD_THRESHOLD` (optional; Prisma realtime VAD tuning, not sent unless set)
+- `KB_RECORD_DIR`, `VK_DEBUG` (optional; local debugging)
 
 Run the voice server locally:
 
@@ -258,7 +327,7 @@ The production logs of a real test showed what used to go wrong. The phone switc
 
 ## Logs
 
-- Server: JSON lines on stdout/stderr, filterable in the Vercel log viewer or with `vercel logs <deployment-url> --json`. Every line has `ev` (event), `sid` (session) and `ip` (hashed). Main events: `conn_open`/`conn_close`/`conn_rejected`, `hello`, `stt_open`/`stt_ready`/`stt_closed`/`stt_error`, `final`, `held`/`held_joined`, `turn` (transcript, intent, reply, ops, all timings), `llm`/`llm_call`, `language_rescue`, `barge_in`, `tts_error`/`tts_timeout`, `session_end`.
+- Server: JSON lines on stdout/stderr, filterable in the Vercel log viewer or with `vercel logs <deployment-url> --json`. Every line has `ev` (event), `sid` (session) and `ip` (hashed). Main events: `conn_open`/`conn_close`/`conn_rejected`, `hello`, `stt_open`/`stt_ready`/`stt_closed`/`stt_error`, `final`, `held`/`held_joined`, `turn` (transcript, intent, reply, ops, all timings), `agent` (transcript, ms, tool names), `agent_call` (winning model, ms of the whole race, number of calls, Haiku's prompt-cache hits when it won), `agent_audio`/`agent_audio_failed`, `agent_failed`, `barge_in`, `tts_error`/`tts_timeout`, `session_end`.
 - Latency report from a log: `npx tsx eval/latency_breakdown.ts server.log`.
 - Browser: open the app with `?log=1` (remembered; `?log=0` turns it off) or switch on "Debug logs" in Settings. Console lines look like `[vk +12.345s] socket_open {ms: 312}`. Warnings and errors are always printed.
 
@@ -266,11 +335,11 @@ The production logs of a real test showed what used to go wrong. The phone switc
 
 ```
 api/        Vercel functions: voice.ts (WebSocket session), backup.ts, confirm.ts, cleanup.ts
-server/     session.ts (dialogue and turn flow), gnani/ (stt.ts, tts.ts), parse/llm.ts (Haiku), turn/energy.ts
-shared/     numbers, intent, names, ledger, chain (hash chain, crypto-shred), replies (10-language templates), protocol
-src/        React PWA: lib/ (store, voice client, backup), ui/, components/
+server/     session.ts (turn flow), attention.ts, agent/ (agent.ts, tools.ts), ledger/core.ts (safety layer), gnani/ (stt.ts, multi.ts, tts.ts), parse/ (gemini.ts, llm.ts), turn/energy.ts
+shared/     wake (wake word, sleep words), numbers, intent, names, ledger, chain (hash chain, crypto-shred), replies (10-language templates), protocol
+src/        React PWA: lib/ (store, voice client, backup, wake/ on-phone detector), ui/, components/
 public/     AudioWorklets (mic.js, player.js), icons
-eval/       noise benchmark, e2e harness, local_server.ts, results/, TURN_DETECTION.md, NOISE_SOURCES.md
+eval/       agent_eval.ts, replay.ts, audio_latency.ts, noise benchmark, e2e harness, local_server.ts, results/, TURN_DETECTION.md, NOISE_SOURCES.md
 docs/       VIDEO_SCRIPT.md
 ```
 

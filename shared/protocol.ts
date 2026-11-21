@@ -3,7 +3,6 @@
  * The ledger lives on the phone; the server is stateless across connections and works from
  * the snapshot the phone sends, replying with ledger ops for the phone to apply.
  */
-import type { ImportRow } from './import.js'
 import type { Direction } from './ledger.js'
 import type { Lang } from './replies.js'
 
@@ -18,6 +17,7 @@ export interface SnapCustomer {
   typicalPaise: number | null
   /** shown and spoken instead of `name` when two customers share it ("Ramesh · Gali 3") */
   label?: string
+  phone?: string
 }
 
 export interface SnapEntry {
@@ -34,8 +34,8 @@ export interface Snapshot {
   shopName: string
   customers: SnapCustomer[]
   last: SnapEntry | null
-  /** Recent live entries, newest first (up to 20): lets the agent change any of them, not just the last. */
-  recent?: SnapEntry[]
+  /** Every live entry (voided excluded), newest first: the agent answers and changes from this. Memory only on the server. */
+  entries: SnapEntry[]
   today: { creditPaise: number; paymentPaise: number; entries: number }
   month: { creditPaise: number; paymentPaise: number; entries: number }
 }
@@ -56,25 +56,29 @@ export type LedgerOp =
   | { op: 'amend'; eid: string; paise?: number; direction?: Direction; cid?: string }
   | { op: 'void'; eid: string; reason: string }
   | { op: 'delete_all' }
+  /** the customer's display name changes (a misheard or fuller name) */
+  | { op: 'rename_customer'; cid: string; name: string }
+  /** two accounts are one person: `from`'s entries move to `into`, `from`'s names become aliases, `from` is gone */
+  | { op: 'merge_customers'; from: string; into: string }
+  | { op: 'set_phone'; cid: string; phone: string }
 
 export type ClientMsg =
   | {
-    type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2; readBack?: boolean
-    /** auto language: Prisma listens with indic-auto and replies follow the language just spoken
-     *  (`lang` is then only the starting/last language) */
-    auto?: boolean
+    type: 'hello'; lang: Lang; snapshot: Snapshot; firstRun: boolean; ptt: boolean; speed?: 0.8 | 1 | 1.2
     /** the previous session's state (open question, conversation), from its last turn_done */
     resume?: string
     /** a turn whose result never arrived because the connection dropped: handle it again */
     resend?: string
   }
   | { type: 'speed'; speed: 0.8 | 1 | 1.2 }
-  | { type: 'readback'; on: boolean }
-  /** importing an old paper khata read aloud: every sentence becomes review rows, nothing is saved */
-  | { type: 'import'; on: boolean }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'ptt_start' }
   | { type: 'ptt_end' }
+  /** the phone woke the app: tap, hold (until hold_end), or its on-device wake-word detector */
+  | { type: 'wake'; source: 'tap' | 'hold' | 'phone' }
+  | { type: 'hold_end' }
+  /** the user tapped to put it to sleep */
+  | { type: 'sleep' }
   | { type: 'tap'; action: 'yes' | 'no' | 'undo' }
   | { type: 'answer'; text: string } // tap answer to the open question (option text, udhaar/jama)
   | { type: 'text'; text: string } // typed (or pasted) instruction: same pipeline as speech
@@ -84,9 +88,13 @@ export type ClientMsg =
   | { type: 'ping'; t: number } // heartbeat: the server answers pong at once
   | { type: 'replay_start' } // binary frames until replay_end are buffered speech from a dropped connection
   | { type: 'replay_end' }
+  /** "Save anyway" on a dimmed not-an-entry line: handled as addressed to the agent, never not_for_me */
+  | { type: 'force'; text: string }
 
 /** A question the agent is waiting on (drives the confirm card on screen). */
 export interface PendingView {
+  /** batch read-back: every line with its own direction; one yes saves them all */
+  rows?: { name: string; paise: number; direction: Direction; newCustomer?: boolean }[]
   kind: 'confirm' | 'name' | 'amount' | 'direction' | 'which' | 'confusable' | 'delete' | 'batch' | 'modify'
   /** confirm: saying yes also opens an account for this name (it is not in the ledger yet) */
   newCustomer?: boolean
@@ -96,9 +104,14 @@ export interface PendingView {
   paise?: number
   direction?: Direction | null
   options?: string[]
-  /** batch read-back: every line with its own direction; one yes saves them all */
-  rows?: { name: string; paise: number; direction: Direction; newCustomer?: boolean }[]
+  /** amount: the amounts to choose from (rupees), shown as buttons */
+  amounts?: number[]
+  /** delete: only typing this word (an answer / typed text) erases; a spoken or tapped yes never does */
+  requireType?: string
 }
+
+/** A setting the agent changed by voice; the phone applies and stores it. */
+export interface SettingMsg { type: 'setting'; key: 'lang' | 'speed' | 'shopName'; value: unknown }
 
 export interface TurnMetrics {
   /** ms timestamps relative to the end of speech (energy-detected), negative = before */
@@ -122,6 +135,8 @@ export interface TurnMetrics {
 
 export type ServerMsg =
   | { type: 'ready'; region: string }
+  /** attention state: sent after every hello and on each change */
+  | { type: 'attention'; state: 'asleep' | 'awake' }
   | { type: 'heard' } // the shopkeeper paused after speaking: a tick on the phone, before the reply
   | { type: 'partial'; text: string }
   | { type: 'final'; text: string }
@@ -134,13 +149,21 @@ export type ServerMsg =
   | { type: 'unduck' } // false alarm: restore volume
   | { type: 'stop_audio' } // real barge-in: stop playback now
   | { type: 'pending'; pending: PendingView | null }
-  | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' }
-  | { type: 'remind'; cid: string; text: string }
-  /** import mode: "name amount" pairs heard in one sentence, for the phone's review table */
-  | { type: 'import_rows'; rows: ImportRow[]; text: string }
+  | { type: 'show'; view: 'customer'; cid: string } | { type: 'show'; view: 'dues' | 'summary' | 'privacy' | 'today' | 'settings' | 'close' }
+  | { type: 'show'; view: 'top_debtors'; count?: number }
+  /** entries between two days (YYYY-MM-DD, inclusive) */
+  | { type: 'show'; view: 'history'; from: string; to: string; cid?: string }
+  | { type: 'show'; view: 'search'; text: string; cids?: string[]; eids?: string[] }
+  | SettingMsg
+  /** one big button on the phone: open WhatsApp with `text` (to `cid`'s number) or start the backup */
+  | { type: 'ready'; kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
   | { type: 'metrics'; turn: TurnMetrics }
   | { type: 'error'; message: string }
   /** every handled turn ends with this, spoken reply or not: the phone leaves 'thinking' */
   | { type: 'turn_done'; resume?: string }
   /** heard, and taken as talk to someone else: nothing written, nothing asked (the phone shows it dimmed) */
   | { type: 'not_entry'; text: string }
+  /** the agent woke (wake word, tap) or went back to sleep (idle timeout) */
+  | { type: 'attention'; state: 'asleep' | 'awake' }
+  /** a setting changed by voice: the phone applies it */
+  | SettingMsg

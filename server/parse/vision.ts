@@ -5,7 +5,7 @@
  * Uses the same Gemini keys and rotation (withGeminiKey).
  */
 import type { ImportRow } from '../../shared/import.js'
-import { GeminiError, withGeminiKey } from './llm.js'
+import { GeminiError, withGeminiKey } from './gemini-keys.js'
 
 export const VISION_MODEL = process.env.GEMINI_VISION_MODEL?.trim() || 'gemini-3.5-flash'
 const TIMEOUT_MS = 30_000

@@ -2,9 +2,8 @@
  * Interfaces between the UI and the parts built separately (store, voice client, backup).
  * Implementations: src/lib/store.ts, src/lib/voice.ts, src/lib/backup.ts.
  */
-import type { ImportRow } from '../../shared/import.js'
 import type { Customer, Entry, LedgerState } from '../../shared/ledger.js'
-import type { LedgerOp, PendingView, ServerMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
+import type { LedgerOp, PendingView, ServerMsg, SettingMsg, Snapshot, TurnMetrics } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
 
 // ------------------------------------------------------------------ store (src/lib/store.ts)
@@ -36,6 +35,8 @@ export interface Settings {
   remindEveryDays?: number
   /** cid -> last reminder sent (ms) */
   reminded?: Record<string, number>
+  /** how fast replies are spoken (Timbre speed); optional: older stored settings lack it (see createStore) */
+  speed?: 0.8 | 1 | 1.2
 }
 
 export interface KhataStore {
@@ -75,7 +76,8 @@ export interface KhataStore {
 export type { Customer, Entry, LedgerState }
 
 // ------------------------------------------------------------------ voice client (src/lib/voice.ts)
-export type VoiceStatus = 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'offline'
+/** 'asleep': connected, waiting for "KhataBhai" or a tap. 'listening': awake. */
+export type VoiceStatus = 'idle' | 'connecting' | 'asleep' | 'listening' | 'thinking' | 'speaking' | 'offline'
 
 export interface VoiceEvents {
   status(s: VoiceStatus): void
@@ -88,7 +90,10 @@ export interface VoiceEvents {
   ops(ops: LedgerOp[]): void | Promise<void>
   pending(p: PendingView | null): void
   show(m: Extract<ServerMsg, { type: 'show' }>): void
-  remind(cid: string, text: string): void
+  /** The agent changed a setting by voice (speed, shopName; the language goes through lang). */
+  setting?(m: SettingMsg): void
+  /** One-tap card from a tool: a WhatsApp message to send, or the backup. */
+  ready?(m: Extract<ServerMsg, { type: 'ready'; kind: unknown }>): void
   metrics(m: TurnMetrics & { clientFirstAudioMs: number | null }): void
   error(message: string): void
   /** The server heard another language and switched the session to it. */
@@ -101,13 +106,17 @@ export interface VoiceEvents {
   resent?(text: string): void
   /** The last thing heard was taken as talk to someone else: nothing written, nothing asked. */
   notEntry?(text: string): void
-  /** Import mode: rows read aloud from an old paper khata, for review. */
-  importRows?(rows: ImportRow[], text: string): void
+  /** The agent woke or went back to sleep (server answer, or the optimistic local change after a tap). */
+  attention?(state: 'asleep' | 'awake'): void
+  /** The turn is over: the on-screen captions are stale. */
+  turnDone?(): void
+  /** The microphone could not be opened after a wake (permission refused, no device). */
+  micError?(): void
 }
 
 export interface VoiceClient {
-  /** Ask mic permission + open the socket. Must be called from a user gesture (audio unlock). */
-  start(opts: { lang: Lang; auto?: boolean; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; fastSpeech?: boolean; readBackAll?: boolean }): Promise<void>
+  /** Ask mic permission + open the socket (`mic: false`: socket only, for typed text; the mic opens on the first wake). Must be called from a user gesture (audio unlock). */
+  start(opts: { lang: Lang; snapshot: () => Snapshot; firstRun: boolean; handsFree: boolean; speed?: 0.8 | 1 | 1.2; mic?: boolean }): Promise<void>
   stop(): void
   /** Push-to-talk (works in both modes). */
   pttDown(): void
@@ -117,15 +126,22 @@ export interface VoiceClient {
   answer(text: string): void
   /** Typed or pasted instruction, handled exactly like speech (bulk lists welcome). */
   sendText(text: string): void
+  /** "Save anyway": the line was dimmed as not-an-entry; handle it as addressed to the app. */
+  force(text: string): void
   /** Send a fresh snapshot after local (non-voice) ledger changes. */
   sendSnapshot(): void
   setHandsFree(on: boolean): void
-  setFastSpeech(on: boolean): void
-  setReadBackAll(on: boolean): void
-  /** Import mode on/off: while on, speech fills the import review table and nothing is saved. */
-  setImportMode(on: boolean): void
+  setSpeed(speed: 0.8 | 1 | 1.2): void
   /** Hands-free tap to cut a reply short: stops local audio at once and tells the server (no push-to-talk). */
   bargeIn(): void
+  /** Wake the agent without the wake word: a tap, or the button held (then call holdEnd). Opens the mic if it is not open yet. */
+  wake(source: 'tap' | 'hold'): void
+  /** The held button was released. */
+  holdEnd(): void
+  /** Tap while awake: show asleep now (the server also times out on its own). */
+  sleep(): void
+  /** Language changed in settings: continue the session in it, keep the mic on. */
+  setLang(l: Lang): void
 }
 
 // ------------------------------------------------------------------ backup + confirm links (src/lib/backup.ts)

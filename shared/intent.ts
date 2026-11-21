@@ -11,6 +11,7 @@
  *   chuka, kattida, katta) 3. case marker / verb person (ne/ko, -ge/-kku/-ki, kottaru/kotte).
  */
 import { type AmountSpan, fold, isCurrencyWord, isNumberWord, parseAmounts, tokenize } from './numbers.js'
+import { SoundSet, crossScript } from './sound.js'
 
 export type Direction = 'credit' | 'payment'
 
@@ -27,7 +28,7 @@ export interface EntryIntent {
 export type Intent =
   | { type: 'entries'; entries: EntryIntent[] }
   | { type: 'correct'; amount?: AmountSpan; direction?: Direction; name?: string }
-  /** Change or remove an earlier entry (not necessarily the last). ref = 1-based index into snapshot.recent. */
+  /** Change or remove an earlier entry (not necessarily the last). ref = 1-based index into snapshot.entries. */
   | { type: 'modify'; ref: number; amount?: AmountSpan; direction?: Direction; name?: string; remove?: boolean }
   | { type: 'undo' }
   | { type: 'yes' }
@@ -39,7 +40,13 @@ export type Intent =
   | { type: 'delete_all' }
   | { type: 'unknown' }
 
-const S = (...w: string[]): Set<string> => new Set(w.map((x) => fold(x)))
+const exact = (...w: string[]): Set<string> => new Set(w.map((x) => fold(x)))
+// vocabulary sets also match an English word written in an Indian script (shared/sound.ts)
+const S = (...w: string[]): Set<string> => {
+  const s = new SoundSet()
+  for (const x of w) s.addWord(fold(x))
+  return s
+}
 
 // ----------------------------------------------------------------- lexicons
 const CREDIT = S('udhaar', 'udhar', 'udhari', 'उधार', 'उधारी', 'baaki', 'baki', 'बाकी', 'बाक़ी', 'bakaya', 'बकाया',
@@ -103,7 +110,8 @@ const GO_AHEAD = S('badal', 'बदल', 'badlo', 'बदलो', 'change', 'kar
   'ಬದಲಾಯಿಸಿ', 'ಮಾಡಿ', 'மாத்துங்க', 'பண்ணுங்க', 'మార్చండి', 'చేయండి')
 const DO_IMP = S('do', 'दो', 'dijiye', 'दीजिए', 'दीजिये', 'dena', 'देना', 'it', 'karo', 'करो', 'badlo', 'बदलो', 'likho', 'लिखो',
   'ಬದಲಾಯಿಸಿ', 'ಮಾಡಿ', 'மாத்துங்க', 'பண்ணுங்க', 'మార్చండి', 'చేయండి')
-const UNDO = S('undo', 'cancel', 'hata', 'हटा', 'mita', 'मिटा', 'kaat', 'काट', 'delete', 'remove', 'ರದ್ದು', 'அழி',
+// never matched by sound: a misheard undo would remove a real entry
+const UNDO = exact('undo', 'cancel', 'hata', 'हटा', 'mita', 'मिटा', 'kaat', 'काट', 'delete', 'remove', 'ರದ್ದು', 'அழி',
   'రద్దు', 'वापस')
 const QUERY = S('total', 'kitna', 'kitne', 'कितना', 'कितने', 'कितनी', 'hisaab', 'hisab', 'हिसाब', 'balance', 'how',
   'much', 'எவ்வளோ', 'எவ்ளோ', 'எவ்வளவுங்க', 'ಎಷ್ಟಿದೆ', 'ಎಷ್ಟು', 'ఎంతుంది', 'ఎంత', 'balance', 'kitni', 'kitta', 'எவ்வளவு', 'ఎంత', 'എത്ര', 'কত', 'કેટલા', 'ਕਿੰਨਾ', 'किती')
@@ -347,6 +355,7 @@ function segments(text: string): { toks: string[]; spans: AmountSpan[] }[] {
 
 // ----------------------------------------------------------------- main
 export function parseFast(text: string): Intent {
+  crossScript.hits = 0 // words matched only by sound in another script make every line a read-back
   const all = tokenize(text)
   if (!all.length) return { type: 'unknown' }
   const amounts = parseAmounts(text)
@@ -469,6 +478,12 @@ export function parseFast(text: string): Intent {
       if (!e.reasons.some((r) => r !== 'name-inherited' && r !== 'dir-all' && r !== 'dir-shared')) e.confidence = 'high'
     }
   }
+  // a deciding word matched only by how it sounds in another script ("साल" may be "year", not "ಸಾಲ"): read back
+  if (crossScript.hits)
+    for (const e of real) {
+      e.reasons.push('cross-script')
+      e.confidence = 'low'
+    }
   return { type: 'entries', entries: real }
 }
 
@@ -571,6 +586,12 @@ export function nameAnswer(text: string): string | null {
   const words = tokenize(text).filter((t) => !stopWord(t) || t === 'ji' || t === 'जी')
   const name = words.filter((w, i) => !(i === 0 && (w === 'ji' || w === 'जी'))).slice(0, 3).join(' ')
   return name || null
+}
+
+/** "Ramesh ka udhaar clear", "hisaab chukta": the customer paid off the whole balance. */
+const SETTLE = S('clear', 'cleared', 'settle', 'settled', 'chukta', 'चुकता', 'chuktha', 'क्लियर', 'ಕ್ಲಿಯರ್', 'ಚುಕ್ತಾ', 'க்ளியர்', 'క్లియర్')
+export function mentionsSettle(text: string): boolean {
+  return tokenize(text).some((t) => SETTLE.has(t))
 }
 
 /** "ಮಾಹಿ ಹೆಸರಿಂದ", "Suresh ke naam se": the turn says whose name or account it is about. */

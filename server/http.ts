@@ -6,7 +6,7 @@
  * https://localhost (Android) or capacitor://localhost (iOS) and calls the deployed API
  * (VITE_API_BASE). More origins: ALLOWED_ORIGINS="https://a.example,https://b.example".
  */
-const BUILT_IN = /^https:\/\/voice-khata[a-z0-9-]*\.vercel\.app$|^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$|^(capacitor|ionic):\/\/localhost$/
+const BUILT_IN = /^https:\/\/(voice-khata|khatabhai)[a-z0-9-]*\.vercel\.app$|^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$|^(capacitor|ionic):\/\/localhost$/
 
 export function isAllowedOrigin(origin: string | null | undefined): boolean {
   if (!origin) return true // scripts and server-to-server calls send no Origin (the eval harness)
@@ -20,7 +20,7 @@ export function cors(handle: (req: Request) => Promise<Response>): (req: Request
     const origin = req.headers.get('origin')
     if (!isAllowedOrigin(origin)) return new Response(JSON.stringify({ error: 'origin not allowed' }), { status: 403, headers: { 'content-type': 'application/json' } })
     const extra: Record<string, string> = origin
-      ? { 'access-control-allow-origin': origin, vary: 'Origin', 'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '86400' }
+      ? { 'access-control-allow-origin': origin, vary: 'Origin', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS', 'access-control-allow-headers': 'content-type, authorization', 'access-control-max-age': '86400' }
       : {}
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: extra })
     const res = await handle(req)

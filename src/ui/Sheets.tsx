@@ -1,16 +1,19 @@
 import { Download, MessageCircle, Share2, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { balance, displayName } from '../../shared/ledger.js'
+import { balance, displayName, dues } from '../../shared/ledger.js'
+import { LANG_NAME, LANGS, type Lang, eraseWord } from '../../shared/replies.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
 import { openExternal } from '@/lib/native'
+import { clientLog } from '@/lib/log'
 import { isUpiId } from '@/lib/pay'
 import { type RemindResult, reminderMessage, sendReminder } from '@/lib/remind'
 import { cn } from '@/lib/utils'
-import { dayLabel, rs } from './format'
+import { dayLabel, entryDay, initials, rs } from './format'
 import { Passbook } from './Ledger'
+import { EntryRow, EraseTyped } from './parts'
 import type { UiStrings } from './strings'
 
 const NOTES_EN = [
@@ -203,6 +206,67 @@ export function toastRemind(t: UiStrings, r: RemindResult) {
   }
 }
 
+export function SettingsSheet({ store, open, t, onClose, onChanged }: {
+  store: KhataStore; open: boolean; t: UiStrings; onClose: () => void; onChanged: (p: { lang?: Lang; handsFree?: boolean; speed?: 0.8 | 1 | 1.2 }) => void
+}) {
+  const st = store.settings
+  const [name, setName] = useState(st.shopName)
+  const [debugLogs, setDebugLogs] = useState(clientLog.enabled)
+  /** the first tap shows the typed-word confirmation; the reset runs only when the word is typed */
+  const [resetArmed, setResetArmed] = useState(false)
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setResetArmed(false); onClose() } }}>
+      <SheetContent side="bottom" className="rounded-t-3xl pb-8">
+        <SheetHeader><SheetTitle>{t.settings}</SheetTitle></SheetHeader>
+        <div className="space-y-4 px-4 text-sm">
+          <label className="flex items-center justify-between gap-3">
+            <span>{t.shopName}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => void store.updateSettings({ shopName: name.trim() || st.shopName })}
+              aria-label={t.shopName} className="h-11 w-44 rounded-lg border bg-background px-2 text-right" maxLength={40} />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t.handsFree}</span>
+            <Switch checked={st.handsFree} onCheckedChange={(v) => void store.updateSettings({ handsFree: v }).then(() => onChanged({ handsFree: v }))} />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t.fastSpeech}</span>
+            {/* faster (1.2) or normal; a slower speed is set by voice ("dheere bolo") and shows as off */}
+            <Switch checked={st.speed === 1.2} onCheckedChange={(v) => { const speed = v ? 1.2 : 1; void store.updateSettings({ speed }).then(() => onChanged({ speed })) }} />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t.debugLogs}</span>
+            <Switch checked={debugLogs} onCheckedChange={(v) => { clientLog.set(v); setDebugLogs(v) }} />
+          </label>
+          <label className="flex items-center justify-between">
+            <span>{t.latency}</span>
+            <Switch checked={st.showLatency} onCheckedChange={(v) => void store.updateSettings({ showLatency: v })} />
+          </label>
+          <div role="group" aria-label={t.language} className="grid grid-cols-5 gap-1.5">
+            {LANGS.map((l) => (
+              <button key={l} aria-pressed={st.lang === l} onClick={() => void store.updateSettings({ lang: l }).then(() => onChanged({ lang: l }))}
+                className={cn('min-h-11 rounded-xl py-2 text-sm ring-1 ring-black/10', st.lang === l && 'bg-primary text-primary-foreground')}>
+                {LANG_NAME[l]}
+              </button>
+            ))}
+          </div>
+          {/* tucked away: wipes this browser's ledger and settings and starts from the first screen */}
+          <div className="pt-2 text-center">
+            {!resetArmed ? (
+              <button onClick={() => setResetArmed(true)} className="min-h-11 px-3 text-xs text-muted-foreground/70 underline underline-offset-4">{t.resetBrowser}</button>
+            ) : (
+              <div className="space-y-1 text-left">
+                <div className="text-sm font-semibold text-destructive">{t.resetBrowser}</div>
+                <div className="text-sm text-muted-foreground">{t.typeToErase} <b className="text-foreground">{eraseWord(st.lang ?? 'hi')}</b></div>
+                <EraseTyped word={eraseWord(st.lang ?? 'hi')} t={t} onErase={() => location.assign(`${location.pathname}?reset=1`)} />
+              </div>
+            )}
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 /** "Mera data kahan hai?": where the data lives, proof it is untampered, export, backup, erase. */
 export function PrivacySheet({ store, open, t, backup, onClose, onChanged }: {
   store: KhataStore; open: boolean; t: UiStrings; backup: BackupClient; onClose: () => void; onChanged: () => void
@@ -279,3 +343,62 @@ async function dropBackup(b: BackupClient) {
   try { await (b as unknown as { deleteBackup?: () => Promise<void> }).deleteBackup?.() } catch { /* best effort */ }
 }
 
+export function remindLink(store: KhataStore, cid: string, text: string) {
+  shareWhatsApp(text, store.state.customers.get(cid)?.phone)
+}
+export { MessageCircle }
+
+/** What a spoken "show ..." opens: a day's entries, a search, or the biggest dues. */
+export type ListView = { k: 'history'; from: string; to: string; cid?: string } | { k: 'search'; text: string; cids?: string[]; eids?: string[] } | { k: 'top'; count?: number }
+
+export function ListSheet({ store, view, t, onClose, onCustomer, onEntry }: {
+  store: KhataStore; view: ListView | null; t: UiStrings; onClose: () => void; onCustomer: (cid: string) => void; onEntry: (eid: string) => void
+}) {
+  if (!view) return null
+  const s = store.state
+  const name = (cid: string) => s.customers.get(cid)?.name ?? '—'
+  const all = s.order.map((id) => s.entries.get(id)!).filter((e) => !e.voided)
+  let title = ''
+  let body: React.ReactNode = null
+  if (view.k === 'top') {
+    title = t.topDebtors
+    const top = dues(s).sort((a, b) => b.paise - a.paise).slice(0, Math.min(5, view.count ?? 5))
+    body = top.length ? top.map((d) => <PersonRow key={d.cid} name={name(d.cid)} paise={d.paise} onClick={() => onCustomer(d.cid)} />) : <Empty t={t} />
+  } else if (view.k === 'history') {
+    title = (view.cid ? `${name(view.cid)} · ` : '') + (view.from === view.to ? dayLabel(view.from) : `${dayLabel(view.from)} ${t.rangeTo} ${dayLabel(view.to)}`)
+    const es = all.filter((e) => { const d = entryDay(e); return d >= view.from && d <= view.to && (!view.cid || e.cid === view.cid) }).sort((a, b) => b.ts - a.ts)
+    body = es.length ? es.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} onClick={() => onEntry(e.eid)} />) : <Empty t={t} />
+  } else {
+    title = `${t.searchResults}: ${view.text}`
+    const q = view.text.trim().toLowerCase()
+    const nums = (view.text.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
+    const people = [...s.customers.values()].filter((c) => view.cids ? view.cids.includes(c.cid) : q && (c.name.toLowerCase().includes(q) || c.aliases.some((a) => a.toLowerCase().includes(q))))
+    const es = view.eids ? all.filter((e) => view.eids!.includes(e.eid)) : nums.length ? all.filter((e) => nums.includes(e.paise)).sort((a, b) => b.ts - a.ts) : []
+    body = people.length || es.length ? (
+      <>
+        {people.map((c) => <PersonRow key={c.cid} name={c.name} paise={balance(s, c.cid)} onClick={() => onCustomer(c.cid)} />)}
+        {es.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} onClick={() => onEntry(e.eid)} />)}
+      </>
+    ) : <Empty t={t} />
+  }
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-3xl pb-8">
+        <SheetHeader><SheetTitle className="text-2xl">{title}</SheetTitle></SheetHeader>
+        <div className="space-y-2 px-4">{body}</div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+const Empty = ({ t }: { t: UiStrings }) => <div className="py-6 text-center text-muted-foreground">{t.noEntriesHere}</div>
+
+function PersonRow({ name, paise, onClick }: { name: string; paise: number; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5 active:bg-muted/60">
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary">{initials(name)}</span>
+      <span className="min-w-0 flex-1 truncate text-lg font-semibold">{name}</span>
+      <span className={cn('num text-2xl font-bold', paise > 0 ? 'text-credit' : 'text-payment')}>{rs(paise)}</span>
+    </button>
+  )
+}

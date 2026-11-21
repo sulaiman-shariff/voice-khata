@@ -63,7 +63,7 @@ const SC = JSON.parse(readFileSync('eval/scenarios.json', 'utf8')) as { shopName
 const snapshotFor = (l: LangSpec): Snapshot => ({
   shopName: SC.shopName,
   customers: l.customers.map((c) => ({ cid: c.cid, name: c.name, aliases: c.aliases, householdId: null, remindersOptIn: false, adult: true, balancePaise: c.balancePaise, typicalPaise: null })),
-  last: null,
+  last: null, entries: [],
   today: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
 })

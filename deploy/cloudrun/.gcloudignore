@@ -1,0 +1,2 @@
+# upload the bundle even though git ignores it
+.gcloudignore
