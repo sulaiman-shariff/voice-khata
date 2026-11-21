@@ -17,6 +17,7 @@ import { WARM_TIMEOUT_MS } from '../server/parse/gemini.js'
 import { GEMINI_TOOLS } from '../server/agent/tools.js'
 import { hashIp, log, shortId } from '../server/log.js'
 import { Session } from '../server/session.js'
+import { validMsg } from '../server/valid-msg.js'
 
 const server = http.createServer((_req, res) => {
   res.writeHead(426, { 'content-type': 'text/plain' })
@@ -208,47 +209,6 @@ wss.on('connection', (ws, req) => {
 })
 
 export default server
-
-const LANGS = new Set(['hi', 'en', 'kn', 'ta', 'te', 'ml', 'mr', 'bn', 'gu', 'pa'])
-/** Shape check before anything reaches the session: one bad frame must not take down the instance. */
-function validMsg(m: unknown): m is ClientMsg {
-  if (!m || typeof m !== 'object') return false
-  const x = m as Record<string, unknown>
-  switch (x.type) {
-    case 'hello': {
-      const s = x.snapshot as Record<string, unknown> | undefined
-      return typeof x.lang === 'string' && LANGS.has(x.lang) && !!s && Array.isArray(s.customers) && s.customers.length <= 5000 &&
-        typeof s.today === 'object' && typeof s.month === 'object' &&
-        (x.resume === undefined || typeof x.resume === 'string') && (x.resend === undefined || typeof x.resend === 'string')
-    }
-    case 'snapshot': {
-      const s = x.snapshot as Record<string, unknown> | undefined
-      return !!s && Array.isArray(s.customers) && s.customers.length <= 5000 && typeof s.today === 'object' && typeof s.month === 'object'
-    }
-    case 'answer':
-    case 'text':
-      return typeof x.text === 'string'
-    case 'tap':
-      return x.action === 'yes' || x.action === 'no' || x.action === 'undo'
-    case 'speed':
-      return x.speed === 0.8 || x.speed === 1 || x.speed === 1.2
-    case 'readback':
-      return typeof x.on === 'boolean'
-    case 'ack':
-      return Number.isInteger(x.seq)
-    case 'wake':
-      return x.source === 'tap' || x.source === 'hold' || x.source === 'phone'
-    case 'hold_end':
-    case 'sleep':
-    case 'ptt_start':
-    case 'ptt_end':
-    case 'playback_done':
-    case 'barge':
-      return true
-    default:
-      return false
-  }
-}
 
 /** 16 kHz mono s16le PCM as a WAV file. */
 function wav(pcm: Buffer): Buffer {
