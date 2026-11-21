@@ -17,7 +17,7 @@ import { Attention } from './attention.js'
 import { type Logger, nullLogger } from './log.js'
 import { type AgentContext, type ToolCall } from './agent/agent.js'
 import { attachTools, runTool } from './agent/tools.js'
-import { LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta } from './ledger/core.js'
+import { LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta, WRITTEN_KEEP_MS } from './ledger/core.js'
 
 export interface SttLike {
   send(pcm: Buffer): void
@@ -846,7 +846,13 @@ export class Session {
       case 'undo': {
         const last = this.snap.last
         if (!last) return { parts: [R.nothingToUndo()], ops: [] }
-        return { parts: [R.undone()], ops: [{ op: 'void', eid: last.eid, reason: 'spoken undo' }] }
+        // at once only when this session wrote that entry in the last minute (the tools' undo_last
+        // rule); an older entry, or one from another session, is read back first
+        if (this.ledger.wroteRecently(last.eid, WRITTEN_KEEP_MS))
+          return { parts: [R.undone()], ops: [{ op: 'void', eid: last.eid, reason: 'spoken undo' }] }
+        const ref = (this.snap.entries ?? []).findIndex((e) => e.eid === last.eid) + 1
+        if (ref < 1) return { parts: [R.didNotCatch()], ops: [] }
+        return this.ledger.modifyEntry({ type: 'modify', ref, remove: true }, { ask: true })
       }
       case 'yes':
       case 'no':

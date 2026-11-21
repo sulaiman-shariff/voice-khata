@@ -544,6 +544,40 @@ describe('corrections and undo target the right entry', () => {
     expect(h.written()).toEqual([['r', 340, 'credit'], ['r', 100, 'credit']])
   })
 
+  describe('a spoken undo is instant only for an entry this session wrote in the last 60 s', () => {
+    const wakeAndSay = async (h: ReturnType<typeof harness>, text: string) => {
+      h.s.onClient({ type: 'wake', source: 'tap' })
+      h.cb.onFinal!(text)
+      await h.s.idle()
+    }
+    it('"ye dabba hata do" with an old last entry asks first, and voids only on a yes', async () => {
+      const h = harness([cust('r', 'Ramesh', 340)], { entries: [ent('e1', 'r', 340, 'credit')] })
+      await wakeAndSay(h, 'ye dabba hata do')
+      expect(h.ops()).toEqual([])
+      expect(h.asks).toBe('modify')
+      expect(h.said.join(' ')).not.toBe('')
+      await h.turn('haan')
+      expect(h.ops()).toEqual([{ op: 'void', eid: 'e1', reason: 'spoken remove' }])
+    })
+    it('"ye dabba hata do" right after a save undoes it at once', async () => {
+      const h = harness([cust('r', 'Ramesh')])
+      await h.turn('Ramesh ka 340 udhaar')
+      const eid = h.entries()[0].eid
+      h.tick(20_000)
+      await wakeAndSay(h, 'ye dabba hata do')
+      expect(h.ops().at(-1)).toEqual({ op: 'void', eid, reason: 'spoken undo' })
+      expect(h.asks).toBeNull()
+    })
+    it('the same entry 61 s later is asked about first', async () => {
+      const h = harness([cust('r', 'Ramesh')])
+      await h.turn('Ramesh ka 340 udhaar')
+      h.tick(61_000)
+      await h.turn('hata do')
+      expect(h.ops().filter((o) => o.op === 'void')).toEqual([])
+      expect(h.asks).toBe('modify')
+    })
+  })
+
   describe('older entries (the model picks one from the numbered recent list)', () => {
     const people = () => [cust('r', 'Ramesh', 340), cust('s', 'Suresh', -200), cust('g', 'Geeta', 150)]
     const recent = () => [ent('e3', 'g', 150, 'credit'), ent('e2', 's', 200, 'payment'), ent('e1', 'r', 340, 'credit', '2026-11-12')]
