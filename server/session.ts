@@ -160,7 +160,7 @@ export class Session {
   private gate(text: string): string | null {
     const asleep = this.attention.state === 'asleep'
     if (asleep && this.isSpeaking()) return null // never wake on what we are saying ourselves
-    const wake = spotWake(text)
+    const wake = spotWake(text, this.phoneUnconfirmed)
     if (asleep && !wake.found) {
       this.log.debug('asleep_dropped', { text })
       return null
@@ -173,10 +173,18 @@ export class Session {
         return null
       }
     }
+    const rest = wake.found ? wake.rest : text
+    if (isSleepWord(rest)) {
+      this.log.info('sleep_word', { text })
+      if (!asleep) {
+        this.flushHeld() // a half-said list is handled, not lost
+        this.sleepNow()
+      }
+      return null
+    }
     if (wake.found) {
       this.attention.wake('word')
-      text = wake.rest
-      if (!text) {
+      if (!rest) {
         this.attention.touch()
         this.enqueue(async () => {
           await this.speak(say(this.lang).awakeHello())
@@ -184,12 +192,24 @@ export class Session {
         })
         return null
       }
-    } else if (isSleepWord(text)) {
-      this.log.info('sleep_word', { text })
-      this.sleepNow()
-      return null
     }
-    return text
+    return rest
+  }
+
+  /** A typed or tapped turn: the window restarts after the reply; an open question keeps us awake for the spoken answer. */
+  private async typedTurn(text: string) {
+    await this.handleText(text, null, 'tap')
+    if (this.pending) this.attention.wake('tap')
+    else this.attention.touch()
+  }
+
+  /** Handle a line held for the rest of its list right now. */
+  private flushHeld() {
+    const h = this.held
+    if (!h) return
+    clearTimeout(h.timer)
+    this.held = null
+    this.dispatchFinal(h.text, h.t)
   }
 
   private sleepNow() {
@@ -250,7 +270,7 @@ export class Session {
         this.log.debug('ptt_start')
         this.ptt = true
         this.bargeIn()
-        this.attention.wake('tap') // push-to-talk is deliberate
+        this.attention.holdStart() // push-to-talk is deliberate: awake while the button is down
         break
       case 'wake':
         this.log.info('wake', { source: msg.source })
@@ -271,23 +291,21 @@ export class Session {
         this.log.debug('ptt_end', { partial: this.lastPartial })
         this.sendHeard()
         this.commit(false)
+        this.attention.holdEnd()
         break
       case 'tap':
         this.log.info('input', { kind: 'tap', action: msg.action })
-        this.attention.touch()
-        this.enqueue(() => this.handleText(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo', null, 'tap'))
+        this.enqueue(() => this.typedTurn(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo'))
         break
       case 'text':
         this.log.info('input', { kind: 'typed', text: msg.text })
-        this.attention.touch()
         // typed lists: one line per entry reads like a spoken list with pauses
         if (msg.text.trim() && msg.text.length <= 2000)
-          this.enqueue(() => this.handleText(msg.text.replace(/\s*[\r\n]+\s*/g, ', ').trim(), null, 'tap'))
+          this.enqueue(() => this.typedTurn(msg.text.replace(/\s*[\r\n]+\s*/g, ', ').trim()))
         break
       case 'answer':
         this.log.info('input', { kind: 'answer', text: msg.text })
-        this.attention.touch()
-        if (msg.text.length <= 60) this.enqueue(() => this.handleText(msg.text, null, 'tap'))
+        if (msg.text.length <= 60) this.enqueue(() => this.typedTurn(msg.text))
         break
       case 'barge':
         this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
@@ -339,6 +357,7 @@ export class Session {
     const stream: SttLike = this.deps.openStt(LOCALE[this.lang], this.keyterms(), {
       onOpen: () => this.log.info('stt_ready', { reason, ms: this.now() - t0 }),
       onSpeechStart: () => {
+        this.attention.touch() // speaking keeps the window open
         if (this.isSpeaking() && this.speaking && !this.speaking.ducked) {
           this.speaking.ducked = true
           this.deps.send({ type: 'duck' })
@@ -445,6 +464,7 @@ export class Session {
   }
 
   private onPartial(text: string) {
+    this.attention.touch()
     this.lastPartial = text
     this.log.debug('partial', { text })
     this.deps.send({ type: 'partial', text })

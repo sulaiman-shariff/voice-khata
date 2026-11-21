@@ -73,11 +73,6 @@ export type ClientMsg =
   | { type: 'hold_end' }
   /** the user tapped to put it to sleep */
   | { type: 'sleep' }
-  /** the phone woke the app: tap, hold (until hold_end), or its on-device wake-word detector */
-  | { type: 'wake'; source: 'tap' | 'hold' | 'phone' }
-  | { type: 'hold_end' }
-  /** the user tapped to put it to sleep */
-  | { type: 'sleep' }
   | { type: 'tap'; action: 'yes' | 'no' | 'undo' }
   | { type: 'answer'; text: string } // tap answer to the open question (option text, udhaar/jama)
   | { type: 'text'; text: string } // typed (or pasted) instruction: same pipeline as speech
@@ -123,8 +118,6 @@ export interface TurnMetrics {
 
 export type ServerMsg =
   | { type: 'ready'; region: string }
-  /** attention state: sent after every hello and on each change */
-  | { type: 'attention'; state: 'asleep' | 'awake' }
   /** attention state: sent after every hello and on each change */
   | { type: 'attention'; state: 'asleep' | 'awake' }
   | { type: 'heard' } // the shopkeeper paused after speaking: a tick on the phone, before the reply

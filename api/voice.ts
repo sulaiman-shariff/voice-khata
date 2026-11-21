@@ -237,10 +237,6 @@ function validMsg(m: unknown): m is ClientMsg {
       return x.source === 'tap' || x.source === 'hold' || x.source === 'phone'
     case 'hold_end':
     case 'sleep':
-    case 'wake':
-      return x.source === 'tap' || x.source === 'hold' || x.source === 'phone'
-    case 'hold_end':
-    case 'sleep':
     case 'ptt_start':
     case 'ptt_end':
     case 'playback_done':
