@@ -13,7 +13,8 @@ const web = (url: string) => { window.open(url, '_blank', 'noopener') }
 /** Open a link; in the app https://wa.me goes straight to WhatsApp. */
 export function openExternal(url: string): void {
   if (!isNative) return web(url)
-  try { AppLauncher.openUrl({ url }).catch(() => web(url)) } catch { web(url) }
+  // openUrl resolves completed:false (not a rejection) when no app takes the link
+  try { AppLauncher.openUrl({ url }).then((r) => { if (!r.completed) web(url) }, () => web(url)) } catch { web(url) }
 }
 
 export function keepAwake(on: boolean): void {
