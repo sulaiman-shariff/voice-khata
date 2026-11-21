@@ -28,6 +28,10 @@ export type LedgerEvent =
   | { type: 'entry_voided'; eid: string; reason: string }
   | { type: 'confirmation'; eid: string; status: 'confirmed' | 'disputed' }
   | { type: 'consent'; cid: string; remindersOptIn: boolean; adult: boolean; phone?: string }
+  | { type: 'customer_renamed'; cid: string; name: string }
+  /** keyed by the surviving account (`cid`); `from`'s entries move to it and `from` is removed */
+  | { type: 'customers_merged'; cid: string; from: string }
+  | { type: 'phone_set'; cid: string; phone: string }
 
 export interface Customer {
   cid: string
@@ -84,6 +88,25 @@ export function apply(s: LedgerState, ev: LedgerEvent, ts = Date.now()): LedgerS
     case 'consent': {
       const c = s.customers.get(ev.cid)
       if (c) Object.assign(c, { remindersOptIn: ev.remindersOptIn, adult: ev.adult, phone: ev.phone })
+      break
+    }
+    case 'customer_renamed': {
+      const c = s.customers.get(ev.cid)
+      if (c) c.name = ev.name
+      break
+    }
+    case 'customers_merged': {
+      const into = s.customers.get(ev.cid)
+      const from = s.customers.get(ev.from)
+      if (!into || !from || ev.cid === ev.from) break
+      for (const n of [from.name, ...from.aliases]) if (n !== into.name && !into.aliases.includes(n)) into.aliases.push(n)
+      for (const e of s.entries.values()) if (e.cid === ev.from) e.cid = ev.cid
+      s.customers.delete(ev.from)
+      break
+    }
+    case 'phone_set': {
+      const c = s.customers.get(ev.cid)
+      if (c) c.phone = ev.phone
       break
     }
     case 'entry':

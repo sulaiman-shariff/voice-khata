@@ -7,7 +7,7 @@
 import { type Direction, type EntryIntent, type Intent, directionAnswer, mentionsMoney, mentionsSettle, nameAnswer, refersBack } from '../../shared/intent.js'
 import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
 import { parseAmounts } from '../../shared/numbers.js'
-import type { LedgerOp, PendingView, ServerMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
+import type { LedgerOp, PendingView, ServerMsg, SettingMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
 import { type Lang, LOCALE, say, sayMore } from '../../shared/replies.js'
 import type { Logger } from '../log.js'
 
@@ -52,11 +52,18 @@ export interface Draft {
 export type Pending =
   | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
   | { kind: 'which'; draft: Draft; queue: Draft[]; options: SnapCustomer[] }
-  | { kind: 'delete' }
+  /**
+   * Erase everything. With requireTap (the agent's erase_all) a spoken yes only arms it
+   * (spokenYes); the on-screen button tap then erases. Without it, a yes erases (the old flow).
+   */
+  | { kind: 'delete'; requireTap?: boolean; spokenYes?: boolean }
   /** one question for a list that shared a single direction word */
   | { kind: 'batch'; drafts: Draft[] }
-  /** read-back before changing or removing an older entry */
-  | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string }
+  /**
+   * read-back before changing or removing an older entry (also merge, move, and a reminder):
+   * on a yes the ops are written, `done` is said, and `ready` (if any) goes to the phone
+   */
+  | { kind: 'modify'; ops: LedgerOp[]; done: string; view: PendingView; focus: string; ready?: Reply['ready'] }
 
 interface SavedState {
   v: 1
@@ -76,6 +83,12 @@ export interface Reply {
   ackable?: number
   /** a screen the phone should show with this reply */
   show?: ShowMsg
+  /** a setting changed by voice, for the phone to apply */
+  setting?: SettingMsg
+  /** something ready for the shopkeeper to send or save with one tap (nothing is sent by the server) */
+  ready?: { kind: 'whatsapp' | 'backup'; cid?: string; text?: string }
+  /** heard, and taken as talk to someone else: nothing said, nothing written */
+  notForMe?: true
 }
 
 export interface LedgerDeps {
@@ -92,7 +105,13 @@ export class LedgerCore {
     shopName: 'Shop', customers: [], last: null, entries: [],
     today: { creditPaise: 0, paymentPaise: 0, entries: 0 }, month: { creditPaise: 0, paymentPaise: 0, entries: 0 },
   }
-  pending: Pending | null = null
+  private _pending: Pending | null = null
+  /** The open question. Setting a new one stamps `pendingAt`, so every question expires on time, whoever asked it. */
+  get pending(): Pending | null { return this._pending }
+  set pending(p: Pending | null) {
+    if (p && p !== this._pending) this.pendingAt = this.now()
+    this._pending = p
+  }
   /** the customer the conversation is about right now */
   focusCid: string | null = null
   /** where the turn being handled came from (taps and typed text arrive as 'tap') */
@@ -105,14 +124,38 @@ export class LedgerCore {
    * Handles a fresh instruction that arrives while a question is open ("a fresh, complete
    * instruction replaces the question"). Set by whoever owns the dialogue (Session).
    */
-  dispatch: (intent: Intent, text: string, meta: TurnMeta) => Reply | null = () => null
+  dispatch: (intent: Intent, text: string, meta: TurnMeta) => Reply | null = (intent, text, meta) => {
+    // the ledger part of a fresh instruction; Session replaces this with its full dialogue
+    switch (intent.type) {
+      case 'entries': return this.addEntries(intent, text, meta)
+      case 'modify': return this.modifyEntry(intent)
+      case 'correct': return this.correctLast(intent)
+      default: return null
+    }
+  }
+  /**
+   * Saves are spoken as one sentence with the customer's new balance (savedWithBalance) instead
+   * of the short read-back. The agent's tools turn this on for the duration of a tool call.
+   */
+  sayBalance = false
 
   constructor(private deps: LedgerDeps) {}
 
+  /** Drop an open question older than PENDING_TTL_MS (the shopkeeper moved on). True if one was dropped. */
+  expireStale(): boolean {
+    if (!this._pending || this.now() - this.pendingAt <= PENDING_TTL_MS) return false
+    this.log.info('pending_expired', { kind: this._pending.kind, ageMs: this.now() - this.pendingAt })
+    this._pending = null
+    return true
+  }
+
   private get log(): Logger { return this.deps.log }
-  private get lang(): Lang { return this.deps.lang() }
+  /** the language replies are spoken in right now */
+  get lang(): Lang { return this.deps.lang() }
   private get now(): () => number { return this.deps.now }
   private get newId(): () => string { return this.deps.newId }
+  /** a fresh id for a customer or entry */
+  freshId(): string { return this.deps.newId() }
 
   /**
    * The state a new session needs to carry on after a dropped or swapped connection: the open
@@ -162,7 +205,7 @@ export class LedgerCore {
   }
 
   /** Change or remove any recent entry. The newest one changes at once (like "nahi, 430"); older ones are read back first. */
-  modifyEntry(intent: Extract<Intent, { type: 'modify' }>): Reply {
+  modifyEntry(intent: Extract<Intent, { type: 'modify' }>, opts: { ask?: boolean } = {}): Reply {
     const R = say(this.lang)
     const M = sayMore(this.lang)
     const e = (this.snap.entries ?? [])[intent.ref - 1]
@@ -171,7 +214,7 @@ export class LedgerCore {
     if (intent.remove) {
       const ops: LedgerOp[] = [{ op: 'void', eid: e.eid, reason: 'spoken remove' }]
       const done = M.removed(oldName, e.paise / 100)
-      if (intent.ref === 1) return { parts: [done], ops }
+      if (intent.ref === 1 && !opts.ask) return { parts: [done], ops }
       this.pending = { kind: 'modify', ops, done, focus: e.cid, view: { kind: 'modify', remove: true, name: oldName, paise: e.paise, direction: e.direction } }
       return { parts: [M.removeAsk(oldName, e.paise / 100, e.direction)], ops: [] }
     }
@@ -199,7 +242,7 @@ export class LedgerCore {
     const done = R.corrected(name, paise / 100, dir)
     const focus = amend.cid ?? e.cid
     const opens = ops.some((o) => o.op === 'add_customer') && this.turnSrc !== 'tap'
-    if (intent.ref === 1 && !opens) {
+    if (intent.ref === 1 && !opens && !opts.ask) {
       this.focusCid = focus
       return { parts: [done], ops }
     }
@@ -227,6 +270,33 @@ export class LedgerCore {
       noisy: meta.noisy,
       spoken: this.turnSrc !== 'tap',
     }
+  }
+
+  /**
+   * A fresh list of entries: drafts in order, the same line twice is one, "uska 100 aur" is the
+   * customer just talked about, and one direction word for a whole list is asked once.
+   */
+  addEntries(intent: Extract<Intent, { type: 'entries' }>, text: string, meta: TurnMeta): Reply {
+    // the same line twice in a row (said twice, or returned twice by the model) is one entry
+    const drafts = intent.entries.map((e) => this.draftFrom(e, text, meta))
+      .filter((d, i, a) => i === 0 || !(d.heardName && d.heardName.toLowerCase() === a[i - 1].heardName?.toLowerCase() &&
+        d.paise === a[i - 1].paise && d.direction === a[i - 1].direction))
+    if (drafts.length === 1) drafts[0].single = true
+    // "uska 100 aur" / "usko 50 udhaar": the customer we were just talking about
+    if (this.focusCid && refersBack(text))
+      for (const d of drafts)
+        if (!d.heardName && !d.cid) {
+          d.cid = this.focusCid
+          d.nameSure = true
+          d.reasons = [...d.reasons.filter((r) => r !== 'no-name'), 'from-context']
+          if (d.reasons.every((r) => r === 'from-context')) d.confidence = 'high'
+        }
+    // one direction word for a whole list: ask once ("all credit?") rather than guess for each
+    if (drafts.length > 1 && drafts.some((d) => d.reasons.includes('dir-shared'))) {
+      this.pending = { kind: 'batch', drafts }
+      return { parts: [sayMore(this.lang).batchAsk(this.batchItems(drafts), drafts.find((d) => d.direction)!.direction!)], ops: [] }
+    }
+    return this.processDrafts(drafts, { parts: [], ops: [] })
   }
 
   /** Customer lookup for queries: best match at NEAR or better. */
@@ -424,9 +494,19 @@ export class LedgerCore {
         snrDb: d.snrDb ?? undefined, path: d.path,
       },
     })
-    acc.parts.push(d.promise ? R.savedPromise(name, d.paise / 100, d.dayOffset) : R.saved(name, d.paise / 100, d.direction!))
+    if (d.promise) acc.parts.push(R.savedPromise(name, d.paise / 100, d.dayOffset))
+    else if (this.sayBalance) acc.parts.push(R.savedWithBalance(name, d.paise / 100, d.direction!, this.balanceAfter(d.cid!, acc.ops) / 100))
+    else acc.parts.push(R.saved(name, d.paise / 100, d.direction!))
     acc.saved = (acc.saved ?? 0) + 1
-    if (this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
+    // the full sentence with the balance is the confirmation: never shortened to an ack
+    if (!this.sayBalance && this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
+  }
+
+  /** The customer's balance (paise) once the not-yet-applied ops of this reply are written. */
+  private balanceAfter(cid: string, ops: LedgerOp[]): number {
+    let b = this.snap.customers.find((c) => c.cid === cid)?.balancePaise ?? 0
+    for (const o of ops) if (o.op === 'entry' && o.cid === cid && !o.promise) b += o.direction === 'credit' ? o.paise : -o.paise
+    return b
   }
 
   /**
@@ -442,7 +522,9 @@ export class LedgerCore {
 
   answerPending(text: string, intent: Intent, meta: TurnMeta): Reply | null {
     const R = say(this.lang)
-    const p = this.pending!
+    // a question left hanging expires instead of catching a later "haan": this is a fresh turn
+    if (this.expireStale() || !this.pending) return this.dispatch(intent, text, meta)
+    const p = this.pending
     const acc: Reply = { parts: [], ops: [] }
     if (p.kind === 'batch') return this.answerBatch(p.drafts, text, intent, meta)
     if (intent.type === 'undo' || (intent.type === 'no' && p.kind !== 'confusable')) {
@@ -451,6 +533,15 @@ export class LedgerCore {
       return { parts: [R.notSaved()], ops: [] }
     }
     if (p.kind === 'delete') {
+      if (p.requireTap && intent.type === 'yes') {
+        // erase_all: a spoken yes arms it, then only the on-screen button erases
+        if (this.turnSrc === 'tap' && p.spokenYes) {
+          this.pending = null
+          return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
+        }
+        if (this.turnSrc !== 'tap') this.pending = { kind: 'delete', requireTap: true, spokenYes: true }
+        return { parts: [this.turnSrc !== 'tap' ? R.eraseTap() : R.eraseAsk()], ops: [] }
+      }
       this.pending = null
       if (intent.type === 'yes') return { parts: [R.deleted()], ops: [{ op: 'delete_all' }] }
       return { parts: [R.notSaved()], ops: [] }
@@ -459,7 +550,7 @@ export class LedgerCore {
       this.pending = null
       if (intent.type === 'yes') {
         this.focusCid = p.focus
-        return { parts: [p.done], ops: p.ops }
+        return p.ready ? { parts: [p.done], ops: p.ops, ready: p.ready } : { parts: [p.done], ops: p.ops }
       }
       // anything else is a new instruction: drop the question and handle it
       return intent.type === 'unknown' ? { parts: [R.notSaved()], ops: [] } : this.dispatch(intent, text, meta)
@@ -677,6 +768,25 @@ export class LedgerCore {
     const focus = saysNoName && this.focusCid ? this.snap.customers.find((c) => c.cid === this.focusCid) ?? null : null
     const one = LedgerCore.clearWinner(found) ?? (found.length ? null : focus)
     if (!one && found.length < 2) return null // nobody we know: not a settle
+    return this.settleWith(one, found, text, meta)
+  }
+
+  /**
+   * Settle by name, for the agent: the customer named (two who fit are asked about), or the one
+   * just talked about when no name is given. Always read back with the balance; null when nobody fits.
+   */
+  settleFor(name: string | null, text: string, meta: TurnMeta): Reply | null {
+    const exact = name ? this.lookup(name) : null
+    const twins = exact ? this.snap.customers.filter((c) => c.name.toLowerCase() === exact.name.toLowerCase()) : []
+    if (twins.length >= 2) return this.settleWith(null, twins.map((c) => ({ c, score: 1 })), text, meta)
+    const found = name ? this.candidates(name) : []
+    const focus = !name && this.focusCid ? this.snap.customers.find((c) => c.cid === this.focusCid) ?? null : null
+    const one = LedgerCore.clearWinner(found) ?? exact ?? focus
+    if (!one && found.length < 2) return null
+    return this.settleWith(one, found, text, meta)
+  }
+
+  private settleWith(one: SnapCustomer | null, found: { c: SnapCustomer; score: number }[], text: string, meta: TurnMeta): Reply {
     const d: Draft = {
       heardName: one?.name ?? null, cid: one?.cid ?? null, newName: null, nameSure: true, paise: one?.balancePaise ?? 1, alt: null,
       direction: 'payment', dayOffset: 0, promise: false, confidence: 'low', reasons: ['settle-balance'], path: meta.path, transcript: text,
@@ -732,9 +842,10 @@ export class LedgerCore {
   }
 
   pendingView(): PendingView | null {
+    this.expireStale()
     const p = this.pending
     if (!p) return null
-    if (p.kind === 'delete') return { kind: 'delete' }
+    if (p.kind === 'delete') return p.requireTap ? { kind: 'delete', requireTap: true } : { kind: 'delete' }
     if (p.kind === 'modify') return p.view
     if (p.kind === 'batch') {
       const dir = p.drafts.find((d) => d.direction)?.direction ?? null
@@ -809,8 +920,35 @@ export class LedgerCore {
         s.entries = []
         this.focusCid = null
         break
-      case 'add_alias':
+      case 'add_alias': {
+        const c = s.customers.find((x) => x.cid === op.cid)
+        if (c && !c.aliases.includes(op.alias)) c.aliases.push(op.alias)
         break
+      }
+      case 'rename_customer': {
+        const c = s.customers.find((x) => x.cid === op.cid)
+        if (c) c.name = op.name
+        this.deps.onCustomerAdded?.() // the recogniser's name hints change
+        break
+      }
+      case 'set_phone': {
+        const c = s.customers.find((x) => x.cid === op.cid)
+        if (c) c.phone = op.phone
+        break
+      }
+      case 'merge_customers': {
+        const into = s.customers.find((x) => x.cid === op.into)
+        const from = s.customers.find((x) => x.cid === op.from)
+        if (!into || !from || into === from) break
+        for (const n of [from.name, ...from.aliases]) if (n !== into.name && !into.aliases.includes(n)) into.aliases.push(n)
+        into.balancePaise += from.balancePaise
+        into.typicalPaise = null
+        for (const e of [s.last, ...(s.entries ?? [])]) if (e && e.cid === op.from) e.cid = op.into
+        s.customers = s.customers.filter((x) => x.cid !== op.from)
+        if (this.focusCid === op.from) this.focusCid = op.into
+        this.deps.onCustomerAdded?.()
+        break
+      }
     }
   }
 

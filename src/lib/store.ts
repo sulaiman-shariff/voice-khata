@@ -224,6 +224,9 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
       }
       case 'void': return { type: 'entry_voided', eid: o.eid, reason: o.reason }
       case 'delete_all': return 'delete_all'
+      case 'rename_customer': return { type: 'customer_renamed', cid: o.cid, name: o.name }
+      case 'merge_customers': return { type: 'customers_merged', cid: o.into, from: o.from }
+      case 'set_phone': return { type: 'phone_set', cid: o.cid, phone: o.phone }
     }
   }
 

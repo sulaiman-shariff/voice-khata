@@ -54,6 +54,11 @@ export type LedgerOp =
   | { op: 'amend'; eid: string; paise?: number; direction?: Direction; cid?: string }
   | { op: 'void'; eid: string; reason: string }
   | { op: 'delete_all' }
+  /** the customer's display name changes (a misheard or fuller name) */
+  | { op: 'rename_customer'; cid: string; name: string }
+  /** two accounts are one person: `from`'s entries move to `into`, `from`'s names become aliases, `from` is gone */
+  | { op: 'merge_customers'; from: string; into: string }
+  | { op: 'set_phone'; cid: string; phone: string }
 
 export type ClientMsg =
   | {
@@ -89,7 +94,12 @@ export interface PendingView {
   paise?: number
   direction?: Direction | null
   options?: string[]
+  /** delete: a spoken yes is not enough, the on-screen button must be tapped */
+  requireTap?: boolean
 }
+
+/** A setting the agent changed by voice; the phone applies and stores it. */
+export interface SettingMsg { type: 'setting'; key: 'lang' | 'readBack' | 'fastSpeech' | 'shopName'; value: unknown }
 
 export interface TurnMetrics {
   /** ms timestamps relative to the end of speech (energy-detected), negative = before */

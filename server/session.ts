@@ -11,7 +11,7 @@ import { type Intent, dangling, directionAnswer, hasNameWord, mentionsSettle, ha
 import { NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, ServerMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, guardReply, langFromLocale, say, sayMore, stripTags } from '../shared/replies.js'
+import { type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { type Logger, nullLogger } from './log.js'
 import { type Draft, LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta } from './ledger/core.js'
@@ -720,28 +720,8 @@ export class Session {
       if (settled) return settled
     }
     switch (intent.type) {
-      case 'entries': {
-        // the same line twice in a row (said twice, or returned twice by the model) is one entry
-        const drafts = intent.entries.map((e) => this.ledger.draftFrom(e, text, meta))
-          .filter((d, i, a) => i === 0 || !(d.heardName && d.heardName.toLowerCase() === a[i - 1].heardName?.toLowerCase() &&
-            d.paise === a[i - 1].paise && d.direction === a[i - 1].direction))
-        if (drafts.length === 1) drafts[0].single = true
-        // "uska 100 aur" / "usko 50 udhaar": the customer we were just talking about
-        if (this.ledger.focusCid && refersBack(text))
-          for (const d of drafts)
-            if (!d.heardName && !d.cid) {
-              d.cid = this.ledger.focusCid
-              d.nameSure = true
-              d.reasons = [...d.reasons.filter((r) => r !== 'no-name'), 'from-context']
-              if (d.reasons.every((r) => r === 'from-context')) d.confidence = 'high'
-            }
-        // one direction word for a whole list: ask once ("all credit?") rather than guess for each
-        if (drafts.length > 1 && drafts.some((d) => d.reasons.includes('dir-shared'))) {
-          this.pending = { kind: 'batch', drafts }
-          return { parts: [sayMore(this.lang).batchAsk(this.ledger.batchItems(drafts), drafts.find((d) => d.direction)!.direction!)], ops: [] }
-        }
-        return this.ledger.processDrafts(drafts, { parts: [], ops: [] })
-      }
+      case 'entries':
+        return this.ledger.addEntries(intent, text, meta)
       case 'modify':
         return this.ledger.modifyEntry(intent)
       case 'correct':

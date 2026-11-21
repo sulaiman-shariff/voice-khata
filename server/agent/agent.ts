@@ -5,9 +5,9 @@
 import { geminiAgentCall, type GeminiTool } from '../parse/gemini.js'
 import type { PendingView } from '../../shared/protocol.js'
 import type { Lang } from '../../shared/replies.js'
+import { type ToolCall, isToolName } from './tools.js'
 
-/** Unified with server/agent/tools.ts later. */
-export interface ToolCall { name: string; args: Record<string, unknown> }
+export type { ToolCall } from './tools.js'
 
 export interface AgentContext {
   lang: Lang
@@ -60,5 +60,7 @@ function userTurn(ctx: AgentContext): string {
 }
 
 export async function decide(ctx: AgentContext, tools: GeminiTool[], audio?: Buffer): Promise<{ calls: ToolCall[]; ms: number }> {
-  return geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio)
+  const r = await geminiAgentCall(AGENT_SYSTEM, userTurn(ctx), tools, audio)
+  // a tool we do not have is never run
+  return { calls: r.calls.filter((c): c is ToolCall => isToolName(c.name)), ms: r.ms }
 }

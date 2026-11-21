@@ -14,6 +14,17 @@ const entry = (eid: string, cid: string, paise: number, direction: 'credit' | 'p
 })
 
 describe('store', () => {
+  it('rename, set_phone and merge ops from the agent are applied', async () => {
+    const s = await createStore(memoryPersistence())
+    await s.applyOps([cust('c1', 'Ramesh'), cust('c2', 'Rmesh'), entry('e1', 'c1', 10000, 'credit'), entry('e2', 'c2', 5000, 'credit'),
+      { op: 'rename_customer', cid: 'c1', name: 'Ramesh Kumar' }, { op: 'set_phone', cid: 'c1', phone: '9845012345' },
+      { op: 'merge_customers', from: 'c2', into: 'c1' }])
+    const snap = s.snapshot()
+    expect(snap.customers).toHaveLength(1)
+    expect(snap.customers[0]).toMatchObject({ cid: 'c1', name: 'Ramesh Kumar', phone: '9845012345', aliases: ['Rmesh'], balancePaise: 15000 })
+    expect(snap.entries.every((e) => e.cid === 'c1')).toBe(true)
+  })
+
   it('server ops give the right balances, totals and last entry (promise, amend, void)', async () => {
     const s = await createStore(memoryPersistence())
     await s.applyOps([cust('c1', 'Ramesh'), entry('e1', 'c1', 50000, 'credit'), entry('e2', 'c1', 20000, 'payment'),
