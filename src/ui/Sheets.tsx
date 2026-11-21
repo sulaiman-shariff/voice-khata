@@ -1,14 +1,15 @@
 import { Download, MessageCircle, Share2, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { balance } from '../../shared/ledger.js'
+import { balance, dues } from '../../shared/ledger.js'
 import { LANG_NAME, LANGS, type Lang } from '../../shared/replies.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
 import { clientLog } from '@/lib/log'
 import { cn } from '@/lib/utils'
-import { dayLabel, rs } from './format'
+import { dayLabel, entryDay, initials, rs } from './format'
 import { Passbook } from './Ledger'
+import { EntryRow } from './parts'
 import type { UiStrings } from './strings'
 
 const NOTES_EN = [
@@ -275,3 +276,58 @@ export function remindLink(store: KhataStore, cid: string, text: string) {
   shareWhatsApp(text, store.state.customers.get(cid)?.phone)
 }
 export { MessageCircle }
+
+/** What a spoken "show ..." opens: a day's entries, a search, or the biggest dues. */
+export type ListView = { k: 'history'; from: string; to: string } | { k: 'search'; text: string } | { k: 'top' }
+
+export function ListSheet({ store, view, t, onClose, onCustomer, onEntry }: {
+  store: KhataStore; view: ListView | null; t: UiStrings; onClose: () => void; onCustomer: (cid: string) => void; onEntry: (eid: string) => void
+}) {
+  if (!view) return null
+  const s = store.state
+  const name = (cid: string) => s.customers.get(cid)?.name ?? '—'
+  const all = s.order.map((id) => s.entries.get(id)!).filter((e) => !e.voided)
+  let title = ''
+  let body: React.ReactNode = null
+  if (view.k === 'top') {
+    title = t.topDebtors
+    const top = dues(s).sort((a, b) => b.paise - a.paise).slice(0, 5)
+    body = top.length ? top.map((d) => <PersonRow key={d.cid} name={name(d.cid)} paise={d.paise} onClick={() => onCustomer(d.cid)} />) : <Empty t={t} />
+  } else if (view.k === 'history') {
+    title = view.from === view.to ? dayLabel(view.from) : `${dayLabel(view.from)} ${t.rangeTo} ${dayLabel(view.to)}`
+    const es = all.filter((e) => { const d = entryDay(e); return d >= view.from && d <= view.to }).sort((a, b) => b.ts - a.ts)
+    body = es.length ? es.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} onClick={() => onEntry(e.eid)} />) : <Empty t={t} />
+  } else {
+    title = `${t.searchResults}: ${view.text}`
+    const q = view.text.trim().toLowerCase()
+    const nums = (view.text.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
+    const people = [...s.customers.values()].filter((c) => q && (c.name.toLowerCase().includes(q) || c.aliases.some((a) => a.toLowerCase().includes(q))))
+    const es = nums.length ? all.filter((e) => nums.includes(e.paise)).sort((a, b) => b.ts - a.ts) : []
+    body = people.length || es.length ? (
+      <>
+        {people.map((c) => <PersonRow key={c.cid} name={c.name} paise={balance(s, c.cid)} onClick={() => onCustomer(c.cid)} />)}
+        {es.map((e) => <EntryRow key={e.eid} e={e} name={name(e.cid)} t={t} onClick={() => onEntry(e.eid)} />)}
+      </>
+    ) : <Empty t={t} />
+  }
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-3xl pb-8">
+        <SheetHeader><SheetTitle className="text-2xl">{title}</SheetTitle></SheetHeader>
+        <div className="space-y-2 px-4">{body}</div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+const Empty = ({ t }: { t: UiStrings }) => <div className="py-6 text-center text-muted-foreground">{t.noEntriesHere}</div>
+
+function PersonRow({ name, paise, onClick }: { name: string; paise: number; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5 active:bg-muted/60">
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary">{initials(name)}</span>
+      <span className="min-w-0 flex-1 truncate text-lg font-semibold">{name}</span>
+      <span className={cn('num text-2xl font-bold', paise > 0 ? 'text-credit' : 'text-payment')}>{rs(paise)}</span>
+    </button>
+  )
+}

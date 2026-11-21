@@ -278,7 +278,15 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
       return
     }
     switch (m.type) {
+      case 'setting':
+        if (m.key === 'lang' && typeof m.value === 'string') {
+          // spoken language change: continue in it on this socket (no reconnect, the mic stays on)
+          if (opts) opts.lang = m.value as Lang
+          ev.lang?.(m.value as Lang)
+        } else ev.setting?.(m)
+        break
       case 'ready':
+        if ('kind' in m) { ev.ready?.(m); break } // the one-tap card, not the connection greeting
         // the socket can be up before the mic is (it opens in parallel with the permission prompt)
         if (status === 'connecting' || status === 'offline') setStatus(idleStatus())
         break
@@ -864,6 +872,7 @@ export function createVoiceClient(url: string, ev: VoiceEvents): VoiceClient {
     tap: (action) => send({ type: 'tap', action }),
     answer: (text) => send({ type: 'answer', text }),
     sendText: (text) => send({ type: 'text', text }),
+    force: (text) => send({ type: 'force', text }),
     sendSnapshot: () => {
       if (opts) send({ type: 'snapshot', snapshot: opts.snapshot() })
     },

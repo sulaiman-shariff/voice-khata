@@ -841,6 +841,15 @@ export class LedgerCore {
     return { parts: [done], ops }
   }
 
+  /** the amounts this customer usually has (typical, then recent), as buttons for the amount question */
+  private amountChoices(cid: string | null): number[] | undefined {
+    if (!cid) return undefined
+    const c = this.snap.customers.find((x) => x.cid === cid)
+    const recent = (this.snap.entries ?? []).filter((e) => e.cid === cid && !e.promise).map((e) => e.paise)
+    const out = [...new Set([c?.typicalPaise ?? 0, ...recent].filter((p) => p > 0))].slice(0, 3).map((p) => p / 100)
+    return out.length ? out : undefined
+  }
+
   pendingView(): PendingView | null {
     this.expireStale()
     const p = this.pending
@@ -858,6 +867,7 @@ export class LedgerCore {
       paise: d.paise,
       direction: d.direction,
       newCustomer: p.kind === 'confirm' && this.opensAccount(d) ? true : undefined,
+      amounts: p.kind === 'amount' ? this.amountChoices(d.cid) : undefined,
       options: p.kind === 'which' ? p.options.map((c) => this.label(c)) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
     }
   }

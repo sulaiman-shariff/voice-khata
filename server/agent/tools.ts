@@ -329,12 +329,14 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       const dayStr = day !== null ? istDay(day) : null
       const list = entries.filter((e) => (!c || e.cid === c.cid) && (!dayStr || e.day === dayStr))
       const label = c ? c.name : dayStr ?? istDay(0)
-      const show = c ? { type: 'show', view: 'customer', cid: c.cid } as const : { type: 'show', view: 'summary' } as const
+      // a customer alone: their page; a day (with or without a customer): the entries of that day
+      const show: Reply['show'] = c && !dayStr ? { type: 'show', view: 'customer', cid: c.cid }
+        : { type: 'show', view: 'history', from: dayStr ?? istDay(0), to: dayStr ?? istDay(0) }
       return { parts: [R.showHistory(label, list.length)], ops: [], show }
     }
     case 'show_today': {
       const t = core.snap.today
-      return { parts: [R.showToday(t.creditPaise / 100, t.paymentPaise / 100)], ops: [], show: { type: 'show', view: 'summary' } }
+      return { parts: [R.showToday(t.creditPaise / 100, t.paymentPaise / 100)], ops: [], show: { type: 'show', view: 'today' } }
     }
     case 'search': {
       const q = str(a.text)
@@ -343,15 +345,15 @@ function run(core: LedgerCore, call: ToolCall, meta: TurnMeta & { transcript: st
       const amounts = (q.match(/\d+(\.\d+)?/g) ?? []).map((x) => Math.round(Number(x) * 100))
       const hits = amounts.length ? entries.filter((e) => amounts.includes(e.paise)) : []
       const reply: Reply = { parts: [R.searchResult(q, found.length + hits.length)], ops: [] }
-      if (found.length === 1) reply.show = { type: 'show', view: 'customer', cid: found[0].cid }
+      reply.show = found.length === 1 && !hits.length ? { type: 'show', view: 'customer', cid: found[0].cid } : { type: 'show', view: 'search', text: q }
       return reply
     }
     case 'top_debtors': {
       const n = Math.min(5, Math.max(1, int(a.count) ?? 3))
-      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'dues' } }
+      return { parts: [R.topDebtors(owing().slice(0, n).map((c) => c.name))], ops: [], show: { type: 'show', view: 'top_debtors' } }
     }
     case 'close_view':
-      return speak(R.closed())
+      return { parts: [R.closed()], ops: [], show: { type: 'show', view: 'close' } }
 
     // ------------------------------------------------------------------ settings
     case 'set_language': {

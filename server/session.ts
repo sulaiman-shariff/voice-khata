@@ -11,7 +11,7 @@ import { type Intent, dangling, directionAnswer, hasNameWord, mentionsSettle, ha
 import { NAME_SURE, matchName } from '../shared/names.js'
 import { parseAmounts } from '../shared/numbers.js'
 import type { ClientMsg, ServerMsg, SnapEntry, Snapshot, TurnMetrics } from '../shared/protocol.js'
-import { type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
+import { LANGS, type Lang, LOCALE, guardReply, langFromLocale, say, stripTags } from '../shared/replies.js'
 import { FRAME_SAMPLES, newEnergyState, pushFrame, resetUtterance, tooNoisy, utteranceSnrDb } from './turn/energy.js'
 import { type Logger, nullLogger } from './log.js'
 import { type Draft, LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta } from './ledger/core.js'
@@ -192,6 +192,8 @@ export class Session {
         break
       case 'tap':
         this.log.info('input', { kind: 'tap', action: msg.action })
+        // the on-screen erase button is the tap that erases: no spoken yes needed first
+        if (msg.action === 'yes' && this.pending?.kind === 'delete' && this.pending.requireTap) this.pending.spokenYes = true
         this.enqueue(() => this.handleText(msg.action === 'yes' ? 'haan' : msg.action === 'no' ? 'nahi' : 'undo', null, 'tap'))
         break
       case 'text':
@@ -203,6 +205,11 @@ export class Session {
       case 'answer':
         this.log.info('input', { kind: 'answer', text: msg.text })
         if (msg.text.length <= 60) this.enqueue(() => this.handleText(msg.text, null, 'tap'))
+        break
+      case 'force':
+        // "Save anyway" on a not-an-entry line: addressed to the app, never dropped as talk to someone else
+        this.log.info('input', { kind: 'force', text: msg.text })
+        if (msg.text.trim() && msg.text.length <= 2000) this.enqueue(() => this.handleText(msg.text.trim(), null, 'tap', true))
         break
       case 'barge':
         this.log.info('barge_in', { by: 'tap', speaking: !!this.speaking })
@@ -509,6 +516,8 @@ export class Session {
     text: string,
     t: TurnTiming | null,
     _src: 'voice' | 'tap' | 'resend',
+    /** "Save anyway": handled as addressed to the app; the model may not answer not_for_me */
+    forced = false,
   ): Promise<void> {
     const t0 = this.now()
     this.ledger.turnSrc = _src
@@ -524,7 +533,7 @@ export class Session {
     }
     const turn = ++this.turnNo
     let unsureChange = false
-    if (!this.pending && this.needsLlm(text, intent)) {
+    if (!this.pending && (forced || this.needsLlm(text, intent))) {
       const change = this.isChangeTalk(text, intent)
       const l0 = this.now()
       try {
@@ -584,6 +593,7 @@ export class Session {
       this.unacked.set(seq, reply.ops.length)
       this.deps.send({ type: 'ops', ops: reply.ops, seq })
     }
+    this.sendReplyExtras(reply)
     this.deps.send({ type: 'pending', pending: this.ledger.pendingView() })
 
     let firstAudioAt: number | null = null
@@ -640,6 +650,17 @@ export class Session {
     // heard and left alone (talk to a customer): the phone shows it dimmed, so it is clear it was heard
     if (_src === 'voice' && !reply && !this.pending) this.deps.send({ type: 'not_entry', text })
     this.deps.send({ type: 'turn_done', resume: this.ledger.exportState() })
+  }
+
+  /** What a tool's reply puts on the screen: the view, the setting it changed, the one-tap card. */
+  private sendReplyExtras(reply: Reply | null) {
+    if (!reply) return
+    if (reply.show) this.deps.send(reply.show)
+    if (reply.setting) {
+      if (reply.setting.key === 'lang' && LANGS.includes(reply.setting.value as Lang)) this.lang = reply.setting.value as Lang
+      this.deps.send(reply.setting)
+    }
+    if (reply.ready) this.deps.send({ type: 'ready', ...reply.ready })
   }
 
   // ------------------------------------------------------------------ continuity across reconnects

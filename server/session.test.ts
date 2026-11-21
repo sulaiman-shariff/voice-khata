@@ -741,3 +741,30 @@ describe('turn taking', () => {
     expect(await talk((h) => h.cb.onPartial?.('Ramesh का कुल'))).toBe(false)
   })
 })
+
+describe('save anyway', () => {
+  it('force{text} after a not_for_me writes the entry', async () => {
+    let calls = 0
+    const h = harness([cust('r', 'Ramesh', 0)], {
+      lang: 'en',
+      // the rules take the line for talk to someone else (no model call); a forced turn asks the model
+      llm: () => { calls++; return llmEntry('Ramesh', 200, 'credit') },
+    })
+    await h.turn('bhaiya do kilo cheeni dena')
+    expect(h.ops()).toEqual([])
+    expect(h.out.some((m) => m.type === 'not_entry')).toBe(true)
+    h.s.onClient({ type: 'force', text: 'bhaiya do kilo cheeni dena, Ramesh 200 udhaar likh do' })
+    await h.s.idle()
+    expect(calls).toBe(1)
+    expect(h.written()).toEqual([['r', 200, 'credit']])
+  })
+
+  it('a tool reply with a show, a setting and a ready card reaches the phone', async () => {
+    const h = harness([cust('r', 'Ramesh', 0)], { lang: 'en' })
+    const send = (h.s as unknown as { sendReplyExtras(r: unknown): void }).sendReplyExtras.bind(h.s)
+    send({ parts: [], ops: [], show: { type: 'show', view: 'today' }, setting: { type: 'setting', key: 'lang', value: 'kn' }, ready: { kind: 'backup' } })
+    expect(h.out).toContainEqual({ type: 'show', view: 'today' })
+    expect(h.out).toContainEqual({ type: 'setting', key: 'lang', value: 'kn' })
+    expect(h.out).toContainEqual({ type: 'ready', kind: 'backup' })
+  })
+})

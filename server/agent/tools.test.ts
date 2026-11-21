@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseFast } from '../../shared/intent.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
-import { say } from '../../shared/replies.js'
+import { LANG_NAME, say } from '../../shared/replies.js'
 import { LedgerCore, PENDING_TTL_MS, type TurnMeta } from '../ledger/core.js'
 import { nullLogger } from '../log.js'
 import { TOOL_SCHEMAS, type ToolCall, runTool } from './tools.js'
@@ -202,5 +202,43 @@ describe('agent tools', () => {
     const r = run('answer_question', { kind: 'yes' }, 'haan ji')
     expect(r.ops[0]).toMatchObject({ op: 'entry', cid: 'c1', paise: 20000 })
     expect(core.pending).toBeNull()
+  })
+
+  describe('the screen follows the tool', () => {
+    const yesterday = new Date(Date.now() + 5.5 * 3600_000 - 86_400_000).toISOString().slice(0, 10)
+
+    it("show_history for \"kal\" produces history with yesterday's date range", () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200)])
+      const r = run('show_history', { day_offset: -1 }, 'kal ka hisaab')
+      expect(r.show).toEqual({ type: 'show', view: 'history', from: yesterday, to: yesterday })
+    })
+
+    it('show_today, top_debtors, search and close_view each name their view', () => {
+      const { run } = setup([cust('c1', 'Ramesh', 200), cust('c2', 'Suresh', 100)])
+      expect(run('show_today', {}, 'aaj ka hisaab').show).toEqual({ type: 'show', view: 'today' })
+      expect(run('top_debtors', {}, 'sabse zyada kiska baaki').show).toEqual({ type: 'show', view: 'top_debtors' })
+      expect(run('search', { text: 'xyz' }, 'xyz dhundho').show).toEqual({ type: 'show', view: 'search', text: 'xyz' })
+      expect(run('close_view', {}, 'band karo').show).toEqual({ type: 'show', view: 'close' })
+    })
+
+    it('set_language produces a setting message and a reply in the new language', () => {
+      const { run } = setup([])
+      const r = run('set_language', { lang: 'kn' }, 'Kannada mein bolo')
+      expect(r.setting).toEqual({ type: 'setting', key: 'lang', value: 'kn' })
+      expect(r.parts).toEqual([say('kn').languageSet(LANG_NAME.kn)])
+    })
+
+    it('send_statement produces a ready{whatsapp} with the statement text', () => {
+      const { run } = setup([cust('c1', 'Suresh', 300, { remindersOptIn: true, adult: true })], [ent('e1', 'c1', 300)])
+      const r = run('send_statement', { name: 'Suresh' }, 'Suresh ko statement bhejo')
+      expect(r.ready).toMatchObject({ kind: 'whatsapp', cid: 'c1' })
+      expect(r.ready?.text).toContain('300')
+    })
+
+    it('the amount question offers the usual amounts of the customer as buttons', () => {
+      const { core, run } = setup([cust('c1', 'Ramesh', 500, { typicalPaise: 20000 })], [ent('e1', 'c1', 300)])
+      core.pending = { kind: 'amount', draft: { cid: 'c1', heardName: 'Ramesh', paise: 0 } as never, queue: [] }
+      expect(core.pendingView()?.amounts).toEqual([200, 300])
+    })
   })
 })
