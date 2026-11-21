@@ -1,6 +1,6 @@
 # KhataBhai
 
-KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice. The ledger lives encrypted on the phone. Version 2 replaced the rule-and-LLM turn loop with a Gemini agent that picks one of 29 tools, each of which runs through the same ledger safety layer, and with a wake word so the app only acts when called.
+KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, built for the Gnani Voice Hackathon (problem statement PS2). The shopkeeper speaks while serving a customer, in any of 10 Indian languages mixed with English, and the app records who owes what, tracks payments, and answers "Ramesh ka total?" by voice. The ledger lives encrypted on the phone. Version 2 replaced the rule-and-LLM turn loop with an agent that picks one of its tools (36 now), each of which runs through the same ledger safety layer, and added a wake word so the app only acts when called. Version 3 adds a clean single design, counter QR payments that book themselves, spoken payment announcements, due dates, instalment plans, a cashbook and a supplier khata.
 
 **Hosted prototype:** https://khatabhai-nine.vercel.app
 
@@ -8,6 +8,28 @@ KhataBhai (formerly Voice Khata) is a voice credit ledger for kirana shops, buil
 1. Open the link on a phone and pick your language on the tile screen.
 2. Tap the mic and allow microphone access. The assistant introduces itself as an AI. It starts asleep.
 3. Say "KhataBhai" (or tap the mic), then "Ramesh ka 340 udhaar", then ask "Ramesh ka total?". It stays awake for 15 s after each exchange; "bas" or "that's all" puts it to sleep.
+4. Try "Ramesh ka QR dikhao", "aaj ka hisaab", "bijli 800", "Gupta ji ko 5000 dene hain" or "aaj kisse lena hai".
+
+## New in version 3
+
+Version 3 replaces the colour themes with one ivory design and turns the mic into a voice orb that shows which state it is in. It also adds collecting money at the counter and a few tools for running the shop.
+
+| Feature | What it does |
+|---|---|
+| Counter QR | Say "Ramesh ka QR dikhao" and a QR for the amount appears. It is a Razorpay Payment Link drawn as our own QR, or a native Razorpay UPI QR when the account has QR Codes. When the customer pays, the webhook books the payment into the khata, the QR turns into a tick, and the app says "Ramesh ne ₹340 jama kiye, baaki ₹900". Nobody types anything or reconciles afterwards. |
+| Payments announced aloud | Every Razorpay payment, whether it came from a reminder link or a counter QR, is spoken within a few seconds, the way a payments soundbox does. If the customer pays only part, the app asks "₹140 baaki — naya link bhejun?" |
+| Due dates and how old a due is | "Ramesh ka 340, Somvaar tak" sets a due date. Dues show an age pill (0–7, 8–30 and 30+ days), and you can ask "kiska 30 din se purana hai?". |
+| Collect today | A single list of everyone who is due, everyone who promised to pay today, and anyone 30 or more days overdue. One tap reminds them all, and each row ticks off when the payment lands. |
+| Instalment plans | "Ramesh ka 3000, teen hafte mein". The server sends a payment link for each instalment on its day, and the customer screen shows a progress bar. |
+| Daily summary | "Aaj ka hisaab" reports credit given, money collected, cash in hand, new customers, top dues and today's promises. The Today tab shows a 7-day chart. |
+| Cashbook (galla) | "Bijli 800" and "500 ka maal kharida" are recorded by category. Customer cash payments appear here too, worked out from the khata and never stored twice. |
+| Supplier khata | "Gupta ji ko 5000 dene hain" records money the shop owes, in its own colour ("dena hai"). Suppliers are never reminded and never counted as dues. |
+| Itemised bills | "Ramesh: do kilo chawal, ek Maggi, 340" keeps the items as chips on the entry. |
+| Statement image | The phone draws a statement PNG (last 15 entries, running balance and a pay QR) and shares it to WhatsApp. Only that one customer's entries leave the phone. |
+| Voice-note replies | When a customer replies on WhatsApp with a voice note such as "kal de dunga", it is transcribed and turned into a promise the shopkeeper can add with one tap. |
+| Two customers with one name | Adding a second Ramesh asks once for a nickname ("doodhwala", "Gali 3"), and skipping it is allowed. "Doodhwala Ramesh" then picks the right one. "Which one?" lists every Ramesh, and "doosra wala" is understood without the model. "Rakesh 200" when only Ramesh exists offers "Ramesh" or "+ naya Rakesh" and keeps the amount. |
+
+**Android app:** `feat/android-capacitor` wraps the PWA in Capacitor. The APK is attached to the [latest release](https://github.com/sulaiman-shariff/voice-khata/releases/latest).
 
 ## What it does well
 
@@ -334,13 +356,16 @@ The production logs of a real test showed what used to go wrong. The phone switc
 ## Repo layout
 
 ```
-api/        Vercel functions: voice.ts (WebSocket session), backup.ts, confirm.ts, cleanup.ts
-server/     session.ts (turn flow), attention.ts, agent/ (agent.ts, tools.ts), ledger/core.ts (safety layer), gnani/ (stt.ts, multi.ts, tts.ts), parse/ (gemini.ts, llm.ts), turn/energy.ts
-shared/     wake (wake word, sleep words), numbers, intent, names, ledger, chain (hash chain, crypto-shred), replies (10-language templates), protocol
-src/        React PWA: lib/ (store, voice client, backup, wake/ on-phone detector), ui/, components/
+api/        Vercel functions: voice.ts (WebSocket session), backup.ts, confirm.ts, cleanup.ts, qr.ts, remind.ts, receivables.ts, pending.ts
+server/     session.ts (turn flow), attention.ts, agent/ (agent.ts, tools.ts), ledger/core.ts (safety layer), gnani/ (stt, tts), parse/,
+            pay/ (razorpay.ts, qr.ts, webhook.ts), wa/ (WhatsApp send, inbound replies, voice notes, hourly reminder sweep), cloudrun.ts
+shared/     wake, numbers, intent, names, ledger (events, dues, ageing, plans, cashbook), chain (hash chain, crypto-shred),
+            replies + replies-shop (10-language templates), protocol
+src/        React PWA: lib/ (store, voice client, sync, qr, statement, backup, wake/), ui/ (kit.tsx, home/, sheets), pages/, components/
 public/     AudioWorklets (mic.js, player.js), icons
-eval/       agent_eval.ts, replay.ts, audio_latency.ts, noise benchmark, e2e harness, local_server.ts, results/, TURN_DETECTION.md, NOISE_SOURCES.md
-docs/       VIDEO_SCRIPT.md
+eval/       agent_eval.ts, replay.ts, audio_latency.ts, noise benchmark, e2e harness, local_server.ts
+deploy/     Cloud Run image and script for webhooks and the hourly sweep
+docs/       deck, screens, VIDEO_SCRIPT.md
 ```
 
 ## Test data licences
