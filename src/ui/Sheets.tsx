@@ -1,27 +1,27 @@
 import { Download, MessageCircle, Share2, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { balance } from '../../shared/ledger.js'
-import { LANG_NAME, LANGS, type Lang } from '../../shared/replies.js'
+import { toast } from 'sonner'
+import { balance, displayName } from '../../shared/ledger.js'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import type { BackupClient, KhataStore } from '@/lib/contracts'
-import { clientLog } from '@/lib/log'
+import { type RemindResult, sendReminder } from '@/lib/remind'
 import { cn } from '@/lib/utils'
 import { dayLabel, rs } from './format'
 import { Passbook } from './Ledger'
-import { AUTO_LANG, type UiStrings } from './strings'
+import type { UiStrings } from './strings'
 
 const NOTES_EN = [
   'Your khata is stored only on this phone, encrypted (AES-256). Each customer has their own key.',
   'Your voice goes to Gnani for speech-to-text and back as speech. Hard sentences go to an AI model (Google Gemini) as text. Nothing is kept on our server.',
   'Every entry is chained with a fingerprint, so any change shows up. Corrections are added, never overwritten.',
-  'Reminders: only for adult customers who agreed, and you send them yourself.',
+  "Reminders: only for adult customers who agreed. They go on WhatsApp from your shop's Twilio number (or you send them yourself); only the number and the message leave the phone.",
 ]
 const NOTES_HI = [
   'आपका खाता सिर्फ़ इसी फ़ोन पर, ताले (AES-256) में रहता है। हर ग्राहक की अलग चाबी।',
   'आपकी आवाज़ लिखने और बोलने के लिए Gnani को जाती है। मुश्किल वाक्य शब्दों में AI मॉडल (Google Gemini) को। हमारे सर्वर पर कुछ नहीं रुकता।',
   'हर एंट्री पर एक निशान जुड़ता है, इसलिए कोई भी बदलाव पकड़ में आता है। सुधार नई लाइन में जुड़ते हैं, पुराना मिटता नहीं।',
-  'याद दिलाना: सिर्फ़ उन वयस्क ग्राहकों को जिन्होंने हाँ कहा, और भेजते आप ख़ुद हैं।',
+  'याद दिलाना: सिर्फ़ उन वयस्क ग्राहकों को जिन्होंने हाँ कहा। संदेश WhatsApp पर आपकी दुकान के Twilio नंबर से जाता है (या आप ख़ुद भेजते हैं); फ़ोन से सिर्फ़ नंबर और संदेश जाता है।',
 ]
 const LINKS_KEY = 'vk-confirm-links'
 const loadLinks = (): Record<string, string> => {
@@ -43,7 +43,10 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
   const s = store.state
   const c = cid ? s.customers.get(cid) : undefined
   const [phone, setPhone] = useState('')
-  useEffect(() => setPhone(c?.phone ?? ''), [c?.cid, c?.phone])
+  const [tag, setTag] = useState('')
+  const [busy, setBusy] = useState(false)
+  // prefilled with what is saved for this customer
+  useEffect(() => { setPhone(c?.phone ?? ''); setTag(c?.tag ?? '') }, [c?.cid, c?.phone, c?.tag])
   // pick up customers' answers to confirmation links
   useEffect(() => {
     if (!c) return
@@ -59,8 +62,11 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
   if (!c) return null
   const entries = s.order.map((id) => s.entries.get(id)!).filter((e) => e.cid === c.cid)
   const bal = balance(s, c.cid)
-  const consent = (patch: Partial<{ remindersOptIn: boolean; adult: boolean; phone: string }>) =>
-    store.setConsent(c.cid, { remindersOptIn: c.remindersOptIn, adult: c.adult, phone: phone || undefined, ...patch }).then(onChanged)
+  const title = displayName(s, c.cid)
+  const save = (patch: Partial<{ remindersOptIn: boolean; adult: boolean; phone: string; tag: string }>) =>
+    store.setConsent(c.cid, { remindersOptIn: c.remindersOptIn, adult: c.adult, phone: phone.trim() || undefined, tag: tag.trim() || undefined, ...patch }).then(onChanged)
+  const phoneOk = !phone.trim() || phone.replace(/\D/g, '').length >= 10
+  const last = store.settings.reminded?.[c.cid]
 
   const askConfirm = async (eid: string) => {
     const e = s.entries.get(eid)!
@@ -78,46 +84,72 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
     shareWhatsApp(text, c.phone)
   }
 
+  const remind = async () => {
+    setBusy(true)
+    try { toastRemind(t, await sendReminder(store, c.cid, { interactive: true })) } finally { setBusy(false) }
+  }
+
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-3xl pb-8">
-        <SheetHeader>
-          <SheetTitle className="text-2xl">{c.name}</SheetTitle>
+        <SheetHeader className="pb-1">
+          <SheetTitle className="pr-10 font-display text-2xl">{title}</SheetTitle>
           {c.aliases.length > 0 && <div className="text-sm text-muted-foreground">{c.aliases.join(' · ')}</div>}
         </SheetHeader>
-        <div className="px-4">
-          <div className={cn('num text-5xl font-extrabold', bal > 0 ? 'text-credit' : 'text-payment')}>{rs(bal)}</div>
-          <div className="text-sm text-muted-foreground">{bal > 0 ? t.dues : bal < 0 ? t.payment : '✓'}</div>
-
-          <div className="mt-5 space-y-3 rounded-2xl bg-muted/50 p-3 text-sm">
-            <label className="flex items-center justify-between gap-3">
-              <span>{t.adult}</span>
-              <Switch checked={c.adult} onCheckedChange={(v) => void consent({ adult: v, remindersOptIn: v && c.remindersOptIn })} />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span>{t.reminders}</span>
-              <Switch disabled={!c.adult} checked={c.remindersOptIn} onCheckedChange={(v) => void consent({ remindersOptIn: v })} />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span>{t.phone}</span>
-              <input
-                inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone !== (c.phone ?? '') && void consent({})}
-                aria-label={t.phone} className="h-11 w-40 rounded-lg border bg-background px-2 text-right" placeholder="98xxxxxxxx"
-              />
-            </label>
-          </div>
-
-          <div className="mt-5 mb-1 flex items-center justify-between">
-            <span className="text-sm font-semibold text-muted-foreground">{t.history}</span>
-            <button onClick={shareStatement} className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-primary ring-1 ring-primary/30">
-              <Share2 className="size-4" />{t.shareStatement}
+        <div className="space-y-5 px-4">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className={cn('num text-5xl font-bold', bal > 0 ? 'text-credit' : 'text-payment')}>{rs(bal)}</div>
+              <div className="text-sm text-muted-foreground">{bal > 0 ? t.dues : bal < 0 ? t.payment : '✓'}</div>
+            </div>
+            <button onClick={() => void remind()} disabled={busy || bal <= 0}
+              className="flex min-h-12 shrink-0 items-center gap-2 rounded-lg bg-payment px-4 font-semibold text-white shadow-md disabled:opacity-40">
+              <MessageCircle className="size-5" />{t.remindNow}
             </button>
           </div>
-          <Passbook entries={entries} t={t} onEntry={onEntry} onConfirm={(eid) => void askConfirm(eid)} />
+          {last && <div className="-mt-3 text-xs text-muted-foreground">{t.lastReminded}: {new Date(last).toLocaleString(t.loc, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</div>}
+
+          <div className="space-y-3 rounded-lg bg-card p-3 text-sm ring-1 ring-foreground/10">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.phone}</span>
+              <input
+                inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} onBlur={() => phone.trim() !== (c.phone ?? '') && phoneOk && void save({})}
+                aria-label={t.phone} aria-invalid={!phoneOk} placeholder="98xxxxxxxx"
+                className={cn('h-11 w-full rounded-lg bg-background px-3 text-base ring-1 ring-foreground/15', !phoneOk && 'ring-destructive')}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-muted-foreground">{t.tag}</span>
+              <input
+                value={tag} onChange={(e) => setTag(e.target.value)} onBlur={() => tag.trim() !== (c.tag ?? '') && void save({})} maxLength={30}
+                aria-label={t.tag} placeholder="Gali 3 / doodhwala"
+                className="h-11 w-full rounded-lg bg-background px-3 text-base ring-1 ring-foreground/15"
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">{t.tagHint}</span>
+            </label>
+            <label className="flex min-h-11 items-center justify-between gap-3">
+              <span>{t.adult}</span>
+              <Switch checked={c.adult} onCheckedChange={(v) => void save({ adult: v, remindersOptIn: v && c.remindersOptIn })} />
+            </label>
+            <label className="flex min-h-11 items-center justify-between gap-3">
+              <span>{t.reminders}</span>
+              <Switch disabled={!c.adult} checked={c.remindersOptIn} onCheckedChange={(v) => void save({ remindersOptIn: v })} />
+            </label>
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">{t.history}</span>
+              <button onClick={shareStatement} className="flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-primary ring-1 ring-primary/30">
+                <Share2 className="size-4" />{t.shareStatement}
+              </button>
+            </div>
+            <Passbook entries={entries} t={t} onEntry={onEntry} onConfirm={(eid) => void askConfirm(eid)} />
+          </div>
 
           <button
-            onClick={() => { if (confirm(`${t.forget}: ${c.name}?`)) void store.forgetCustomer(c.cid).then(() => { void dropBackup(backup); onChanged(); onClose() }) }}
-            className="mt-6 flex min-h-11 items-center gap-2 text-sm text-destructive"
+            onClick={() => { if (confirm(`${t.forget}: ${title}?`)) void store.forgetCustomer(c.cid).then(() => { void dropBackup(backup); onChanged(); onClose() }) }}
+            className="flex min-h-11 items-center gap-2 text-sm text-destructive"
           >
             <Trash2 className="size-4" />{t.forget}
           </button>
@@ -127,58 +159,13 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
   )
 }
 
-export function SettingsSheet({ store, open, t, onClose, onChanged }: {
-  store: KhataStore; open: boolean; t: UiStrings; onClose: () => void; onChanged: (p: { lang?: Lang; handsFree?: boolean; fastSpeech?: boolean; readBackAll?: boolean }) => void
-}) {
-  const st = store.settings
-  const [name, setName] = useState(st.shopName)
-  const [debugLogs, setDebugLogs] = useState(clientLog.enabled)
-  return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="bottom" className="rounded-t-3xl pb-8">
-        <SheetHeader><SheetTitle>{t.settings}</SheetTitle></SheetHeader>
-        <div className="space-y-4 px-4 text-sm">
-          <label className="flex items-center justify-between gap-3">
-            <span>{t.shopName}</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => void store.updateSettings({ shopName: name.trim() || st.shopName })}
-              aria-label={t.shopName} className="h-11 w-44 rounded-lg border bg-background px-2 text-right" maxLength={40} />
-          </label>
-          <label className="flex items-center justify-between">
-            <span>{t.handsFree}</span>
-            <Switch checked={st.handsFree} onCheckedChange={(v) => void store.updateSettings({ handsFree: v }).then(() => onChanged({ handsFree: v }))} />
-          </label>
-          <label className="flex items-center justify-between">
-            <span>{t.fastSpeech}</span>
-            <Switch checked={!!st.fastSpeech} onCheckedChange={(v) => void store.updateSettings({ fastSpeech: v }).then(() => onChanged({ fastSpeech: v }))} />
-          </label>
-          <label className="flex items-center justify-between">
-            <span>{t.readBackAll}</span>
-            <Switch checked={!!st.readBackAll} onCheckedChange={(v) => void store.updateSettings({ readBackAll: v }).then(() => onChanged({ readBackAll: v }))} />
-          </label>
-          <label className="flex items-center justify-between">
-            <span>{t.debugLogs}</span>
-            <Switch checked={debugLogs} onCheckedChange={(v) => { clientLog.set(v); setDebugLogs(v) }} />
-          </label>
-          <label className="flex items-center justify-between">
-            <span>{t.latency}</span>
-            <Switch checked={st.showLatency} onCheckedChange={(v) => void store.updateSettings({ showLatency: v })} />
-          </label>
-          <div role="group" aria-label={t.language} className="grid grid-cols-5 gap-1.5">
-            <button aria-pressed={st.autoLang !== false} onClick={() => void store.updateSettings({ autoLang: true }).then(() => onChanged({ lang: st.lang ?? 'hi' }))}
-              className={cn('col-span-5 min-h-11 rounded-xl py-2 text-sm font-semibold ring-1 ring-black/10', st.autoLang !== false && 'bg-primary text-primary-foreground')}>
-              {AUTO_LANG[st.lang ?? 'hi']} · Auto
-            </button>
-            {LANGS.map((l) => (
-              <button key={l} aria-pressed={st.autoLang === false && st.lang === l} onClick={() => void store.updateSettings({ lang: l, autoLang: false }).then(() => onChanged({ lang: l }))}
-                className={cn('min-h-11 rounded-xl py-2 text-sm ring-1 ring-black/10', st.autoLang === false && st.lang === l && 'bg-primary text-primary-foreground')}>
-                {LANG_NAME[l]}
-              </button>
-            ))}
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
+/** One toast per reminder attempt, in the shop's language. */
+export function toastRemind(t: UiStrings, r: RemindResult) {
+  if (r.ok) toast.success(r.via === 'twilio' ? t.remindSent : t.remindShared)
+  else if (r.reason === 'no-phone') toast.error(t.noPhone)
+  else if (r.reason === 'not-allowed') toast.error(t.notAllowed)
+  else if (r.reason === 'nothing-due') toast(t.nothingDue)
+  else toast.error(`${t.remindFailed}${r.error ? `: ${r.error}` : ''}`, { duration: 8000 })
 }
 
 /** "Mera data kahan hai?": where the data lives, proof it is untampered, export, backup, erase. */
@@ -238,7 +225,7 @@ export function PrivacySheet({ store, open, t, backup, onClose, onChanged }: {
               <button onClick={() => void doBackup()} className="min-h-11 shrink-0 rounded-lg bg-primary px-3 text-primary-foreground">{t.backupBtn}</button>
               <input value={restoreId} onChange={(e) => setRestoreId(e.target.value.trim())} placeholder={lastId ? `${lastId.slice(0, 8)}…` : t.backupId} aria-label={t.backupId}
                 className="h-11 min-w-0 flex-1 rounded-lg border bg-background px-2" />
-              <button onClick={() => void doRestore()} className="min-h-11 shrink-0 rounded-lg px-3 ring-1 ring-black/15">{t.restore}</button>
+              <button onClick={() => void doRestore()} className="min-h-11 shrink-0 rounded-lg px-3 ring-1 ring-foreground/15">{t.restore}</button>
             </div>
             {msg && <div className="text-xs text-muted-foreground">{msg}</div>}
             <div className="text-xs text-muted-foreground">{t.backupNote}</div>
@@ -257,7 +244,3 @@ async function dropBackup(b: BackupClient) {
   try { await (b as unknown as { deleteBackup?: () => Promise<void> }).deleteBackup?.() } catch { /* best effort */ }
 }
 
-export function remindLink(store: KhataStore, cid: string, text: string) {
-  shareWhatsApp(text, store.state.customers.get(cid)?.phone)
-}
-export { MessageCircle }

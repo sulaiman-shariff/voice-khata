@@ -19,6 +19,18 @@ export interface Settings {
   fastSpeech?: boolean
   /** read every saved entry back in full instead of a short "noted" */
   readBackAll?: boolean
+  /** shop profile from the sign-up step (sign-up shows until profileDone) */
+  profileDone?: boolean
+  ownerName?: string
+  shopAddress?: string
+  shopPhone?: string
+  /** colour scheme (see THEMES in src/ui/theme.ts) */
+  theme?: string
+  /** WhatsApp reminders: send automatically to opted-in customers who owe, every N days */
+  autoRemind?: boolean
+  remindEveryDays?: number
+  /** cid -> last reminder sent (ms) */
+  reminded?: Record<string, number>
 }
 
 export interface KhataStore {
@@ -34,7 +46,7 @@ export interface KhataStore {
   /** Manual edit of any entry (amount, direction, customer, day). Recorded as an amendment, never overwritten. */
   amendEntry(eid: string, ch: { paise?: number; direction?: 'credit' | 'payment'; cid?: string; day?: string }): Promise<void>
   addCustomer(name: string): Promise<string>
-  setConsent(cid: string, c: { remindersOptIn: boolean; adult: boolean; phone?: string }): Promise<void>
+  setConsent(cid: string, c: { remindersOptIn: boolean; adult: boolean; phone?: string; tag?: string }): Promise<void>
   addAlias(cid: string, alias: string): Promise<void>
   setHousehold(cid: string, householdId: string | null): Promise<void>
   setConfirmation(eid: string, status: 'confirmed' | 'disputed'): Promise<void>

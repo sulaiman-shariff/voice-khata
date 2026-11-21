@@ -3,7 +3,7 @@
  * Persistence is behind a small interface so tests run without a browser.
  */
 import {
-  apply, balance, daySummary, dayFromOffset, emptyLedger, lastEntry, monthSummary, reduce, typicalAmount,
+  apply, balance, daySummary, displayName, dayFromOffset, emptyLedger, lastEntry, monthSummary, reduce, typicalAmount,
   type LedgerEvent, type LedgerState,
 } from '../../shared/ledger.js'
 import {
@@ -295,6 +295,7 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
         shopName: settings.shopName,
         customers: [...state.customers.values()].map((c) => ({
           cid: c.cid, name: c.name, aliases: [...c.aliases], householdId: c.householdId,
+          ...(displayName(state, c.cid) !== c.name ? { label: displayName(state, c.cid) } : {}),
           remindersOptIn: c.remindersOptIn, adult: c.adult,
           balancePaise: balance(state, c.cid), typicalPaise: typicalAmount(state, c.cid),
         })),

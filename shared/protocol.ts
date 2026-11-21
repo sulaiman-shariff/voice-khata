@@ -15,6 +15,8 @@ export interface SnapCustomer {
   adult: boolean
   balancePaise: number
   typicalPaise: number | null
+  /** shown and spoken instead of `name` when two customers share it ("Ramesh · Gali 3") */
+  label?: string
 }
 
 export interface SnapEntry {

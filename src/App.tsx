@@ -1,7 +1,7 @@
-import { BellRing, Keyboard, Plus, Search, Settings2, ShieldCheck, WifiOff } from 'lucide-react'
+import { BellRing, Globe, Keyboard, Menu as MenuIcon, Plus, Search, WifiOff } from 'lucide-react'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
-import { balance, daySummary, dues, promises } from '../shared/ledger.js'
+import { balance, daySummary, displayName, dues, promises } from '../shared/ledger.js'
 import type { LedgerOp, PendingView, TurnMetrics } from '../shared/protocol.js'
 import { LANG_NAME, LANGS, type Lang } from '../shared/replies.js'
 import { Toaster } from '@/components/ui/sonner'
@@ -16,8 +16,13 @@ import { heardFeedback, primeFeedback, savedFeedback } from '@/ui/feedback'
 import { clientLog } from '@/lib/log'
 import { DayFeed } from '@/ui/Ledger'
 import { MicButton, PendingCard, Waterfall } from '@/ui/parts'
-import { CustomerSheet, PrivacySheet, SettingsSheet, remindLink } from '@/ui/Sheets'
-import { AUTO_LANG, ui } from '@/ui/strings'
+import { CustomerSheet, PrivacySheet, toastRemind } from '@/ui/Sheets'
+import { ui } from '@/ui/strings'
+import { Dropdown } from '@/ui/Dropdown'
+import { MenuSheet } from '@/ui/Menu'
+import { ProfileForm } from '@/ui/Profile'
+import { applyTheme } from '@/ui/theme'
+import { dueForReminder, runAutoReminders, sendReminder } from '@/lib/remind'
 
 const ConfirmPage = lazy(() => import('@/pages/ConfirmPage'))
 const backup = createBackupClient()
@@ -53,7 +58,10 @@ function Home({ store }: { store: KhataStore }) {
   const [metrics, setMetrics] = useState<(TurnMetrics & { clientFirstAudioMs: number | null }) | null>(null)
   const [tab, setTab] = useState<'today' | 'dues'>('today')
   const [cid, setCid] = useState<string | null>(null)
-  const [sheet, setSheet] = useState<'settings' | 'privacy' | null>(null)
+  const [sheet, setSheet] = useState<'menu' | 'privacy' | null>(null)
+  // the bottom panel (question card, mic) floats over the list: the list is padded by its real height
+  const footer = useRef<HTMLElement>(null)
+  const [footerH, setFooterH] = useState(260)
   const [fresh, setFresh] = useState<string | null>(null)
   const [on, setOn] = useState(false)
   const [net, setNet] = useState<'good' | 'slow' | 'offline'>('good')
@@ -112,7 +120,7 @@ function Home({ store }: { store: KhataStore }) {
         else if (s.view === 'summary') setTab('today')
         else if (s.view === 'privacy') setSheet('privacy')
       },
-      remind: (c, text) => { try { if (c && text) remindLink(store, c, text) } catch (e) { clientLog.warn('remind_failed', { error: String(e) }) } },
+      remind: (c, text) => { if (c && text) void sendReminder(store, c, { text, interactive: true }).then((r) => toastRemind(t, r)).catch((e) => clientLog.warn('remind_failed', { error: String(e) })) },
       metrics: setMetrics,
       error: (msg) => clientLog.warn('voice_error', { message: msg }),
       lang: (l) => void store.updateSettings({ lang: l }),
@@ -153,6 +161,43 @@ function Home({ store }: { store: KhataStore }) {
 
   const stop = () => { voice.current?.stop(); voice.current = null; setOn(false); setStatus('idle'); setPending(null) }
 
+  // the saved scheme wins over the quick local copy used for the first paint
+  useEffect(() => { applyTheme(store.settings.theme) }, [store])
+
+  // automatic WhatsApp reminders: on open and every 6 h while the app stays open
+  useEffect(() => {
+    const run = () => void runAutoReminders(store).then(({ sent }) => { if (sent) toast.success(`${ui(store.settings.lang).remindSent} × ${sent}`) })
+    run()
+    const id = setInterval(run, 6 * 3600_000)
+    return () => clearInterval(id)
+  }, [store])
+
+  useEffect(() => {
+    const el = footer.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setFooterH(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
+
+  const remindAll = async () => {
+    setSheet(null)
+    let sent = 0
+    let failed = 0
+    for (const c of dueForReminder(store.state, store.settings)) {
+      const r = await sendReminder(store, c)
+      if (r.ok) sent++
+      else failed++
+    }
+    if (sent) toast.success(`${t.remindSent} × ${sent}`)
+    if (failed) toast.error(`${t.remindFailed} × ${failed}`)
+  }
+
+  const setLanguage = (v: string) => {
+    const auto = v === 'auto'
+    void store.updateSettings(auto ? { autoLang: true } : { lang: v as Lang, autoLang: false }).then(() => { if (voice.current) stop() })
+  }
+
   // keep the screen awake while the khata is listening
   useEffect(() => {
     if (!on || !('wakeLock' in navigator)) return
@@ -161,14 +206,24 @@ function Home({ store }: { store: KhataStore }) {
     return () => void lock?.release()
   }, [on])
 
-  if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto }).then(() => start(l))} />
+  if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto })} />
+  if (!settings.profileDone) {
+    return (
+      <div className="mx-auto h-full max-w-md overflow-y-auto px-5 pt-8 pb-8">
+        <Brand />
+        <h1 className="mt-6 font-display text-3xl font-semibold">{t.signupTitle}</h1>
+        <div className="gold-rule mt-3 mb-5" />
+        <ProfileForm t={t} initial={settings} submit={t.continueBtn} onSave={(p) => void store.updateSettings({ ...p, profileDone: true })} />
+      </div>
+    )
+  }
 
   const day = daySummary(state, today())
   const all = state.order.map((id) => state.entries.get(id)!)
   const due = dues(state)
   const totalDue = due.reduce((n, d) => n + d.paise, 0)
   const proms = promises(state)
-  const name = (c: string) => state.customers.get(c)?.name ?? '—'
+  const name = (c: string) => displayName(state, c)
   const lastDay = new Map<string, string>()
   for (const e of all) if (!e.voided) { const d = e.promise ? dayOfTs(e.ts) : e.day; if (d > (lastDay.get(e.cid) ?? '')) lastDay.set(e.cid, d) }
   const needle = q.trim().toLowerCase()
@@ -179,19 +234,26 @@ function Home({ store }: { store: KhataStore }) {
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <header className="flex items-center gap-1.5 px-4 pt-4">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-lg font-black text-primary-foreground">₹</div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-bold leading-tight">{settings.shopName}</div>
-          <div className="text-xs text-muted-foreground">KhataBhai · AI</div>
+      <header className="grid grid-cols-[6.5rem_1fr_6.5rem] items-center gap-2 px-3 pt-3">
+        <button aria-label={t.menu} onClick={() => setSheet('menu')} className="grid size-11 place-items-center rounded-lg bg-card shadow-sm ring-1 ring-foreground/10 active:scale-95">
+          <MenuIcon className="size-5" />
+        </button>
+        <div className="min-w-0 text-center">
+          <div className="truncate font-display text-xl leading-tight font-semibold">{settings.shopName}</div>
+          <div className="text-[10px] font-bold tracking-[0.3em] text-gold uppercase">KhataBhai</div>
         </div>
-        <button aria-label={t.language} onClick={() => setSheet('settings')} className="h-11 shrink-0 rounded-full px-3 text-sm font-semibold ring-1 ring-black/15">{settings.autoLang !== false ? `${AUTO_LANG[settings.lang]} · ${LANG_NAME[settings.lang]}` : LANG_NAME[settings.lang]}</button>
-        <button aria-label={t.myData} onClick={() => setSheet('privacy')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><ShieldCheck className="size-5" /></button>
-        <button aria-label={t.settings} onClick={() => setSheet('settings')} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-muted"><Settings2 className="size-5" /></button>
+        <Dropdown
+          label={t.language} align="right" panelClassName="w-60"
+          value={settings.autoLang !== false ? 'auto' : settings.lang}
+          options={[{ value: 'auto', label: 'Auto', hint: t.autoAny }, ...LANGS.map((l) => ({ value: l as string, label: LANG_NAME[l] }))]}
+          onChange={setLanguage}
+          button={<span className="flex min-w-0 items-center gap-1.5"><Globe className="size-4 shrink-0" /><span className="truncate">{settings.autoLang !== false ? 'Auto' : LANG_NAME[settings.lang]}</span></span>}
+        />
       </header>
+      <div className="gold-rule mx-4 mt-3" />
 
       {on && status === 'offline' && (
-        <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-100 px-3 py-1.5 text-sm text-amber-900">
+        <div role="status" className="mx-4 mt-2 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300">
           <WifiOff className="size-4 shrink-0" /><span>{t.offlineBanner}</span>
         </div>
       )}
@@ -213,7 +275,7 @@ function Home({ store }: { store: KhataStore }) {
         <button aria-label={t.addEntry} onClick={() => setEntry({ kind: 'new' })} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm active:scale-95"><Plus className="size-6" /></button>
       </div>
 
-      <main className="flex-1 space-y-2 overflow-y-auto px-4 pt-2 pb-64">
+      <main className="flex-1 space-y-2 overflow-y-auto px-4 pt-2" style={{ paddingBottom: footerH + 16 }}>
         {settings.showLatency && metrics && <Waterfall m={metrics} />}
         {tab === 'today' ? (
           all.length ? <DayFeed entries={all} t={t} name={name} fresh={fresh} onEntry={(eid) => setEntry({ kind: 'edit', eid })} />
@@ -231,7 +293,7 @@ function Home({ store }: { store: KhataStore }) {
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl bg-card px-3 ring-1 ring-black/10">
+              <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl bg-card px-3 ring-1 ring-foreground/10">
                 <Search className="size-4 shrink-0 text-muted-foreground" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} aria-label={t.search} className="min-w-0 flex-1 bg-transparent text-base outline-none" />
               </label>
@@ -241,7 +303,7 @@ function Home({ store }: { store: KhataStore }) {
               </div>
             </div>
             {shownDues.map((d) => (
-              <button key={d.cid} onClick={() => setCid(d.cid)} className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-black/5 active:bg-muted/60">
+              <button key={d.cid} onClick={() => setCid(d.cid)} className="flex min-h-16 w-full items-center gap-3 rounded-2xl bg-card px-4 py-3 text-left shadow-sm ring-1 ring-foreground/5 active:bg-muted/60">
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 font-bold text-primary">{initials(name(d.cid))}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-lg font-semibold leading-snug">{name(d.cid)}</span>
@@ -254,10 +316,10 @@ function Home({ store }: { store: KhataStore }) {
             {q && shownDues.length === 0 && <div className="py-6 text-center text-muted-foreground">{t.noMatch}</div>}
             {proms.length > 0 && <div className="pt-3 text-sm font-semibold text-muted-foreground">{t.promise}</div>}
             {proms.map((p) => (
-              <button key={p.eid} onClick={() => setCid(p.cid)} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-left ring-1 ring-amber-200">
+              <button key={p.eid} onClick={() => setCid(p.cid)} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-amber-500/10 px-4 py-3 text-left ring-1 ring-amber-500/30">
                 <span className="min-w-0 flex-1 truncate text-lg font-semibold">{name(p.cid)}</span>
-                <span className={cn('text-sm', p.day < today() ? 'font-semibold text-destructive' : 'text-amber-800')}>{t.due} {relDay(p.day, t)}</span>
-                <span className="num text-xl font-bold text-amber-800">{rs(p.paise)}</span>
+                <span className={cn('text-sm', p.day < today() ? 'font-semibold text-destructive' : 'text-amber-700 dark:text-amber-300')}>{t.due} {relDay(p.day, t)}</span>
+                <span className="num text-xl font-bold text-amber-700 dark:text-amber-300">{rs(p.paise)}</span>
                 <span className="num text-xs text-muted-foreground">/ {rs(balance(state, p.cid))}</span>
               </button>
             ))}
@@ -265,7 +327,7 @@ function Home({ store }: { store: KhataStore }) {
         )}
       </main>
 
-      <footer className="pointer-events-none fixed inset-x-0 bottom-0 mx-auto max-w-md bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-10 pb-5">
+      <footer ref={footer} className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-8 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="pointer-events-auto space-y-3">
           {pending && <PendingCard p={pending} t={t} onAnswer={(a) => {
             if (a === 'haan') voice.current?.tap('yes')
@@ -273,7 +335,7 @@ function Home({ store }: { store: KhataStore }) {
             else voice.current?.answer(a)
           }} />}
           {on && net !== 'good' && (
-            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-800 dark:text-amber-300')}>
+            <div role="status" className={cn('rounded-xl px-3 py-1.5 text-center text-sm font-medium', net === 'offline' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300')}>
               {net === 'offline' ? t.netOffline : t.netSlow}
             </div>
           )}
@@ -289,7 +351,7 @@ function Home({ store }: { store: KhataStore }) {
           )}
           <div className="flex flex-col items-center">
             <div className="flex items-center justify-center gap-5">
-              <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-black/10 active:scale-95"><Keyboard className="size-6" /></button>
+              <span className="size-14" aria-hidden />
               <MicButton
                 status={status} levelSource={levelSource} on={on} handsFree={settings.handsFree} t={t}
                 onPress={() => {
@@ -300,12 +362,12 @@ function Home({ store }: { store: KhataStore }) {
                 }}
                 onRelease={() => { if (on && !settings.handsFree) voice.current?.pttUp() }}
               />
-              <span className="size-14" aria-hidden />
+              <button aria-label={t.typeInstead} onClick={() => setTyping(true)} className="grid size-14 place-items-center rounded-full bg-card shadow-md ring-1 ring-foreground/10 active:scale-95"><Keyboard className="size-6" /></button>
             </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
               <span role="status" aria-live="polite">{statusText}</span>
               {/* push-to-talk's button is hold-only, so it cannot also be the off switch; hands-free needs no extra control */}
-              {on && !settings.handsFree && <button onClick={stop} className="min-h-11 rounded-full px-3 text-sm ring-1 ring-black/10">{t.micStop}</button>}
+              {on && !settings.handsFree && <button onClick={stop} className="min-h-11 rounded-full px-3 text-sm ring-1 ring-foreground/10">{t.micStop}</button>}
             </div>
           </div>
         </div>
@@ -314,8 +376,8 @@ function Home({ store }: { store: KhataStore }) {
       <CustomerSheet store={store} cid={cid} t={t} backup={backup} onClose={() => setCid(null)} onChanged={() => voice.current?.sendSnapshot()} onEntry={openEntry} />
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={() => voice.current?.sendSnapshot()} onSaved={onSaved} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
-      <SettingsSheet store={store} open={sheet === 'settings'} t={t} onClose={() => setSheet(null)}
-        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll); if (p.lang) { stop() } }} />
+      <MenuSheet store={store} open={sheet === 'menu'} t={t} onClose={() => setSheet(null)} onPrivacy={() => setSheet('privacy')} onRemindAll={() => void remindAll()}
+        onChanged={(p) => { if (p.handsFree !== undefined) voice.current?.setHandsFree(p.handsFree); if (p.fastSpeech !== undefined) voice.current?.setFastSpeech(p.fastSpeech); if (p.readBackAll !== undefined) voice.current?.setReadBackAll(p.readBackAll) }} />
       <PrivacySheet store={store} open={sheet === 'privacy'} t={t} backup={backup} onClose={() => setSheet(null)} onChanged={() => voice.current?.sendSnapshot()} />
       <Toaster position="top-center" />
     </div>
@@ -326,9 +388,9 @@ const UNDO_STYLE = { minHeight: 44, minWidth: 64, fontSize: 16, fontWeight: 700 
 
 function Stat({ label, value, className, tint }: { label: string; value: string; className?: string; tint?: boolean }) {
   return (
-    <div className={cn('min-w-0 rounded-2xl bg-card px-2.5 py-2 shadow-sm ring-1 ring-black/5', tint && 'bg-primary/5 ring-primary/20')}>
-      <div className="truncate text-[11px] text-muted-foreground">{label}</div>
-      <div className={cn('num truncate text-xl font-extrabold', className)}>{value}</div>
+    <div className={cn('min-w-0 rounded-lg bg-card px-2.5 py-2 shadow-sm ring-1 ring-foreground/10', tint && 'bg-primary/5 ring-gold/50')}>
+      <div className="truncate text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</div>
+      <div className={cn('num truncate text-2xl font-bold', className)}>{value}</div>
     </div>
   )
 }
@@ -343,27 +405,42 @@ function phoneLang(): Lang {
   }
 }
 
+function Brand() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="grid size-12 place-items-center rounded-lg bg-primary font-display text-2xl font-bold text-primary-foreground shadow-md ring-2 ring-gold/60">₹</div>
+      <div>
+        <div className="font-display text-2xl leading-tight font-semibold">KhataBhai</div>
+        <div className="text-[10px] font-bold tracking-[0.3em] text-gold uppercase">Voice khata · AI</div>
+      </div>
+    </div>
+  )
+}
+
 function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => void }) {
-  const sample = useMemo(() => ['रमेश का 340 उधार', 'ರಮೇಶ್ 340 ಸಾಲ', 'ரமேஷ் 340 கடன்', 'రమేష్ 340 అప్పు'], [])
+  const sample = useMemo(() => ['रमेश का 340 उधार', 'ರಮೇಶ್ 340 ಸಾಲ', 'ரமேஷ் 340 கடன்', 'రమేష్ 340 అప్పు', 'Ramesh 340 credit'], [])
   const [i, setI] = useState(0)
   useEffect(() => { const id = setInterval(() => setI((x) => (x + 1) % sample.length), 1800); return () => clearInterval(id) }, [sample])
   return (
-    <div className="mx-auto flex h-full max-w-md flex-col px-5 pt-10 pb-6">
-      <div className="grid size-14 place-items-center rounded-2xl bg-primary text-3xl font-black text-primary-foreground">₹</div>
-      <h1 className="mt-4 text-3xl font-extrabold leading-tight">KhataBhai</h1>
-      <div className="mt-1 h-7 overflow-hidden text-lg text-primary">
+    <div className="mx-auto flex h-full max-w-md flex-col overflow-y-auto px-5 pt-8 pb-6">
+      <Brand />
+      <div className="mt-8 h-9 overflow-hidden font-display text-2xl text-primary">
         <div key={i} className="stamp">“{sample[i]}”</div>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">Bolo, khata likh jaayega. An AI assistant · data stays on your phone.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Bolo, khata likh jaayega. An AI assistant · data stays on your phone.</p>
+      <div className="gold-rule mt-6" />
       <button onClick={() => onPick(phoneLang(), true)}
-        className="mt-8 rounded-2xl bg-primary px-4 py-5 text-left text-primary-foreground shadow-sm active:scale-[.98]">
-        <div className="text-xl font-bold">Auto · कोई भी भाषा</div>
-        <div className="mt-0.5 text-sm opacity-90">Speak any language — replies in the same one</div>
+        className="mt-6 flex items-center gap-3 rounded-lg bg-primary px-4 py-4 text-left text-primary-foreground shadow-md active:scale-[.98]">
+        <Globe className="size-7 shrink-0" />
+        <span>
+          <span className="block text-xl font-bold">Auto · कोई भी भाषा</span>
+          <span className="block text-sm opacity-90">Speak any language — replies in the same one</span>
+        </span>
       </button>
-      <div className="mt-3 grid flex-1 grid-cols-2 content-start gap-2.5">
+      <div className="mt-3 grid grid-cols-2 content-start gap-2">
         {LANGS.map((l) => (
           <button key={l} onClick={() => onPick(l, false)}
-            className={cn('rounded-2xl bg-card py-5 text-xl font-semibold shadow-sm ring-1 ring-black/10 active:scale-[.97]', ['hi', 'kn', 'ta', 'te'].includes(l) && 'ring-primary/40')}>
+            className="min-h-14 rounded-lg bg-card py-3 text-lg font-semibold shadow-sm ring-1 ring-foreground/10 active:scale-[.97]">
             {LANG_NAME[l]}
           </button>
         ))}

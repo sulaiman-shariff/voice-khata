@@ -1215,7 +1215,7 @@ export class Session {
         const res = this.resolveName(d)
         if (Array.isArray(res)) {
           this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
-          acc.parts.push(R.askWhich(res[0].name, res[1].name))
+          acc.parts.push(R.askWhich(res[0].label ?? res[0].name, res[1].label ?? res[1].name))
           return acc
         }
         this.pending = { kind: 'amount', draft: d, queue: drafts }
@@ -1230,7 +1230,7 @@ export class Session {
       const res = this.resolveName(d)
       if (Array.isArray(res)) {
         this.pending = { kind: 'which', draft: d, queue: drafts, options: res }
-        acc.parts.push(R.askWhich(res[0].name, res[1].name))
+        acc.parts.push(R.askWhich(res[0].label ?? res[0].name, res[1].label ?? res[1].name))
         return acc
       }
       const name = this.customerName(d)
@@ -1391,7 +1391,7 @@ export class Session {
             const res = this.resolveName(d)
             if (Array.isArray(res)) {
               this.pending = { kind: 'which', draft: d, queue: p.queue, options: res }
-              return { parts: [R.askWhich(res[0].name, res[1].name)], ops: [] }
+              return { parts: [R.askWhich(res[0].label ?? res[0].name, res[1].label ?? res[1].name)], ops: [] }
             }
           }
           this.save(d, acc) // the user just said the right value: no second confirmation
@@ -1433,9 +1433,11 @@ export class Session {
       }
       case 'which': {
         const n = nameAnswer(text) ?? text
-        const m = matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.name, ...c.aliases] })))
+        // a tapped option is its label ("Ramesh · Gali 3"); a spoken one may name the tag
+        const exact = p.options.find((c) => (c.label ?? c.name) === text.trim())
+        const m = exact ? [{ id: exact.cid, score: 1 }] : matchName(n, p.options.map((c) => ({ id: c.cid, names: [c.label ?? c.name, c.name, ...c.aliases] })))
         if (!m.length || m[0].score < NAME_NEAR || (m[1] && m[1].score >= m[0].score - 0.01))
-          return { parts: [R.askWhich(p.options[0].name, p.options[1].name)], ops: [] }
+          return { parts: [R.askWhich(p.options[0].label ?? p.options[0].name, p.options[1].label ?? p.options[1].name)], ops: [] }
         d.cid = m[0].id
         d.nameSure = true
         return this.processDrafts([d, ...p.queue], acc)
@@ -1493,6 +1495,7 @@ export class Session {
         })
         if (hits.every((h) => h.d)) {
           for (const { e, d } of hits) {
+            if (!d) continue
             d.paise = Math.round(e.amount.value * 100)
             if (e.direction) d.direction = e.direction
           }
@@ -1644,7 +1647,7 @@ export class Session {
       paise: d.paise,
       direction: d.direction,
       newCustomer: p.kind === 'confirm' && this.opensAccount(d) ? true : undefined,
-      options: p.kind === 'which' ? p.options.map((c) => c.name) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
+      options: p.kind === 'which' ? p.options.map((c) => c.label ?? c.name) : p.kind === 'confusable' ? [String(d.paise / 100), String(d.alt)] : undefined,
     }
   }
 

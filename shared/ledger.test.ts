@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  type LedgerEvent, apply, balance, dayFromOffset, daySummary, dues, emptyLedger, householdBalance, lastEntry,
+  type LedgerEvent, apply, balance, dayFromOffset, displayName, daySummary, dues, emptyLedger, householdBalance, lastEntry,
   promises, reduce, toPaise,
 } from './ledger.js'
 import { type ChainRecord, keyIdFor, memoryKeyStore, open, seal, shred, verifyChain } from './chain.js'
@@ -115,5 +115,26 @@ describe('hash chain + crypto-shred', () => {
     const evs: LedgerEvent[] = [...base, { type: 'entry_voided', eid: 'e1', reason: 'undo' }]
     const { recs } = await sealAll(evs)
     expect(recs.at(-1)!.keyId).toBe('r')
+  })
+})
+
+describe('displayName', () => {
+  const two = (extra: LedgerEvent[] = []) => build([
+    { type: 'customer_added', cid: 'a1', name: 'Ramesh', aliases: [] },
+    { type: 'customer_added', cid: 'b2', name: 'ramesh', aliases: [] },
+    { type: 'customer_added', cid: 'c3', name: 'Suresh', aliases: [] },
+    ...extra,
+  ])
+  it('a unique name is shown as it is', () => {
+    expect(displayName(two(), 'c3')).toBe('Suresh')
+  })
+  it('two customers with one name are told apart by tag, else phone digits, else id', () => {
+    const s = two([
+      { type: 'consent', cid: 'a1', remindersOptIn: false, adult: true, tag: 'Gali 3' },
+      { type: 'consent', cid: 'b2', remindersOptIn: false, adult: true, phone: '98765 43210' },
+    ])
+    expect(displayName(s, 'a1')).toBe('Ramesh · Gali 3')
+    expect(displayName(s, 'b2')).toBe('ramesh · …3210')
+    expect(displayName(two(), 'b2')).toBe('ramesh · b2')
   })
 })

@@ -7,10 +7,126 @@ Changes made on the `dev` branch, newest first. Each item lists what changed, wh
 ```
 npm install
 npm run server      # voice function on ws://localhost:8787 (reads .env, restarts on server changes)
-npm run dev         # UI on http://localhost:5173 (proxies /api/voice to 8787)
+npm run dev         # UI on http://localhost:5173 (proxies /api/voice and /api/* to 8787)
 ```
 
-**Tests:** `npx vitest run` (575 pass) and `npx tsc -b` (clean).
+**Tests:** `npx vitest run` (580 pass) and `npx tsc -b` (clean).
+
+---
+
+## 4. New look, shop sign-up, simpler editing, WhatsApp reminders (Twilio)
+
+**Status:** built and committed locally. Type check and unit tests pass. **Not yet tested by hand in the app.** The owner is testing it now; feedback will be added below under "Feedback and fixes".
+
+### What the user sees
+- **Header**
+  - **Left:** hamburger (☰) button.
+  - **Middle:** the shop name in a serif display font, with a small gold "KHATABHAI".
+  - **Right:** a single **language dropdown**: "Auto" plus the 10 languages, with a ✓ on the current one.
+  - "Auto · English" is gone: in auto mode the button says just **Auto**.
+  - The privacy and settings icons moved into the menu.
+- **Hamburger menu** (slides in from the left), in this order:
+  - **Shop profile**, with "Edit profile".
+  - **Colour theme** dropdown.
+  - **WhatsApp reminders:** Twilio status, "Send automatically", "Repeat every 3/7/15/30 days", "Remind all due (N)".
+  - **Voice:** hands-free, faster replies, read every entry back, latency, debug logs.
+  - **My data** (the old privacy sheet).
+- **5 colour schemes:**
+  - Bahi Maroon (default, maroon + gold on ivory)
+  - Emerald Ivory
+  - Royal Indigo
+  - Noir & Gold (dark)
+  - Midnight Peacock (dark)
+
+  The choice is saved, and applied from the first paint on the next open.
+- **Luxury styling**
+  - **Cut corners:** every box, button, card and sheet has bevelled corners instead of curves (CSS `corner-shape: bevel`). The mic is an octagon. Browsers without `corner-shape` (Safari/Firefox today) show small rounded corners instead.
+  - **Fonts:** Playfair Display for the shop name, headings and every amount; Manrope for body text. Indian scripts keep the Noto fonts.
+  - **Accents:** thin gold rules under the header and in the menu.
+- **Sign-up step**
+  - **New shops:** after picking a language, a "Set up your shop" form asks for shop name (required), owner name, address/area and shop phone.
+  - **Existing shops:** they see it once too (until `profileDone`).
+  - **Where it's used:** the profile signs every WhatsApp reminder.
+- **Simpler edit-entry sheet**
+  - **The sheet now holds:** big amount (gold underline instead of a red focus box), credit/paid, the customer as one line with "Change", date (Today / Yesterday / a calendar button), and one Save button.
+  - **Moved to small text:** "Remove entry" and "what was said", at the bottom and under the title.
+  - **Picking a customer:** a search plus the 8 most recent customers.
+  - **Same-name customers:** typing a name that already exists offers "Another 'Ramesh'" for a genuinely different customer with the same name.
+- **Mic row:** the keyboard (type instead) button is now on the **right** of the mic.
+- **No overlap:** the list's bottom padding follows the real height of the floating bottom panel (question card + mic), so the last entries are never hidden behind it. The bottom panel also respects the phone's safe area.
+- **Customer sheet**
+  - **New fields:** a big **Send reminder** button next to the balance, and the last reminder time.
+  - **Phone:** prefilled from what is saved, validated to 10+ digits.
+  - **Tag:** area / nickname.
+  - **Switches:** Adult and Allow reminders.
+
+### Customers with the same name
+- **The tag:** customers have an optional **tag** (area, shop, nickname: "Gali 3", "doodhwala"). It is stored in the existing `consent` event (`tag?`), so older ledgers still load.
+- **Display name:** `displayName()` (shared/ledger.ts) is the name everywhere: lists, chips, sheet titles.
+  - A unique name shows as it is.
+  - Two customers with one name show as "Ramesh · Gali 3" (tag), else "Ramesh · …3210" (last 4 phone digits), else a short id.
+- **Voice:** the snapshot sends this as `label`. When a spoken name matches two customers, the agent asks "Which one, Ramesh · Gali 3 or Ramesh · …3210?". Both the buttons and a spoken tag pick the right one.
+
+### WhatsApp reminders
+- **Manual:** the customer sheet's "Send reminder" button, or saying "Ramesh ko yaad dilao" (the existing remind intent).
+  - The message is the existing polite template (shared/replies.ts `reminderText`, in the shop's language), signed with owner name, shop name, address and phone.
+  - **With Twilio set up:** it is sent from the Twilio WhatsApp number.
+  - **Without Twilio, or if Twilio refuses:** WhatsApp opens with the message filled in, for the shopkeeper to tap send.
+- **Automatic:** with "Send automatically" on, when the app opens (and every 6 h while it stays open), every customer is reminded at most once per "Repeat every N days", if they are:
+  - adult,
+  - opted in,
+  - with a phone number,
+  - and owe money.
+
+  It runs on the phone because the ledger only lives on the phone. A closed app sends nothing.
+- **Consent unchanged:** only adult customers who agreed get reminders. Each message ends with how to stop them.
+- **Payments:** not done. Paying from the message and the payment showing in the khata are left for the next step.
+
+### Twilio setup (free trial, step by step)
+1. Sign up at twilio.com (free trial) and verify your own phone number.
+2. Open **Console → Messaging → Try it out → Send a WhatsApp message**. Twilio shows the **sandbox number** `+1 415 523 8886` and a join code like `join bright-river`.
+3. Each phone that should receive reminders (start with your own) sends **`join <your-code>`** on WhatsApp to `+1 415 523 8886`. Trial limits:
+   - **Only joined numbers get messages.** Twilio error 63015 means the number hasn't joined.
+   - **The 24-hour window:** free-form text arrives only within 24 h of that phone's last message to the sandbox. Sending "join …" again, or any message, reopens it.
+4. Copy **Account SID** and **Auth Token** from Console → Account Info. Add them to `voice-khata/.env`:
+   ```
+   TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   TWILIO_AUTH_TOKEN=your_auth_token
+   TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+   ```
+5. Restart `npm run server`. In the app: ☰ → WhatsApp reminders should show "✓ Sent from your Twilio WhatsApp number".
+6. **Test:**
+   - Open a customer who owes money and enter your (joined) number.
+   - Turn on Adult + Allow reminders.
+   - Tap **Send reminder**. The WhatsApp message should arrive within seconds.
+7. **Production, later:** register your own WhatsApp sender in Twilio, get a message **template** approved (variables {{1}} name, {{2}} amount, {{3}} shop), and set `TWILIO_WHATSAPP_FROM` and `TWILIO_CONTENT_SID`. Then any customer can be reminded at any time, with no join and no 24 h window. On Vercel, add the same env vars in the project settings.
+
+### How it is built
+- `server/remind/twilio.ts`: Twilio Messages API with one form POST (no SDK); `toE164()` turns 10-digit Indian numbers into +91 format.
+- `api/remind.ts`:
+  - `GET` → `{configured}`; `POST {to, body, vars?}` → send.
+  - Guards: own origin only, phone validation, ≤1000 chars, 60 per IP per hour.
+  - Nothing is stored; only the number and the text reach the server.
+- `eval/local_server.ts`: serves `/api/remind`, `/api/backup` and `/api/confirm` beside the voice socket, and `vite.config.ts` proxies `/api/*` to it. Local dev therefore works without `vercel dev`.
+- `src/lib/remind.ts`: builds the message, sends or falls back to wa.me, records the last reminder per customer (`settings.reminded`), runs automatic reminders.
+- `src/ui/theme.ts` + `src/index.css`: 5 themes as CSS token sets (`<html data-theme>`, dark ones also set `.dark`), fonts, bevel corners, gold rule. Hard-coded `ring-black/*` and amber colours became theme-aware.
+- New UI pieces:
+  - `src/ui/Dropdown.tsx`: listbox dropdown, used for language, theme and repeat days.
+  - `src/ui/Menu.tsx`: the hamburger menu.
+  - `src/ui/Profile.tsx`: the sign-up and profile form.
+- Rewritten: the `EntrySheet` form; `CustomerSheet` (tag, phone, reminder); `App.tsx` header, onboarding, mic row and footer padding.
+- `SettingsSheet` is removed; its switches moved to the menu.
+- Data: `shared/ledger.ts` (`tag`, `displayName`); `shared/protocol.ts` (`SnapCustomer.label`); `server/session.ts` (labels in "which one?"); `src/lib/contracts.ts` (profile, theme and reminder settings).
+- Strings: about 30 new UI strings in hi/en/kn/ta/te (`EXTRA3` in `src/ui/strings.ts`).
+- Fonts: `@fontsource-variable/playfair-display`, `@fontsource-variable/manrope`.
+- Also fixed: a type-narrowing gap in the batch-confirm fix-one-line code from change 2. The project's `tsc -b` doesn't cover `server/`, so it was only found by checking the server files directly.
+
+### Tests added
+- `server/remind/twilio.test.ts`: number normalisation, rejects, configured check.
+- `shared/ledger.test.ts`: `displayName` for unique names, tag, phone digits, id.
+
+### Feedback and fixes
+_(to be filled in from the owner's testing)_
 
 ---
 
@@ -112,7 +228,9 @@ npm run dev         # UI on http://localhost:5173 (proxies /api/voice to 8787)
 
 - **Marathi:** indic-auto tags Marathi as Hindi. The Marathi-word check catches common sentences, not all.
 - **Kannada:** indic-auto sometimes writes Kannada in Hindi script. The REST language rescue (one extra 0.2–0.5 s call, only on turns that don't read) recovers it.
-- **Vercel:** env needs `GEMINI_API_KEY*` (and no `ANTHROPIC_API_KEY`, or `LLM_PROVIDER=gemini`).
+- **Vercel env:** needs `GEMINI_API_KEY*` (and no `ANTHROPIC_API_KEY`, or `LLM_PROVIDER=gemini`), plus `TWILIO_*` for reminders.
+- **Typecheck gap:** `npx tsc -b` only covers `src/` and `shared/`; server files can be checked with `npx tsc --ignoreConfig --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck --types node api/*.ts server/session.ts`.
+- **Reminders:** automatic reminders need the app to be opened; a server-side schedule would need balances on the server, which the design avoids.
 - **Backups:** backup and customer confirmation links need `DATABASE_URL` (Neon). Not set locally.
 
 ## Latest e2e numbers

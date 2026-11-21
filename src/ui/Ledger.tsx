@@ -110,7 +110,7 @@ export function Passbook({ entries, t, onEntry, onConfirm }: {
           {es.map((e) => {
             const bal = running.get(e.eid)
             return (
-              <div key={e.eid} className="border-b border-black/5">
+              <div key={e.eid} className="border-b border-foreground/5">
                 <button onClick={() => onEntry(e.eid)} className={cn(col, 'min-h-14 w-full py-2 text-left active:bg-muted/60', e.voided && 'opacity-50')}>
                   <span className="num text-sm leading-tight text-muted-foreground">
                     {e.promise ? t.promise : time(e.ts)}
@@ -118,7 +118,7 @@ export function Passbook({ entries, t, onEntry, onConfirm }: {
                     {e.voided && <span className="block text-[11px]">{t.removed}</span>}
                   </span>
                   {(['credit', 'payment'] as const).map((d) => (
-                    <span key={d} className={cn('num text-right text-lg font-bold', d === 'credit' ? 'text-credit' : 'text-payment', e.promise && 'font-medium text-amber-700', e.voided && 'line-through')}>
+                    <span key={d} className={cn('num text-right text-lg font-bold', d === 'credit' ? 'text-credit' : 'text-payment', e.promise && 'font-medium text-amber-700 dark:text-amber-300', e.voided && 'line-through')}>
                       {e.direction === d ? rs(e.paise) : ''}
                     </span>
                   ))}

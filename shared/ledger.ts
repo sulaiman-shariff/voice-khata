@@ -27,7 +27,7 @@ export type LedgerEvent =
   | { type: 'entry_amended'; eid: string; paise?: number; direction?: Direction; cid?: string; day?: string }
   | { type: 'entry_voided'; eid: string; reason: string }
   | { type: 'confirmation'; eid: string; status: 'confirmed' | 'disputed' }
-  | { type: 'consent'; cid: string; remindersOptIn: boolean; adult: boolean; phone?: string }
+  | { type: 'consent'; cid: string; remindersOptIn: boolean; adult: boolean; phone?: string; tag?: string }
 
 export interface Customer {
   cid: string
@@ -37,6 +37,8 @@ export interface Customer {
   remindersOptIn: boolean
   adult: boolean
   phone?: string
+  /** tells two customers with the same name apart: area, shop, nickname ("Gali 3", "doodhwala") */
+  tag?: string
 }
 
 export interface Entry {
@@ -83,7 +85,7 @@ export function apply(s: LedgerState, ev: LedgerEvent, ts = Date.now()): LedgerS
     }
     case 'consent': {
       const c = s.customers.get(ev.cid)
-      if (c) Object.assign(c, { remindersOptIn: ev.remindersOptIn, adult: ev.adult, phone: ev.phone })
+      if (c) Object.assign(c, { remindersOptIn: ev.remindersOptIn, adult: ev.adult, phone: ev.phone, tag: ev.tag?.trim() || undefined })
       break
     }
     case 'entry':
@@ -219,3 +221,18 @@ export function dayFromOffset(offset: number, now = new Date()): string {
 
 export const toPaise = (rupees: number) => Math.round(rupees * 100)
 export const toRupees = (paise: number) => paise / 100
+
+/**
+ * The name to show and say for a customer. Two customers with the same name are told apart by
+ * their tag ("Ramesh · Gali 3"), else by the last digits of their phone ("Ramesh · …4321").
+ */
+export function displayName(state: LedgerState, cid: string): string {
+  const c = state.customers.get(cid)
+  if (!c) return '—'
+  if (c.tag) return `${c.name} · ${c.tag}`
+  const key = c.name.trim().toLowerCase()
+  const twin = [...state.customers.values()].some((x) => x.cid !== cid && x.name.trim().toLowerCase() === key)
+  if (!twin) return c.name
+  const digits = c.phone?.replace(/\D/g, '') ?? ''
+  return digits.length >= 4 ? `${c.name} · …${digits.slice(-4)}` : `${c.name} · ${cid.slice(0, 4)}`
+}
