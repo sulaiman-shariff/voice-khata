@@ -101,5 +101,60 @@ export async function geminiToolCall<T>(system: string, user: string, tool: Gemi
   return { args: call.args, ms }
 }
 
+/** 16 kHz mono s16le PCM -> a playable WAV (44-byte header). */
+function pcmToWav(pcm: Buffer): Buffer {
+  const h = Buffer.alloc(44)
+  h.write('RIFF', 0)
+  h.writeUInt32LE(36 + pcm.length, 4)
+  h.write('WAVEfmt ', 8)
+  h.writeUInt32LE(16, 16)
+  h.writeUInt16LE(1, 20) // PCM
+  h.writeUInt16LE(1, 22) // mono
+  h.writeUInt32LE(16000, 24)
+  h.writeUInt32LE(32000, 28) // byte rate
+  h.writeUInt16LE(2, 32) // block align
+  h.writeUInt16LE(16, 34) // bits
+  h.write('data', 36)
+  h.writeUInt32LE(pcm.length, 40)
+  return Buffer.concat([h, pcm])
+}
+
+/** One turn, many tools: returns every functionCall the model made, in order. `audio` is 16 kHz mono s16le PCM. */
+export async function geminiAgentCall(
+  system: string, user: string, tools: GeminiTool[], audio?: Buffer, opts: { model?: string; timeoutMs?: number } = {},
+): Promise<{ calls: { name: string; args: Record<string, unknown> }[]; ms: number }> {
+  const project = process.env.VERTEX_PROJECT ?? serviceKey().project_id
+  const host = LOCATION === 'global' ? 'aiplatform.googleapis.com' : `${LOCATION}-aiplatform.googleapis.com`
+  const url = `https://${host}/v1/projects/${project}/locations/${LOCATION}/publishers/google/models/${opts.model ?? GEMINI_MODEL}:generateContent`
+  const auth = await accessToken()
+  const parts: unknown[] = []
+  if (audio?.length) parts.push({ inlineData: { mimeType: 'audio/wav', data: pcmToWav(audio).toString('base64') } })
+  parts.push({ text: user })
+  const t0 = performance.now()
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${auth}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts }],
+      tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.input_schema })) }],
+      toolConfig: { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: tools.map((t) => t.name) } },
+      generationConfig: { temperature: 0, maxOutputTokens: 800, thinkingConfig: { thinkingBudget: 0 } },
+    }),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
+  })
+  const ms = performance.now() - t0
+  const j = (await res.json()) as {
+    error?: { message?: string }
+    candidates?: { content?: { parts?: { functionCall?: { name?: string; args?: Record<string, unknown> } }[] } }[]
+  }
+  if (!res.ok) throw new Error(`gemini ${res.status}: ${j.error?.message?.slice(0, 200) ?? ''}`)
+  const calls = (j.candidates?.[0]?.content?.parts ?? [])
+    .filter((p) => p.functionCall?.name)
+    .map((p) => ({ name: p.functionCall!.name!, args: p.functionCall!.args ?? {} }))
+  if (!calls.length) throw new Error('gemini: no tool call')
+  return { calls, ms }
+}
+
 /** Measured: the first call or two after a cold start take 2-6 s, then ~0.55 s. */
 export const WARM_TIMEOUT_MS = 15000
