@@ -73,11 +73,11 @@ const GAVE_1P = S('ಕೊಟ್ಟೆ', 'ಕೊಟ್ಟಿದ್ದೇನೆ', 
 // "maine diya" / "hamne diye": the shop gave (credit), whatever the case marker on the name
 const SHOP_SUBJ = S('maine', 'मैंने', 'मैने', 'hamne', 'हमने', 'humne')
 const TOOK = S('liya', 'liye', 'लिया', 'लिए', 'took', 'taken', 'घेतले', 'ತಗೊಂಡ', 'ತೆಗೆದುಕೊಂಡ', 'வாங்கினார்', 'తీసుకున్నాడు')
-const GAYA = S('gaya', 'gayi', 'gaye', 'गया', 'गई', 'गए', 'gai')
+const GAYA = S('aite', 'aitu', 'ಆಯ್ತು', 'ಆಗಿದೆ', 'gaya', 'gayi', 'gaye', 'गया', 'गई', 'गए', 'gai')
 
 const MARK_AGENT = S('ne', 'ने', 'नी') // "Ramesh ne 200 diya" -> he gave -> payment
-const MARK_RECIP = S('ko', 'को', 'ला', 'কে', 'ને', 'ਨੂੰ') // "Ramesh ko 200 diya" -> credit
-const MARK_POSS = S('ka', 'ki', 'ke', 'का', 'की', 'के', 'cha', 'चा', 'ची', 'चे', 'ਦਾ', 'ਦੀ', 'ਦੇ', 'નો', 'ની', 'ના', 'er', 'এর')
+const MARK_RECIP = S('కి', 'కు', 'ko', 'को', 'ला', 'কে', 'ને', 'ਨੂੰ') // "Ramesh ko 200 diya" -> credit
+const MARK_POSS = S('ಅವರ', 'avara', 'ka', 'ki', 'ke', 'का', 'की', 'के', 'cha', 'चा', 'ची', 'चे', 'ਦਾ', 'ਦੀ', 'ਦੇ', 'નો', 'ની', 'ના', 'er', 'এর')
 const MARK_SRC = S('se', 'से', 'from')
 const CASE = new Set([...MARK_AGENT, ...MARK_RECIP, ...MARK_POSS, ...MARK_SRC])
 const EN_PREP = new Set(['from', 'to', 'for', 'against', 'on', 'under', 'in', 'by'])
@@ -126,7 +126,7 @@ const BACKREF = S('uska', 'uski', 'uske', 'usko', 'usne', 'उसका', 'उ�
 const MONTH = S('mahine', 'mahina', 'महीने', 'महीना', 'month', 'monthly', 'ತಿಂಗಳ', 'மாத', 'నెల')
 const SUMMARY = S('summary', 'report', 'sales', 'saransh', 'सारांश', 'ಸಾರಾಂಶ', 'சுருக்கம்', 'సారాంశం')
 const WHO = S('kaun', 'कौन', 'who', 'kisko', 'किसको', 'kiska', 'किसका')
-const FILLER = S('maine', 'मैंने', 'मैने', 'hamne', 'हमने', 'humne', 'hua', 'हुआ', 'hui', 'हुई', 'hue', 'हुए', 'bana', 'बना', 'banta', 'बनता', 'bhai', 'भाई', 'bhaiya', 'भैया', 'arre', 'अरे', 'achha', 'अच्छा', 'haan', 'to', 'तो', 'toh', 'ab', 'अब',
+const FILLER = S('again', 'phir se', 'maine', 'मैंने', 'मैने', 'hamne', 'हमने', 'humne', 'hua', 'हुआ', 'hui', 'हुई', 'hue', 'हुए', 'bana', 'बना', 'banta', 'बनता', 'bhai', 'भाई', 'bhaiya', 'भैया', 'arre', 'अरे', 'achha', 'अच्छा', 'haan', 'to', 'तो', 'toh', 'ab', 'अब',
   'please', 'zara', 'ज़रा', 'jara', 'likh', 'लिख', 'likho', 'लिखो', 'lo', 'लो', 'do', 'दो', 'rupaye', 'रुपये', 'रुपए',
   'rs', '₹', 'ಅವರು', 'avaru', 'அவர்', 'ఆయన', 'mein', 'में', 'ka', 'hai', 'है', 'ho', 'kar', 'कर', 'gaya', 'diya',
   'ji', 'जी', 'customer', 'naya', 'नया', 'batao', 'bata', 'बताओ', 'बता', 'bolo', 'बोलो', 'sunao', 'सुनाओ', 'dikhao',
@@ -505,7 +505,7 @@ const AUX_BEFORE_DO = S('likh', 'लिख', 'jod', 'जोड़', 'जोड',
   'daal', 'डाल', 'note', 'save', 'chuka', 'चुका', 'de', 'दे', 'bata', 'बता')
 const CLOSERS = new Set([...CREDIT, ...PAYMENT, ...GIVE, ...GAVE_3P, ...GAVE_1P, ...TOOK, ...GAYA, ...PAST, ...FUTURE,
   ...S('hai', 'है', 'hain', 'हैं', 'kiye', 'किए', 'kiya', 'किया', 'karo', 'करो', 'dena', 'देना', 'lena', 'लेना', 'gayi', 'gaye',
-    'please', 'ji', 'जी', 'ಬರೆ', 'ಬರೆಯಿರಿ', 'எழுது', 'రాయి', 'ಇದೆ', 'இருக்கு', 'ఉంది')])
+    'please', 'ji', 'जी', 'ಬರೆ', 'ಬರೆಯಿರಿ', 'எழுது', 'எழுதுங்கள்', 'எழுதுங்க', 'రాయి', 'రాయండి', 'రాయు', 'ಇದೆ', 'இருக்கு', 'ఉంది')])
 
 const QUERY_END = S('kitna', 'kitne', 'कितना', 'कितने', 'hai', 'है', 'batao', 'बताओ', 'bolo', 'बोलो', 'sunao', 'सुनाओ',
   'dilao', 'दिलाओ', 'karo', 'करो', 'ಎಷ್ಟು', 'எவ்வளவு', 'ఎంత', 'എത്ര', 'please')

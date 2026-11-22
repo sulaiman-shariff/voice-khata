@@ -7,7 +7,7 @@
 import { type Direction, type EntryIntent, type Intent, directionAnswer, entryLeftovers, mentionsMoney, mentionsSettle, nameAnswer, parseFast, refersBack, yesAndRest } from '../../shared/intent.js'
 import { uniqueLabels } from '../../shared/ledger.js'
 import { NAME_NEAR, NAME_SURE, matchName, phoneticKey } from '../../shared/names.js'
-import { parseAmounts } from '../../shared/numbers.js'
+import { fold, parseAmounts } from '../../shared/numbers.js'
 import type { LedgerOp, PendingView, ReadyCard, ServerMsg, SettingMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
 import { type Lang, LOCALE, eraseWord, say, sayMore } from '../../shared/replies.js'
 import { sayShop } from '../../shared/replies-shop.js'
@@ -779,9 +779,11 @@ export class LedgerCore {
     // every word must be explained: entry vocabulary, or the named customers' own names
     if (text) {
       const named = intent.entries.map((e) => (e.name ? this.lookup(e.name) : null))
-      const nameWords = new Set(named.flatMap((c) => (c ? [c.name, ...c.aliases, c.tag ?? ''] : [])).flatMap((n) => n.toLowerCase().split(/\s+/)).filter(Boolean))
-      const heardNames = new Set(intent.entries.flatMap((e) => (e.name ?? '').toLowerCase().split(/\s+/)).filter(Boolean))
-      const extra = entryLeftovers(text).filter((w) => !nameWords.has(w) && !heardNames.has(w))
+      // the name as said, in the parser's own normal form, with or without a case ending ("ರಮೇಶ್‌ಗೆ", "ரமேஷுக்கு", "Sureshdu")
+      const names = [...named.flatMap((c) => (c ? [c.name, ...c.aliases, c.tag ?? ''] : [])), ...intent.entries.map((e) => e.name ?? '')]
+        .flatMap((n) => fold(n).split(/\s+/)).filter((w) => w.length >= 2)
+      const isName = (w: string) => names.some((n) => w === n || (w.startsWith(n.length > 3 ? n.slice(0, -1) : n) && w.length - n.length <= 6))
+      const extra = entryLeftovers(text).filter((w) => !isName(w))
       if (extra.length) return false
     }
     return intent.entries.every((e) => {
