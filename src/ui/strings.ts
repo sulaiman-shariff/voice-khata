@@ -81,7 +81,15 @@ const T = Object.fromEntries(
   (Object.keys(BASE) as (keyof typeof BASE)[]).map((k) => [k, Object.assign({}, BASE[k], EXTRA[k], EXTRA2[k], EXTRA3[k], EXTRA4[k], EXTRA5[k], EXTRA6[k], EXTRA7[k], EXTRA8[k], EXTRA9[k])]),
 ) as { [K in keyof typeof BASE]: (typeof BASE)[K] & (typeof EXTRA)[K] & (typeof EXTRA2)[K] & (typeof EXTRA3)[K] & (typeof EXTRA4)[K] & (typeof EXTRA5)[K] & (typeof EXTRA6)[K] & (typeof EXTRA7)[K] & (typeof EXTRA8)[K] & (typeof EXTRA9)[K] }
 export type UiStrings = (typeof T)['en']
-export const ui = (l: Lang | null): UiStrings => (l && l in T ? T[l as keyof typeof T] : T.hi)
+export const ui = (l: Lang | null): UiStrings => (l && l in T ? T[l as keyof typeof T] : l ? T.hi : T.en)
+
+/**
+ * The language the screen is shown in. Only an explicit choice changes it (a language tile at setup, or
+ * the header's language menu); the voice's auto mode follows the spoken language but never the screen.
+ * Older installs without `uiLang` keep a language they picked by hand, else English.
+ */
+export const screenLang = (s: { lang: Lang | null; autoLang?: boolean; uiLang?: Lang }): Lang =>
+  s.uiLang ?? (s.autoLang === false && s.lang ? s.lang : 'en')
 
 /** The auto-language choice: listens for any language, replies in the one just spoken. */
 export const AUTO_LANG: Record<Lang, string> = {
@@ -123,7 +131,7 @@ export const ONBOARD = {
   ai: ['An AI assistant', 'आपकी आवाज़ AI समझता है'],
   choose: ['Choose language', 'भाषा चुनें'],
   auto: ['Auto', 'कोई भी भाषा'],
-  autoHint: ['Speak any language — replies in the same one', 'जिस भाषा में बोलें, उसी में जवाब'],
+  autoHint: ['Speak any language, replies in the same one · screen in English', 'किसी भी भाषा में बोलें · स्क्रीन English में'],
   samples: ['रमेश का 340 उधार', 'ರಮೇಶ್ 340 ಸಾಲ', 'ரமேஷ் 340 கடன்', 'రమేష్ 340 అప్పు', 'Ramesh 340 credit'],
 } as const
 export const both = (x: readonly [string, string] | readonly string[]) => `${x[0]} · ${x[1]}`

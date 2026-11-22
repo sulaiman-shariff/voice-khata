@@ -85,7 +85,7 @@ const te: Partial<FeatureStrings> = {
 const T: Record<string, FeatureStrings> = { hi, en, kn: { ...hi, ...kn }, ta: { ...hi, ...ta }, te: { ...hi, ...te } }
 
 /** Feature-screen labels for a language (Hindi when the language has none of its own). */
-export const fx = (l: Lang | null | undefined): FeatureStrings => (l && T[l]) || hi
+export const fx = (l: Lang | null | undefined): FeatureStrings => (l && T[l]) || (l ? hi : en)
 
 /** "Today" / "Tomorrow" / "Yesterday" / "Mon, 24 Nov" for a YYYY-MM-DD day. */
 export function dayWord(day: string, f: FeatureStrings, now = new Date()): string {

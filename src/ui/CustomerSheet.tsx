@@ -15,7 +15,7 @@ import { Passbook } from './Ledger'
 import { PlanCard } from './PlanCard'
 import { dropBackup, shareWhatsApp, toastRemind } from './share'
 import { StatementButton } from './StatementButton'
-import type { UiStrings } from './strings'
+import { type UiStrings, screenLang } from './strings'
 import { fx } from './strings-features'
 
 const LINKS_KEY = 'vk-confirm-links'
@@ -61,7 +61,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
   const entries = s.order.map((id) => s.entries.get(id)!).filter((e) => e.cid === c.cid)
   const bal = balance(s, c.cid)
   const title = displayName(s, c.cid)
-  const f = fx(store.settings.lang)
+  const f = fx(screenLang(store.settings))
   const supplier = c.kind === 'supplier'
   const owed = owedLabel(c.kind, bal)
   // a same-name account on the same number is probably this person twice: offer the join, never do it unasked
@@ -113,7 +113,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
             </button>
           )}
 
-          <PlanCard state={s} cid={c.cid} lang={store.settings.lang} onCancel={() => void store.cancelPlan(c.cid).then(onChanged)} />
+          <PlanCard state={s} cid={c.cid} lang={screenLang(store.settings)} onCancel={() => void store.cancelPlan(c.cid).then(onChanged)} />
 
           {/* WhatsApp reminder: number, consent, send — all in one place (never for suppliers) */}
           {!supplier && <section className="space-y-3 rounded-2xl bg-card p-4 text-sm shadow-1 ring-1 ring-foreground/6">
@@ -170,7 +170,7 @@ export function CustomerSheet({ store, cid, t, backup, onClose, onChanged, onEnt
               <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">{t.history}</span>
               <StatementButton state={s} cid={c.cid} settings={store.settings} className="h-11 px-3 text-sm text-primary ring-primary/25" />
             </div>
-            <Passbook entries={entries} t={t} onEntry={onEntry} onConfirm={(eid) => void askConfirm(eid)} state={s} lang={store.settings.lang} />
+            <Passbook entries={entries} t={t} onEntry={onEntry} onConfirm={(eid) => void askConfirm(eid)} state={s} lang={screenLang(store.settings)} />
           </div>
 
           <button onClick={() => setForgetting(true)} className="flex min-h-11 items-center gap-2 text-sm text-destructive">

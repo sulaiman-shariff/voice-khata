@@ -7,6 +7,7 @@ import { isUpiId, upiUri } from '@/lib/pay'
 import { renderStatementPng, shareStatement, statementInputFor } from '@/lib/statement'
 import { cn } from '@/lib/utils'
 import { rs } from './format'
+import { screenLang } from './strings'
 import { fx } from './strings-features'
 
 /**
@@ -19,7 +20,7 @@ export function StatementButton({ state, cid, settings, className }: {
   settings: Pick<Settings, 'shopName' | 'ownerName' | 'shopAddress' | 'shopPhone' | 'shopUpi' | 'lang'>
   className?: string
 }) {
-  const f = fx(settings.lang)
+  const f = fx(screenLang(settings))
   const [busy, setBusy] = useState(false)
   const c = state.customers.get(cid)
   if (!c) return null

@@ -6,7 +6,7 @@ import type { KhataStore } from '@/lib/contracts'
 import { cn } from '@/lib/utils'
 import { rs } from './format'
 import { Chip, Segmented, inputCls } from './kit'
-import type { UiStrings } from './strings'
+import { type UiStrings, screenLang } from './strings'
 import { fx } from './strings-features'
 
 /** 'new' writes a galla row; an eid edits that cash row's amount, or removes it. */
@@ -23,7 +23,7 @@ export function CashSheet({ store, mode, t, onClose, onChanged }: {
 function CashForm({ store, mode, t, onClose, onChanged }: {
   store: KhataStore; mode: NonNullable<CashMode>; t: UiStrings; onClose: () => void; onChanged: () => void
 }) {
-  const f = fx(store.settings.lang)
+  const f = fx(screenLang(store.settings))
   const row = mode === 'new' ? undefined : store.state.cash.get(mode.eid)
   const [dir, setDir] = useState<'in' | 'out'>(row?.dir ?? 'out')
   const [amt, setAmt] = useState(row ? String(row.paise / 100) : '')

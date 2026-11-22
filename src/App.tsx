@@ -43,7 +43,7 @@ import { ProfileForm } from '@/ui/Profile'
 import { QrSheet } from '@/ui/QrSheet'
 import { RemindSheet } from '@/ui/RemindSheet'
 import { shareWhatsApp, toastRemind } from '@/ui/share'
-import { ui } from '@/ui/strings'
+import { screenLang, ui } from '@/ui/strings'
 import { UNDO_STYLE, type ShowMsg, useVoice } from '@/ui/useVoice'
 
 const ConfirmPage = lazy(() => import('@/pages/ConfirmPage'))
@@ -83,7 +83,8 @@ const TAB_ORDER: Tab[] = ['today', 'dues', 'cashbook']
 function Home({ store }: { store: KhataStore }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state)
   const settings = store.settings
-  const t = ui(settings.lang)
+  const sl = screenLang(settings)
+  const t = ui(sl)
   const [tab, setTabState] = useState<Tab>('today')
   const [tabDir, setTabDir] = useState(1)
   const [cid, setCid] = useState<string | null>(null)
@@ -182,7 +183,7 @@ function Home({ store }: { store: KhataStore }) {
 
   // Razorpay payments and customer replies come back into the khata; opted-in customers go up for reminders
   useEffect(() => startSync(store, (n) => {
-    const tt = ui(store.settings.lang)
+    const tt = ui(screenLang(store.settings))
     const name = store.state.customers.get(n.cid)?.name ?? ''
     if (n.kind === 'payment') {
       const paise = n.paise ?? 0
@@ -207,7 +208,7 @@ function Home({ store }: { store: KhataStore }) {
 
   // automatic WhatsApp reminders: on open and every 6 h while the app stays open
   useEffect(() => {
-    const run = () => void runAutoReminders(store).then(({ sent }) => { if (sent) toast.success(`${ui(store.settings.lang).remindSent} × ${sent}`) })
+    const run = () => void runAutoReminders(store).then(({ sent }) => { if (sent) toast.success(`${ui(screenLang(store.settings)).remindSent} × ${sent}`) })
     run()
     const id = setInterval(run, 6 * 3600_000)
     return () => clearInterval(id)
@@ -257,7 +258,7 @@ function Home({ store }: { store: KhataStore }) {
 
   const setLanguage = (l: 'auto' | Lang) => {
     const auto = l === 'auto'
-    void store.updateSettings(auto ? { autoLang: true } : { lang: l, autoLang: false }).then(() => { if (voiceRef.current) stop() })
+    void store.updateSettings(auto ? { autoLang: true } : { lang: l, autoLang: false, uiLang: l }).then(() => { if (voiceRef.current) stop() })
   }
 
   const all = useMemo(() => state.order.map((id) => state.entries.get(id)!), [state])
@@ -279,7 +280,7 @@ function Home({ store }: { store: KhataStore }) {
   })
   useEffect(() => onBackButton(() => back.current()), [])
 
-  if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto })} />
+  if (!settings.lang) return <Onboarding onPick={(l, auto) => void store.updateSettings({ lang: l, autoLang: auto, uiLang: auto ? 'en' : l })} />
   if (!settings.profileDone) {
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto h-full max-w-md overflow-y-auto px-5 pb-8" style={{ paddingTop: SAFE_TOP }}>
@@ -320,7 +321,7 @@ function Home({ store }: { store: KhataStore }) {
   const suggestionCard = suggestion?.kind === 'promise_suggestion' && suggestion.day ? (
     <PromiseSuggestionCard
       notice={{ cid: suggestion.cid, day: suggestion.day, paise: suggestion.paise, text: suggestion.text }}
-      name={name(suggestion.cid)} lang={settings.lang} className="shadow-none ring-0 p-0 bg-transparent"
+      name={name(suggestion.cid)} lang={sl} className="shadow-none ring-0 p-0 bg-transparent"
       onAccept={() => acceptPromise(suggestion)} onDismiss={() => setSuggestion(null)}
     />
   ) : null
@@ -370,12 +371,12 @@ function Home({ store }: { store: KhataStore }) {
             initial="enter" animate="center" exit="leave" transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
             {tab === 'today' ? (
-              <TodayTab t={t} lang={settings.lang} state={state} entries={all} name={name} fresh={fresh} onEntry={(eid) => setEntry({ kind: 'edit', eid })} onImport={() => setSheet('import')} onExample={(x) => void sendTyped(x)} />
+              <TodayTab t={t} lang={sl} state={state} entries={all} name={name} fresh={fresh} onEntry={(eid) => setEntry({ kind: 'edit', eid })} onImport={() => setSheet('import')} onExample={(x) => void sendTyped(x)} />
             ) : tab === 'dues' ? (
-              <DuesTab t={t} lang={settings.lang} state={state} name={name} q={q} setQ={setQ} sort={sort} setSort={setSort}
+              <DuesTab t={t} lang={sl} state={state} name={name} q={q} setQ={setQ} sort={sort} setSort={setSort}
                 party={party} setParty={setParty} minAge={minAge} setMinAge={setMinAge} onCustomer={setCid} onRemind={quickRemind} />
             ) : (
-              <CashbookTab state={state} day={today()} lang={settings.lang} onAdd={() => setCash('new')}
+              <CashbookTab state={state} day={today()} lang={sl} onAdd={() => setCash('new')}
                 onRow={(r) => (r.derived ? setEntry({ kind: 'edit', eid: r.eid }) : setCash({ eid: r.eid }))} />
             )}
           </motion.div>
@@ -390,7 +391,7 @@ function Home({ store }: { store: KhataStore }) {
       {qr && (
         <QrSheet
           open onOpenChange={(o) => { if (!o) setQr(null) }}
-          cid={qr.cid} paise={qr.paise} name={name(qr.cid)} lang={settings.lang}
+          cid={qr.cid} paise={qr.paise} name={name(qr.cid)} lang={sl}
           shopUpi={settings.shopUpi} shopName={settings.shopName} paidNotice={lastPaid}
           onPaidCash={() => paidAtCounter(qr.cid, qr.paise, false)}
           onPaidUpi={() => paidAtCounter(qr.cid, qr.paise, true)}
@@ -398,7 +399,7 @@ function Home({ store }: { store: KhataStore }) {
       )}
       <CollectSheet
         open={sheet === 'collect'} onOpenChange={(o) => { if (!o) setSheet(null) }}
-        state={state} lang={settings.lang} statuses={collectSt}
+        state={state} lang={sl} statuses={collectSt}
         onOpenCustomer={(c) => { setSheet(null); setCid(c) }}
         onRemindAll={(cids) => void remindQueue(cids)}
       />

@@ -5,16 +5,6 @@ import { LANG_NAME, LANGS, type Lang } from '../../../shared/replies.js'
 import { Logo, Wordmark } from '../Logo'
 import { ONBOARD, both } from '../strings'
 
-/** Starting language for auto mode: the phone's own language when we speak it, else Hindi. */
-function phoneLang(): Lang {
-  try {
-    const l = (navigator.languages ?? [navigator.language]).map((x) => x.slice(0, 2)).find((x) => (LANGS as readonly string[]).includes(x) && x !== 'en')
-    return (l as Lang | undefined) ?? 'hi'
-  } catch {
-    return 'hi'
-  }
-}
-
 const list = { hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.25 } } }
 const item = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 30 } } } as const
 
@@ -81,7 +71,7 @@ export function Onboarding({ onPick }: { onPick: (l: Lang, auto: boolean) => voi
       <Wordmark size={48} />
       <h1 className="mt-8 text-2xl font-semibold tracking-tight">{both(ONBOARD.choose)}</h1>
       <div className="gold-rule mt-4" />
-      <button onClick={() => onPick(phoneLang(), true)}
+      <button onClick={() => onPick('en', true)}
         className="mt-5 flex items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-primary-foreground shadow-2 active:scale-[.98]">
         <Globe className="size-7 shrink-0" />
         <span>

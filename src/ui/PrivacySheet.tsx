@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { ConfirmDialog, inputCls } from './kit'
 import { EraseTyped } from './parts'
 import { dropBackup } from './share'
-import type { UiStrings } from './strings'
+import { type UiStrings, screenLang } from './strings'
 
 const NOTES_EN = [
   'Your khata is stored only on this phone, encrypted (AES-256). Each customer has their own key.',
@@ -65,7 +65,7 @@ export function PrivacySheet({ store, open, t, backup, onClose, onChanged }: {
         <SheetHeader><SheetTitle className="pr-10 text-2xl">{t.myData}</SheetTitle></SheetHeader>
         <div className="space-y-4 px-4 text-sm">
           <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
-            {(store.settings.lang === 'hi' || store.settings.lang === 'mr' ? NOTES_HI : NOTES_EN).map((n) => <li key={n}>{n}</li>)}
+            {(screenLang(store.settings) === 'hi' || screenLang(store.settings) === 'mr' ? NOTES_HI : NOTES_EN).map((n) => <li key={n}>{n}</li>)}
           </ul>
           {chain && (
             <div className={cn('flex items-center gap-2 rounded-2xl p-3 font-medium', chain.ok ? 'bg-primary/6 text-primary' : 'bg-destructive/10 text-destructive')}>

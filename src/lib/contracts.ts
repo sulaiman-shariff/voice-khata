@@ -11,6 +11,8 @@ export interface Settings {
   lang: Lang | null // null until the language tile is picked; with autoLang, the language last spoken
   /** auto language (default): listen for any supported language, reply in the one just spoken */
   autoLang?: boolean
+  /** the screen's language: set only when the shopkeeper picks one (English until then); speaking another language never changes it */
+  uiLang?: Lang
   shopName: string
   firstRunDone: boolean // AI disclosure already spoken
   handsFree: boolean // true: open mic with server end-of-turn; false: push-to-talk only

@@ -251,7 +251,7 @@ export async function createStore(p: Persistence): Promise<KhataStore> {
   const deleteAll = () =>
     enqueue(async () => {
       await wipe()
-      settings = { ...defaultSettings(), lang: settings.lang, shopName: settings.shopName }
+      settings = { ...defaultSettings(), lang: settings.lang, uiLang: settings.uiLang, shopName: settings.shopName }
       await p.saveSettings(settings)
       notify()
     })
