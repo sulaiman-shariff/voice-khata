@@ -624,3 +624,27 @@ export function hasOtherWords(text: string, names: (string | null)[]): boolean {
   const nameToks = new Set(names.filter((n): n is string => !!n).flatMap((n) => tokenize(n)))
   return tokenize(text).some((t) => !nameToks.has(t) && !nameToks.has(stripSuffix(t).base) && !isNumberish(t) && !isNumberWord(t) && !isCurrencyWord(t) && !CONJ.has(t))
 }
+
+
+// ----------------------------------------------------------------- the instant path's strictness
+/**
+ * The words of a sentence that the entry vocabulary does not explain: not an amount, a credit / paid word,
+ * a case marker, a date, a filler or a "write it" verb. The instant path only takes a sentence whose
+ * leftovers are all the customer's own name: anything else ("nahi", "nikal", "uska", a word in a
+ * language the lists do not know) means the sentence says more than an entry, so the agent reads it.
+ */
+export function entryLeftovers(text: string): string[] {
+  const ENTRY = [CREDIT, PAYMENT, GIVE, TOOK, GAYA, CASE, DATE_WORDS, CONJ, PAST, FUTURE, GAVE_3P, GAVE_1P, FILLER, UNITS,
+    DO_IMP, AUX_BEFORE_DO, CLOSERS, EN_PREP, SHOP_SUBJ]
+  const known = (t: string) => ENTRY.some((set) => set.has(t)) || isNumberish(t) || isNumberWord(t) || isCurrencyWord(t)
+  return tokenize(text).filter((t) => !known(t) && !known(stripSuffix(t).base))
+}
+
+/** "haan, 400" -> "400": the words after a leading yes (in any language the yes list knows), or null. */
+export function yesAndRest(text: string): string | null {
+  const toks = tokenize(text)
+  let i = 0
+  while (i < toks.length && (YES.has(toks[i]) || FILLER.has(toks[i]))) i++
+  if (!i || !toks.slice(0, i).some((t) => YES.has(t)) || i === toks.length) return null
+  return toks.slice(i).join(' ')
+}

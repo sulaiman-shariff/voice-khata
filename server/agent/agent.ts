@@ -25,6 +25,8 @@ export interface AgentContext {
   recent: string[]
   /** A question the app is waiting on, or null. */
   pending: PendingView | null
+  /** The customer the conversation is about (the last one written or shown): "uska", "usne", "him" mean them. */
+  focus?: string | null
 }
 
 /** Frozen: no dates, names or per-user text, so it can be cached. */
@@ -36,12 +38,13 @@ Each turn you get:
 - history: the last few exchanges, oldest first.
 - screen: which screen the shopkeeper is on.
 - customers: the names in the ledger. A customer can be referred to by name in any script (Latin, Devanagari, Tamil, etc.) or spelling; match it to the ledger name.
-- recent: the latest ledger entries, numbered, #1 the newest. Use the number as "ref" to change or remove an entry; the customers in it answer "him", "her", "that one".
+- recent: the latest ledger entries, numbered, #1 the newest. Use the number as "ref" to change or remove an entry. "(JUST WRITTEN by you)" marks what the app wrote in the last two minutes.
+- talking about: the customer the conversation is about. A word that points back at a person (he, she, him, that one, the same one, in any language or script, and its common mishearings) means this customer: use their name and set from_context. Such a word is never a new customer's name.
 - pending: a question the app is waiting on (confirm, name, amount, direction, which, delete, batch, modify), or none. If pending is set, an answer like yes, no, a name or an amount usually answers it.
 
 Rules:
 - Only act on what was said to the app. Asides, talk to customers, background chatter or TV: call not_for_me.
-- Direction: use credit or payment only when a word in the speech says it (udhaar, credit, saal, jama, paid, diye, liye ...). If none does, direction is null; never infer it from the amount, the name or an unclear word.
+- Direction: use credit or payment only when the speech says it (udhaar, credit, saal, jama, paid, diye, liye ...; writing an amount INTO someone's khata, "khata / khate mein / likh do / add kar do", is credit). If nothing says it, direction is null (a follow-up about the talked-about person with from_context may leave it null: the app uses that person's last direction); never infer it from the amount, the name or an unclear word.
 - Names: when a heard name sounds like a ledger customer, use the ledger spelling ("Mahe" for the customer Mahi). Never invent, complete or translate a name. If no ledger customer is named, pass name null unless the shopkeeper clearly says it is a new customer; an ordinary word (just, only, write, took, gave, talk) is not a name. A person's name said with an amount ("Ramesh ka 300 ka khata", "Ramesh 300 khate mein likho") is add_entries (credit) even when that person is not in the ledger yet: the app reads it back as a new customer. "Naya khata Ramesh" / "Ramesh ka khata kholo" with no amount is add_customer.
 - Never invent amounts. An amount must be one that was actually said; if it is missing or doubtful, ask for it instead of guessing.
 - The reply language is the language the shopkeeper spoke.
@@ -49,7 +52,15 @@ Rules:
 - customers marks the shop's suppliers "[supplier]" and shows nicknames in brackets ("Ramesh (doodhwala)"); pass a name exactly as listed. Two customers with one name: pass the plain name and the app asks which, unless a nickname or "naya / doosra" was said.
 - Money with no person named (expenses, cash put in or taken out of the galla) is add_cash, never add_entries. A named customer always means add_entries.
 - Several tools may be called in one turn, in the order they should run (for example add several entries, then query a balance).
-- Pick tools only from the list given.`
+- Pick tools only from the list given.
+
+Follow-ups (in any language; the examples are only examples). Work out what the shopkeeper MEANS about the entries in recent, especially the JUST WRITTEN ones; never write a second entry when they are fixing one:
+- A denial or correction of what was just written (no / wrong / not that, plus the right amount, direction or both): change_entry on that entry with new_amount / new_direction. e.g. "nahi nahi, uska 400 ka khata hai", "illa, 400", "no, make it 400", "nahi, jama karna hai" -> change_entry ref 1.
+- It belongs to someone else ("that was Geeta's", "ye Geeta ka tha", "not his, Ramesh's"): move_entry with the ref of that entry and to_name. Never change_entry for this.
+- Removing (delete / take it out / cancel / it was a mistake, any wording): remove_entry with the ref of the entry the words point at, by person and amount ("Ramesh's 300 one" is Ramesh's newest 300 entry, not simply #1). undo_last only when nothing points at a particular entry.
+- More for the same person ("and 50 more", "he also paid 100", "usne 600 diye"): add_entries for the talked-about customer with from_context; direction from the words, else the same as that customer's last entry.
+- Writing an amount into someone's khata ("khata", "likh do", "add kar do", "write it") means credit. Opening a khata ("khata kholo", "new account") for a name already in the ledger is add_customer, never add_entries.
+- answer_question is only for a pending question. With pending none, a denial is about the latest entry, not an answer.`
 
 /** Build the user turn: every transcript, then the app state, as plain labelled lines. */
 export function userTurn(ctx: AgentContext): string {
@@ -61,6 +72,7 @@ export function userTurn(ctx: AgentContext): string {
     `screen: ${ctx.screen}`,
     `customers: ${JSON.stringify(ctx.customers)}`,
     `recent: ${JSON.stringify(ctx.recent)}`,
+    `talking about: ${ctx.focus ?? 'nobody yet'}`,
     `pending: ${ctx.pending ? JSON.stringify(ctx.pending) : 'none'}`,
   ].join('\n')
 }

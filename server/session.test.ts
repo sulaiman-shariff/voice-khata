@@ -247,6 +247,8 @@ describe('a heard name not in the ledger is never written without a yes', () => 
     await h.turn(text)
     if (h.asks === 'direction') await h.turn('udhaar')
     if (h.asks === 'confirm') await h.turn('yes')
+    // "existing, or a new one?" is answered with the name: a bare yes chooses nothing
+    if (h.asks === 'soundalike') await h.turn(people[0].name)
     expect(h.accounts()).toEqual([])
     expect(h.written()).toEqual([[cid, 300, 'credit']])
   })

@@ -4,7 +4,7 @@
  * name resolution, and applying ops to the local snapshot. Nothing here touches audio, STT,
  * the model or the network, so a voice agent's tools can call it as well as the turn loop.
  */
-import { type Direction, type EntryIntent, type Intent, directionAnswer, mentionsMoney, mentionsSettle, nameAnswer, parseFast, refersBack } from '../../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, directionAnswer, entryLeftovers, mentionsMoney, mentionsSettle, nameAnswer, parseFast, refersBack, yesAndRest } from '../../shared/intent.js'
 import { uniqueLabels } from '../../shared/ledger.js'
 import { NAME_NEAR, NAME_SURE, matchName, phoneticKey } from '../../shared/names.js'
 import { parseAmounts } from '../../shared/numbers.js'
@@ -291,7 +291,8 @@ export class LedgerCore {
     if (intent.remove) {
       const ops: LedgerOp[] = [{ op: 'void', eid: e.eid, reason: 'spoken remove' }]
       const done = M.removed(oldName, e.paise / 100)
-      if (intent.ref === 1 && !opts.ask) return { parts: [done], ops }
+      // the newest entry, or one this session wrote in the last 2 minutes, goes at once; older ones are asked
+      if ((intent.ref === 1 || this.wroteRecently(e.eid, 120_000)) && !opts.ask) return { parts: [done], ops }
       this.pending = { kind: 'modify', ops, done, focus: e.cid, view: { kind: 'modify', remove: true, name: oldName, paise: e.paise, direction: e.direction } }
       return { parts: [M.removeAsk(oldName, e.paise / 100, e.direction)], ops: [] }
     }
@@ -319,7 +320,9 @@ export class LedgerCore {
     const done = R.corrected(name, paise / 100, dir)
     const focus = amend.cid ?? e.cid
     const opens = ops.some((o) => o.op === 'add_customer') && this.turnSrc !== 'tap'
-    if (intent.ref === 1 && !opens && !opts.ask) {
+    // an amount / direction fix to the newest entry, or to one this session wrote in the last 2 minutes, is
+    // applied at once (the reply says what it is now); moving to another person or an older entry is asked
+    if ((intent.ref === 1 || (this.wroteRecently(e.eid, 120_000) && !amend.cid)) && !opens && !opts.ask) {
       this.focusCid = focus
       return { parts: [done], ops }
     }
@@ -357,39 +360,6 @@ export class LedgerCore {
    * A fresh list of entries: drafts in order, the same line twice is one, "uska 100 aur" is the
    * customer just talked about, and one direction word for a whole list is asked once.
    */
-  /**
-   * "aur 50", "100 aur likho" right after an entry: one amount, a word pointing back, no other name.
-   * The person is the one just talked about; the direction is the one said, else that of their last entry.
-   */
-  followUp(text: string): Extract<Intent, { type: 'entries' }> | null {
-    if (!this.focusCid || this.pending || !refersBack(text)) return null
-    const c = this.snap.customers.find((x) => x.cid === this.focusCid)
-    if (!c || this.candidates(text).some((x) => x.c.cid !== c.cid)) return null
-    const amts = parseAmounts(text).filter((a) => a.value > 0)
-    if (!amts.length || amts.some((a) => a.value !== amts[0].value)) return null
-    const last = (this.snap.entries ?? []).find((e) => e.cid === c.cid && !e.promise)
-    const said = directionAnswer(text)
-    const direction = said ?? last?.direction ?? null
-    return { type: 'entries', entries: [{ name: c.name, amount: amts[0], direction, dayOffset: 0, promise: false, confidence: 'high', reasons: said ? [] : ['from-context'] }] }
-  }
-
-  /** A pay-by day heard in a short answer ("kal tak", "Somvaar tak", "3 din mein"), as YYYY-MM-DD. */
-  dueFromText(text: string): string | undefined {
-    const t = text.toLowerCase()
-    if (!/(tak|तक|till|until|by|mein|में|ವರೆಗೆ|வரை|వరకు)/.test(t)) return undefined
-    const ist = new Date(this.deps.now() + 5.5 * 3600_000)
-    const at = (n: number) => new Date(ist.getTime() + n * 86_400_000).toISOString().slice(0, 10)
-    const days = t.match(/(\d+)\s*(din|दिन|days?)/)
-    if (days) return at(Number(days[1]))
-    if (/parson|परसों/.test(t)) return at(2)
-    if (/\bkal\b|कल|tomorrow|ನಾಳೆ|நாளை|రేపు/.test(t)) return at(1)
-    const WD: [RegExp, number][] = [[/ravi|itvaar|इतवार|रविवार|sunday/, 0], [/som|सोम|monday/, 1], [/mangal|मंगल|tuesday/, 2], [/budh|बुध|wednesday/, 3],
-      [/guru|brihaspati|गुरु|thursday/, 4], [/shukra|शुक्र|friday/, 5], [/shani|शनि|saturday/, 6]]
-    const wd = WD.find(([re]) => re.test(t))
-    if (wd) return at(((wd[1] - ist.getUTCDay() + 7) % 7) || 7)
-    return undefined
-  }
-
   /**
    * A name that is not in the ledger is never a dead end. With an amount in the sentence the entry is
    * read back as a new customer's ("Ramesh ka 300 ka khata"); without one, opening their khata is
@@ -443,6 +413,16 @@ export class LedgerCore {
   }
 
   /** Customer lookup for queries: best match at NEAR or better. */
+  /** lookup, but only a sure match (exact, listed, nickname, or a name score of NAME_SURE) */
+  sureLookup(name: string): SnapCustomer | null {
+    const listed = this.fromListName(name)
+    if (listed) return listed
+    const tagged = this.tagMatch(name)
+    if (tagged && tagged.score >= NAME_SURE) return this.snap.customers.find((c) => c.cid === tagged.id) ?? null
+    const m = matchName(name, this.people())[0]
+    return m && m.score >= NAME_SURE ? this.snap.customers.find((c) => c.cid === m.id) ?? null : null
+  }
+
   lookup(name: string): SnapCustomer | null {
     const listed = this.fromListName(name)
     if (listed) return listed
@@ -725,8 +705,6 @@ export class LedgerCore {
 
   private needsConfirm(d: Draft): boolean {
     if (this.opensAccount(d)) return true
-    // "open a khata" for a name that already has one may mean a different person: never written blindly
-    if (d.cid && !d.newName && !d.confirmed && !d.readBack && OPEN_KHATA.test(d.transcript)) return true
     if (d.confirmed && d.nameSure) return false
     if (d.noisy || !d.nameSure) return true
     const hard = d.reasons.filter((r) => r !== 'name-inherited' && r !== 'llm' && r !== 'confusable-resolved' && r !== 'from-context' && r !== 'dir-all')
@@ -798,8 +776,17 @@ export class LedgerCore {
   isPlainEntry(intent: Extract<Intent, { type: 'entries' }>, text?: string): boolean {
     // a due date, a plan or a new twin in the sentence: the agent reads it (the fast parser would drop it)
     if (text && AGENT_ONLY.test(text)) return false
+    // every word must be explained: entry vocabulary, or the named customers' own names
+    if (text) {
+      const named = intent.entries.map((e) => (e.name ? this.lookup(e.name) : null))
+      const nameWords = new Set(named.flatMap((c) => (c ? [c.name, ...c.aliases, c.tag ?? ''] : [])).flatMap((n) => n.toLowerCase().split(/\s+/)).filter(Boolean))
+      const heardNames = new Set(intent.entries.flatMap((e) => (e.name ?? '').toLowerCase().split(/\s+/)).filter(Boolean))
+      const extra = entryLeftovers(text).filter((w) => !nameWords.has(w) && !heardNames.has(w))
+      if (extra.length) return false
+    }
     return intent.entries.every((e) => {
-      const c = e.name ? this.lookup(e.name) : null
+      // only a SURE name match: a near one ("usme" ~ Umesh, a misheard pronoun) is the agent's to read in context
+      const c = e.name ? this.sureLookup(e.name) : null
       // a supplier's line has its own read-back and wording: the agent handles it
       return !!c && c.kind !== 'supplier' && (!!e.direction || e.promise) && e.confidence === 'high'
     })
@@ -813,7 +800,7 @@ export class LedgerCore {
     const p = this.pending
     if (!p) return true
     // a fresh complete plain entry replaces the question, with no model in the way
-    if (intent.type === 'entries' && this.isPlainEntry(intent)) return true
+    if (intent.type === 'entries' && this.isPlainEntry(intent, text)) return true
     if (this.turnSrc === 'tap' || this.turnSrc === 'force') return true
     if (intent.type === 'yes' || intent.type === 'no' || intent.type === 'undo') return true
     const words = text.trim().split(/\s+/).filter(Boolean).length
@@ -893,11 +880,11 @@ export class LedgerCore {
   }
 
   /** The sound-alike question's answer: the known customer, a new account, or null when unclear. */
-  soundAlikePick(p: Extract<Pending, { kind: 'soundalike' }>, text: string, intent: Intent): 'known' | 'new' | null {
+  soundAlikePick(p: Extract<Pending, { kind: 'soundalike' }>, text: string, _intent: Intent): 'known' | 'new' | null {
     const t = text.trim()
     if (t === 'new' || t === p.newName) return 'new'
     if (t === p.known.cid || t === this.label(p.known)) return 'known'
-    if (intent.type === 'yes') return 'known'
+    // a bare "haan" to "Ramesh or a new Rakesh?" chooses nothing: the question is asked again
     if (NEW_WORD.test(t)) return 'new'
     const m = matchName(nameAnswer(t) ?? t, [{ id: 'known', names: [p.known.name, ...p.known.aliases] }, { id: 'new', names: [p.newName] }])
     if (m.length && m[0].score >= NAME_SURE && !(m[1] && m[1].score >= m[0].score - 0.01)) return m[0].id as 'known' | 'new'
@@ -965,16 +952,14 @@ export class LedgerCore {
       if (intent.type === 'yes') return { parts: [R.eraseType(p.requireType)], ops: [] }
     }
     // "haan, 400" / "haan, kal tak" / "haan, 300 udhaar": the yes, plus what was added to it
-    const rest = this.turnSrc === 'tap' ? null : yesRest(text)
+    const rest = this.turnSrc === 'tap' ? null : yesAndRest(text)
     if (rest && p.kind === 'confirm') {
       const d = p.draft
       const amts = parseAmounts(rest).filter((a) => a.value > 0)
       if (amts.length === 1) d.paise = Math.round(amts[0].value * 100)
       const dir = directionAnswer(rest)
       if (dir) d.direction = dir
-      const due = this.dueFromText(rest)
-      if (due && d.direction === 'credit' && !d.promise) d.due = due
-      if (amts.length === 1 || dir || due) {
+      if (amts.length === 1 || dir) {
         this.pending = null
         d.readBack = true
         this.save(d, acc)
@@ -995,8 +980,6 @@ export class LedgerCore {
         d.nameSure = true
         d.readBack = true
         d.confirmed = true
-        const due = this.dueFromText(rest)
-        if (due && dir === 'credit') d.due = due
         this.save(d, acc)
         return this.processDrafts([], acc)
       }
@@ -1175,6 +1158,8 @@ export class LedgerCore {
         return this.processDrafts(p.queue, acc)
       }
       case 'confusable': {
+        const said = directionAnswer(text) ?? (intent.type === 'correct' ? intent.direction ?? null : null)
+        if (said) d.direction = said
         const heard = parseAmounts(text).map((s) => s.value)
         let pick: number | null = null
         if (heard.includes(d.alt!)) pick = d.alt
@@ -1526,16 +1511,6 @@ export class LedgerCore {
  * "Suresh's") is dropped, so the account is "ಸುರೇಶ್". Names that end in ದು by themselves
  * ("ಬಿಂದು") are kept: there the ದು follows a vowel sign or anusvara, not a virama.
  */
-/** "khata kholo", "naya khata", "open an account": opening words, not just "write it in the khata" */
-const OPEN_KHATA = /(khata|khaata|khaate|खाता|account)\s*(kholo|kholna|khol\s*do|khol\s*de|खोलो|खोल\s*दो|खोलना|open)|naya\s+khata|नया\s+खाता|open\s+(an?\s+|new\s+)?(account|khata)|new\s+account/i
-
-/** What follows a leading yes ("haan, 400" -> "400"), or null when the turn is not a yes with more. */
-export function yesRest(text: string): string | null {
-  const m = text.trim().match(/^(haan|haa|han|ha|haanji|haan ji|ji haan|ji|yes|yeah|ok|okay|theek hai|thik hai|sahi hai|sahi|हाँ|हां|जी हाँ|जी|ठीक है|सही है|ಹೌದು|ஆமா|ஆம்|అవును)(?=[\s,।.!]|$)[\s,।.!-]*(.*)$/i)
-  const rest = m?.[2]?.trim()
-  return rest ? rest : null
-}
-
 export function newCustomerName(heard: string): string {
   return heard
     .split(' ')

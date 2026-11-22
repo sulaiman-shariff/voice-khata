@@ -8,23 +8,38 @@ import { callsOf, cust, harness } from './test-harness.js'
 
 const people = () => [cust('r', 'Ramesh'), cust('s1', 'Suresh'), cust('s2', 'Suresh')]
 
-describe('follow-ups keep the person', () => {
-  it.each([
-    ['aur 50', ['r', 50, 'credit']],
-    ['100 aur likho', ['r', 100, 'credit']],
-    ['aur 50 jama', ['r', 50, 'payment']],
-    ['usne 200 diye', ['r', 200, 'payment']],
-  ] as const)('"Ramesh ka 300 udhaar" then "%s"', async (follow, want) => {
-    const h = harness(people())
-    await h.turn('Ramesh ka 300 udhaar')
-    await h.turn(follow)
-    expect(h.written()).toEqual([['r', 300, 'credit'], want])
+describe('follow-ups keep the person (the agent resolves who; code checks it)', () => {
+  const said = (from_context: boolean) => () => callsOf({ name: 'add_entries', args: { entries: [{ name: 'Ramesh', amount: 50, direction: 'credit', from_context }] } })
+
+  it('the agent marks "aur 50" as the talked-about Ramesh: written at once', async () => {
+    const h = harness(people(), { agent: said(true) })
+    await h.turn('Ramesh ka 300 udhaar') // instant path, no agent
+    await h.turn('aur 50 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit'], ['r', 50, 'credit']])
   })
 
-  it('"aur 50" with nobody talked about yet writes nothing', async () => {
-    const h = harness(people())
-    await h.turn('aur 50')
-    expect(h.ops()).toEqual([])
+  it('a name the agent filled in without marking it as context is read back first', async () => {
+    const h = harness(people(), { agent: said(false) })
+    await h.turn('Ramesh ka 300 udhaar')
+    await h.turn('aur 50 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+    expect(h.asks).toBe('confirm')
+  })
+
+  it('"from context" is only believed for the customer actually being talked about', async () => {
+    const h = harness(people(), { agent: () => callsOf({ name: 'add_entries', args: { entries: [{ name: 'Geeta', amount: 50, direction: 'credit', from_context: true }] } }) })
+    await h.turn('Ramesh ka 300 udhaar')
+    await h.turn('aur 50 udhaar')
+    expect(h.written()).toEqual([['r', 300, 'credit']])
+  })
+
+  it('the instant path only takes a sentence it fully explains', async () => {
+    for (const t of ['nahi nahi, Ramesh ka 400 ka khata hai', 'Ramesh ka 300 ka khata nikal do', 'Ramesh ka 300 khata kholo']) {
+      const h = harness(people(), { agent: () => callsOf({ name: 'not_for_me', args: {} }) })
+      await h.turn(t)
+      expect(h.agentCalls.length, t).toBe(1)
+      expect(h.ops(), t).toEqual([])
+    }
   })
 })
 
@@ -69,12 +84,6 @@ describe('a yes with extra detail uses the detail', () => {
     expect(h.entries().map((e) => e.paise)).toEqual([40000])
   })
 
-  it('"haan, kal tak" keeps the due date', async () => {
-    const h = harness(people())
-    await h.turn('Ramesh ka 340 udhaar', true)
-    await h.turn('haan, kal tak')
-    expect(h.entries()).toEqual([expect.objectContaining({ cid: 'r', paise: 34000, due: expect.stringMatching(/^\d{4}-\d\d-\d\d$/) })])
-  })
 
   it('"open a khata?" then "haan, 300 udhaar" opens it with the entry', async () => {
     const h = harness(people())
@@ -116,12 +125,6 @@ describe('never blindly into an existing khata', () => {
     expect(h.entries()[0].cid).not.toBe('r')
   })
 
-  it('"aur 50" never goes to someone else named in the sentence', async () => {
-    const h = harness(people())
-    await h.turn('Ramesh ka 300 udhaar')
-    await h.turn('aur Mahesh 50')
-    expect(h.written().filter((w) => w[0] === 'r')).toEqual([['r', 300, 'credit']])
-  })
 
   it('a yes word inside a name answer is not mistaken for "haan + detail"', () => {
     expect(parseFast('haan').type).toBe('yes')

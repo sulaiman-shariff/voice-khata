@@ -80,6 +80,7 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
           items: { type: 'array', items: STR, description: 'the goods listed for this line, as said ("do kilo chawal", "ek Maggi")' },
           party: { type: 'string', enum: ['supplier'], description: 'the shop\'s own supplier (wholesaler): "Gupta ji ko 5000 dene hain" (credit = goods the shop took, owes them), "Gupta ji ko 2000 diye" (payment = the shop paid them)' },
           new_customer: { type: 'boolean', description: 'true only when the shopkeeper says this is a new / second person with a name already in the ledger ("naya Ramesh", "doosra Ramesh")' },
+          from_context: { type: 'boolean', description: 'true when the person was not named but meant by a word pointing back (he / she / that one, in any language: usne, uska, avanu, avaru, அவர், అతను ...): name is then the "talking about" customer' },
         }, ['name', 'amount', 'direction']),
       },
       sure: { type: 'boolean', description: 'false when any part is a guess' },
@@ -372,6 +373,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const known = meta.fromAudio ? [...contextAmounts, ...(raw.entries ?? []).map((e) => e?.amount).filter((v): v is number => typeof v === 'number')] : contextAmounts
       const intent = validate(text, raw, known, recent.length)
       if (intent.type !== 'entries') return notCaught()
+
       if (meta.fromAudio) for (const e of intent.entries) { e.reasons = [...e.reasons, 'from-audio']; e.confidence = 'low' }
       // what the model added to each line (due date, items, supplier, a new twin), only when the words say it
       const rawEntries = (Array.isArray(a.entries) ? a.entries : []) as Record<string, unknown>[]
@@ -389,6 +391,18 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
         const items = Array.isArray(x.items) ? x.items.map(str).filter((v): v is string => !!v && v.length <= 40).slice(0, 12) : []
         if (items.length) extra.note = items.join(', ')
         if (x.party === 'supplier' && e.name && !core.lookup(e.name)) extra.supplier = true
+        // the model resolved the person from the conversation ("usne", "avanu", "he" ...): accepted without a
+        // name read-back only when it is exactly the customer being talked about
+        const focusName = core.focusCid ? core.snap.customers.find((c) => c.cid === core.focusCid)?.name : undefined
+        if (x.from_context === true && focusName && e.name && e.name.toLowerCase() === focusName.toLowerCase()) {
+          // the person comes from the conversation, and so does the direction when none was said: that
+          // customer's last entry ("aur 50" after "Ramesh ka 300 udhaar" is 50 more udhaar)
+          const last = entries.find((en) => en.cid === core.focusCid && !en.promise)
+          if (!e.direction && !e.promise && last) e.direction = last.direction
+          const fromContext = (r: string) => r === 'name-changed' || ((r === 'no-direction-cue' || r === 'direction-guessed') && !!last && e.direction === last.direction)
+          e.reasons = e.reasons.filter((r) => !fromContext(r))
+          e.confidence = e.reasons.filter((r) => r !== 'from-context').length > 1 ? 'low' : 'high'
+        }
         if (x.new_customer === true && newSaid && e.name && core.snap.customers.some((c) => c.name.toLowerCase() === e.name!.toLowerCase())) extra.forceNew = true
         Object.assign(e, extra)
       }
@@ -428,6 +442,12 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     case 'remove_entry': {
       const ref = findRef()
       if (isReply(ref)) return ref
+      // an entry this session wrote in the last 2 minutes goes at once (the spoken-undo rule); older ones are asked
+      const target = entries[ref - 1]
+      if (target && core.wroteRecently(target.eid, 120_000)) {
+        core.focusCid = target.cid
+        return { parts: [R.undone()], ops: [{ op: 'void', eid: target.eid, reason: 'spoken remove' }] }
+      }
       return core.modifyEntry({ type: 'modify', ref, remove: true }, { ask: true })
     }
     case 'undo_last': {

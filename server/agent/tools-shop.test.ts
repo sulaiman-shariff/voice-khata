@@ -253,7 +253,11 @@ describe('sound-alikes', () => {
     expect(r.ops).toEqual([expect.objectContaining({ op: 'add_customer', name: 'Rakesh' }), expect.objectContaining({ op: 'entry', paise: 20000 })])
     s = mk()
     s.run('add_entries', { entries: [{ name: 'Rakesh', amount: 200, direction: 'credit' }] }, 'Rakesh ko 200 udhaar')
+    // a bare "haan" chooses nothing (it once put a payment in the wrong khata): asked again; the name picks
     r = s.answer('haan')!
+    expect(r.ops).toEqual([])
+    expect(s.core.pending?.kind).toBe('soundalike')
+    r = s.answer('Ramesh')!
     expect(r.ops).toEqual([expect.objectContaining({ op: 'entry', cid: 'a', paise: 20000 })])
     s = mk()
     s.run('add_entries', { entries: [{ name: 'Rakesh', amount: 200, direction: 'credit' }] }, 'Rakesh ko 200 udhaar')
