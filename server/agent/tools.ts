@@ -31,9 +31,9 @@ import { NAME_SURE, matchName } from '../../shared/names.js'
 import { formatINR, parseAmounts } from '../../shared/numbers.js'
 import type { SnapCustomer, SnapEntry } from '../../shared/protocol.js'
 import { LANGS, LANG_NAME, type Lang, eraseWord, guardReply, say, sayMore, sayPay } from '../../shared/replies.js'
-import { type ChooseOption, type EntryExtras, LedgerCore, type Reply, type TurnMeta, WRITTEN_KEEP_MS, cleanTag } from '../ledger/core.js'
+import { type ChooseOption, type EntryExtras, LedgerCore, type Reply, type TurnMeta, cleanTag, phoneFrom } from '../ledger/core.js'
 import type { GeminiTool } from '../parse/gemini.js'
-import { type LlmReading, validate } from '../parse/llm.js'
+import { type LlmReading, validate, saidName } from '../parse/llm.js'
 
 export const TOOL_NAMES = [
   'add_entries', 'change_entry', 'remove_entry', 'undo_last', 'move_entry', 'settle',
@@ -79,7 +79,10 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
           due_date: { ...INT, description: 'credit to be paid by this date of the month ("15 tarikh tak"); only if said' },
           items: { type: 'array', items: STR, description: 'the goods listed for this line, as said ("do kilo chawal", "ek Maggi")' },
           party: { type: 'string', enum: ['supplier'], description: 'the shop\'s own supplier (wholesaler): "Gupta ji ko 5000 dene hain" (credit = goods the shop took, owes them), "Gupta ji ko 2000 diye" (payment = the shop paid them)' },
-          new_customer: { type: 'boolean', description: 'true only when the shopkeeper says this is a new / second person with a name already in the ledger ("naya Ramesh", "doosra Ramesh")' },
+          new_customer: { type: 'boolean', description: 'true when the shopkeeper means a new / another / second person with a name already in the ledger, in any language ("naya Ramesh", "doosra Ramesh", "another Ramesh", "ಇನ್ನೊಬ್ಬ ರಮೇಶ್"). It is read back before anything is written.' },
+          full_name: { type: 'string', description: 'only for a new person: their full name if said ("Ramesh Kumar", "R. Ramesh")' },
+          detail: { type: 'string', description: 'only for a new person: what tells them apart if said (area, street, shop, work, father: "Gandhi Nagar", "doodhwala"), a few words' },
+          phone: { type: 'string', description: 'only for a new person: their mobile number if said, digits' },
           from_context: { type: 'boolean', description: 'true when the person was not named but meant by a word pointing back (he / she / that one, in any language: usne, uska, avanu, avaru, அவர், అతను ...): name is then the "talking about" customer' },
         }, ['name', 'amount', 'direction']),
       },
@@ -98,7 +101,7 @@ export const TOOL_SCHEMAS: { name: ToolName; description: string; parameters: JS
   { name: 'search', description: 'Search customers and entries by a name or an amount.', parameters: obj({ text: STR }, ['text']) },
   { name: 'top_debtors', description: 'The customers with the largest balances.', parameters: obj({ count: { ...INT, description: 'default 3, at most 5' } }) },
   { name: 'close_view', description: 'Close the open panel or screen.', parameters: obj({}) },
-  { name: 'add_customer', description: 'Open a new customer account with no entry.', parameters: obj({ name: STR }, ['name']) },
+  { name: 'add_customer', description: 'Open a new customer account with no entry. new_customer: true for another person with a name already in the ledger. full_name / detail / phone only if said.', parameters: obj({ name: STR, new_customer: { type: 'boolean' }, full_name: STR, detail: STR, phone: STR }, ['name']) },
   { name: 'rename_customer', description: 'Change a customer\'s name.', parameters: obj({ name: STR, new_name: STR }, ['name', 'new_name']) },
   { name: 'merge_customers', description: 'Two accounts are the same person: join `name` into `into` (asked first).', parameters: obj({ name: STR, into: STR }, ['name', 'into']) },
   { name: 'set_phone', description: 'Save a customer\'s 10-digit mobile number.', parameters: obj({ name: STR, phone: STR }, ['name', 'phone']) },
@@ -170,6 +173,20 @@ const istDay = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_
 /** a due date must have been said: "tak", "by", "till", a date word */
 const DUE_HEARD = /(^|[\s,])(tak|takk|tarikh|taarikh|till|until|by|before|within|mein|me)([\s,.?!]|$)|तक|तारीख|में|ವರೆಗೆ|ಒಳಗೆ|ತಾರೀಖು|வரை|க்குள்|தேதி|వరకు|లోపు|తేదీ|വരെ|ക്കകം|पर्यंत|তারিখ|পর্যন্ত|মধ্যে|સુધી|ਤੱਕ/i
 /** "naya / doosra Ramesh": a second person with a name the ledger has */
+/** A new person's full name / detail / mobile from the model's args, each only if it was really said. */
+function profileFrom(x: Record<string, unknown>, heard: string[]): Pick<EntryExtras, 'fullName' | 'tag' | 'phone'> {
+  const out: Pick<EntryExtras, 'fullName' | 'tag' | 'phone'> = {}
+  const all = heard.join(' ')
+  const full = str(x.full_name)
+  if (full && full.split(/\s+/).length >= 2 && full.length <= 40 && full.split(/\s+/).every((w) => saidName(w, all))) out.fullName = titleCase(full)
+  const detail = str(x.detail)
+  if (detail && detail.length <= 30 && detail.split(/\s+/).some((w) => saidName(w, all))) out.tag = cleanTag(detail) || undefined
+  const phone = x.phone !== undefined ? phoneFrom(String(x.phone)) : null
+  // every digit heard, in order (typed digits, or spoken digit words)
+  if (phone && heard.some((t) => t.replace(/\D/g, '').includes(phone) || phoneFrom(t) === phone)) out.phone = phone
+  return out
+}
+
 const NEW_HEARD = /(^|\s)(naya|nayi|naye|doosra|dusra|doosri|dusri|new|another|second)(\s|$)|नया|नई|दूसरा|दूसरी|ಹೊಸ|ಇನ್ನೊಬ್ಬ|புதிய|இன்னொரு|కొత్త|ఇంకో|പുതിയ|മറ്റൊരു|नवीन|দূসরা|নতুন|আরেক|નવા|બીજા|ਨਵਾਂ|ਦੂਜਾ/i
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 /** The pay-by day the model read (offset, weekday or date of the month), as YYYY-MM-DD in India. */
@@ -300,7 +317,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
   /** Ask which customer (all of them as options); the answer finishes this same tool call. */
   const askWhich = (slot: string, options: SnapCustomer[], extra: ChooseOption[] = []): Reply => {
     const opts: ChooseOption[] = [
-      ...options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, id: c.cid, ...(c.tag ? { tag: c.tag } : {}), args: { ...a, [`${slot}__cid`]: c.cid } })),
+      ...options.map((c) => ({ label: core.label(c), name: c.name, rupees: c.balancePaise / 100, id: c.cid, ...(c.tag ? { tag: c.tag } : {}), ...(c.phone ? { phone: c.phone } : {}), args: { ...a, [`${slot}__cid`]: c.cid } })),
       ...extra,
     ]
     const labels = opts.map((o) => o.label)
@@ -379,7 +396,6 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const rawEntries = (Array.isArray(a.entries) ? a.entries : []) as Record<string, unknown>[]
       const used = new Set<number>()
       const dueSaid = heard.some((t) => DUE_HEARD.test(t))
-      const newSaid = heard.some((t) => NEW_HEARD.test(t))
       for (const e of intent.entries) {
         const i = rawEntries.findIndex((x, k) => !used.has(k) && x && x.amount === e.amount.value && (str(x.name) ?? null) === e.name)
         if (i < 0) continue
@@ -403,26 +419,9 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
           e.reasons = e.reasons.filter((r) => !fromContext(r))
           e.confidence = e.reasons.filter((r) => r !== 'from-context').length > 1 ? 'low' : 'high'
         }
-        if (x.new_customer === true && newSaid && e.name && core.snap.customers.some((c) => c.name.toLowerCase() === e.name!.toLowerCase())) extra.forceNew = true
+        if (x.new_customer === true && e.name && core.snap.customers.some((c) => c.name.toLowerCase() === e.name!.toLowerCase())) extra.forceNew = true
+        Object.assign(extra, profileFrom(x, heard))
         Object.assign(e, extra)
-      }
-      // the same customer + amount + direction as an entry written in the last 60 s: the model
-      // repeating itself (or a re-read of one sentence) is not a second entry. Saying it plainly
-      // again takes the instant path, which still writes.
-      const dup = (e: (typeof intent.entries)[number]): SnapCustomer | null => {
-        const c = e.name ? core.lookup(e.name) : null
-        if (!c || e.promise || !e.direction) return null
-        const same = entries.some((x) => x.cid === c.cid && !x.promise && x.direction === e.direction &&
-          x.paise === Math.round(e.amount.value * 100) && core.wroteRecently(x.eid, WRITTEN_KEEP_MS))
-        return same ? c : null
-      }
-      const dups = intent.entries.filter((e) => dup(e))
-      if (dups.length) {
-        const said = dups.map((e) => R.alreadyWritten(dup(e)!.name, e.amount.value))
-        const rest = intent.entries.filter((e) => !dup(e))
-        if (!rest.length) return speak(...said)
-        const r = core.addEntries({ ...intent, entries: rest }, text, tm)
-        return { ...r, parts: [...said, ...r.parts] }
       }
       return core.addEntries(intent, text, tm)
     }
@@ -493,7 +492,7 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const said = parseFast(text)
       if (said.type === 'entries' && said.entries.length === 1 && said.entries[0].amount) {
         const e = said.entries[0]
-        const wantsNew = a._new === true || heard.some((t) => NEW_HEARD.test(t))
+        const wantsNew = a._new === true || a.new_customer === true || heard.some((t) => NEW_HEARD.test(t))
         if (same && !wantsNew) {
           // "open a khata" for a name that already has one: the existing customer is the likely one, but
           // never written blindly (it may be a different person): read back first, direction as said
@@ -504,17 +503,18 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
           e.name = newName
           // a new khata opened with an amount: credit unless said otherwise (it is read back as a new customer anyway)
           if (!e.direction && !e.promise) e.direction = 'credit'
-          if (same) Object.assign(e, { forceNew: true })
+          Object.assign(e, profileFrom(a, heard), same ? { forceNew: true } : {})
         }
         return core.addEntries(said, text, tm)
       }
-      // "naya / doosra Ramesh": a second Ramesh, read back, then asked for a nickname
-      if (same && heard.some((t) => NEW_HEARD.test(t))) {
+      // "naya / doosra Ramesh": a second Ramesh, read back; its full name / detail / number are asked after the yes
+      if (same && (a.new_customer === true || heard.some((t) => NEW_HEARD.test(t)))) {
         const cid = core.freshId()
+        const p = profileFrom(a, heard)
+        const twinName = p.fullName ?? newName
         core.pending = {
-          kind: 'modify', ops: [{ op: 'add_customer', cid, name: newName }], done: R.customerAdded(newName), focus: cid,
+          kind: 'modify', ops: [{ op: 'add_customer', cid, name: twinName }, ...(p.tag ? [{ op: 'set_tag' as const, cid, tag: p.tag }] : []), ...(p.phone ? [{ op: 'set_phone' as const, cid, phone: p.phone }] : [])], done: R.customerAdded(twinName), focus: cid,
           view: { kind: 'modify', name: newName, newCustomer: true },
-          then: { pending: { kind: 'nickname', cid, name: newName }, ask: S.nicknameAsk(newName) },
         }
         return speak(M.addAsk(newName))
       }

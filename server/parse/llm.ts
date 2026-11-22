@@ -190,7 +190,7 @@ export async function warmUp(): Promise<void> {
  * turn becomes low-confidence, so the agent asks instead of saving.
  */
 /** Is this name (or one of its words) in the sentence, in any script? */
-function saidName(name: string, transcript: string): boolean {
+export function saidName(name: string, transcript: string): boolean {
   const words = transcript.split(/[\s,.;:!?।]+/).filter(Boolean)
   const tries = [...words, ...words.slice(1).map((w, i) => `${words[i]} ${w}`)].map(phoneticKey).filter(Boolean)
   // a name counts as said only when its sound matches a said word exactly: near-misses (Sunitu for

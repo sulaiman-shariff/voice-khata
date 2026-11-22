@@ -7,7 +7,7 @@
 import { type Direction, type EntryIntent, type Intent, directionAnswer, entryLeftovers, mentionsMoney, mentionsSettle, nameAnswer, parseFast, refersBack, yesAndRest } from '../../shared/intent.js'
 import { uniqueLabels } from '../../shared/ledger.js'
 import { NAME_NEAR, NAME_SURE, matchName, phoneticKey } from '../../shared/names.js'
-import { fold, parseAmounts } from '../../shared/numbers.js'
+import { fold, parseAmounts, tokenize } from '../../shared/numbers.js'
 import type { LedgerOp, PendingView, ReadyCard, ServerMsg, SettingMsg, SnapCustomer, SnapEntry, Snapshot } from '../../shared/protocol.js'
 import { type Lang, LOCALE, eraseWord, say, sayMore } from '../../shared/replies.js'
 import { sayShop } from '../../shared/replies-shop.js'
@@ -18,7 +18,11 @@ const ANOMALY_FACTOR = 5
 const BIG_PAISE = 10_000_00
 export const PENDING_TTL_MS = 45_000
 /** how long an entry written in this session is remembered for an instant undo */
-export const WRITTEN_KEEP_MS = 60_000
+export const WRITTEN_KEEP_MS = 120_000
+/** a spoken undo / undo_last is instant only for an entry this session wrote this recently */
+export const UNDO_INSTANT_MS = 60_000
+/** the same sentence delivered again this soon (speech-to-text or the model repeating) is not a second entry */
+const REDELIVERY_MS = 5_000
 const AMOUNT_FLAGS = new Set(['confusable', 'elided_scale', 'approx_range', 'bare_fraction', 'digit_sequence'])
 /** a "which one?" lists at most this many customers */
 export const MAX_WHICH = 4
@@ -76,10 +80,14 @@ export interface Draft {
   forceNew?: boolean
   /** the heard name only sounds like the customer it matched: offered as a new account too */
   soundAlike?: string
+  /** said with the line, used only if it opens an account: the full name, a detail (area, shop ...), the mobile */
+  fullName?: string
+  tag?: string
+  phone?: string
 }
 
 /** What the agent may add to a line it read (not in the fast parser's EntryIntent). */
-export type EntryExtras = { due?: string; note?: string; supplier?: boolean; forceNew?: boolean }
+export type EntryExtras = { due?: string; note?: string; supplier?: boolean; forceNew?: boolean; fullName?: string; tag?: string; phone?: string }
 
 export type Pending =
   | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[]; /** a spoken "no" was heard: waiting for one fix */ fixing?: boolean }
@@ -102,7 +110,8 @@ export type Pending =
    */
   | { kind: 'choose'; ask: string; tool: string; transcript: string; options: ChooseOption[]; reasked?: number }
   /** a second customer with this name was just opened: how to tell them apart (a skip is fine) */
-  | { kind: 'nickname'; cid: string; name: string }
+  /** a new account's details, one question at a time: full name (only when the name is taken), then a detail (only when the full name is taken too), then the mobile number */
+  | { kind: 'nickname'; cid: string; name: string; step: 'fullname' | 'detail' | 'phone'; tried?: boolean }
   /** the heard name only sounds like `known`: that customer, or a new account `newName`, same entry */
   | { kind: 'soundalike'; draft: Draft; queue: Draft[]; known: SnapCustomer; newName: string }
 
@@ -117,6 +126,8 @@ export interface ChooseOption {
   id?: string
   /** the customer's nickname: "doodhwala wale" picks this option */
   tag?: string
+  /** the customer's mobile: its last digits ("3210 wala") pick this option */
+  phone?: string
   /** the tool's args with this option filled in */
   args: Record<string, unknown>
   /** run this tool instead of the question's own ("+ new Rakesh" opens a customer) */
@@ -204,6 +215,8 @@ export class LedgerCore {
   choose: (tool: string, args: Record<string, unknown>, transcript: string, meta: TurnMeta) => Reply | null = () => null
   /** when each entry was written in this session (eid -> ms): only these can be undone without a question */
   writtenAt = new Map<string, number>()
+  /** the sentence (folded) that wrote each of those entries */
+  writtenText = new Map<string, string>()
   /** was this entry written in this session, within the last `ms`? */
   wroteRecently(eid: string, ms: number): boolean {
     const t = this.writtenAt.get(eid)
@@ -353,6 +366,9 @@ export class LedgerCore {
       ...(e.note ? { note: e.note } : {}),
       ...(e.supplier ? { supplier: true } : {}),
       ...(e.forceNew ? { forceNew: true } : {}),
+      ...(e.fullName ? { fullName: e.fullName } : {}),
+      ...(e.tag ? { tag: e.tag } : {}),
+      ...(e.phone ? { phone: e.phone } : {}),
     }
   }
 
@@ -487,7 +503,7 @@ export class LedgerCore {
     if (d.cid || d.newName) return 'ok'
     // "naya / doosra Ramesh": a second account with a name we already have
     if (d.forceNew) {
-      d.newName = titleCase(newCustomerName(d.heardName!))
+      d.newName = titleCase(d.fullName ?? newCustomerName(d.heardName!))
       d.nameSure = true
       return 'ok'
     }
@@ -592,8 +608,6 @@ export class LedgerCore {
   private labelMemo: { list: SnapCustomer[]; n: number; v: number; map: Map<string, string> } | null = null
   /** bumped when a name, nickname or phone changes in the local snapshot */
   private labelsV = 0
-  /** a second account with an existing name was opened in this reply: its nickname is asked once the reply is done */
-  private twinBorn: { cid: string; name: string } | null = null
 
   /** the name to say for a customer: the label when another customer has the same name */
   spokenName(c: SnapCustomer): string {
@@ -611,7 +625,7 @@ export class LedgerCore {
   }
   /** a which question's customers as choose options (tap by cid, nickname, ordinal, "300 wala", name) */
   whichOptions(cs: SnapCustomer[]): ChooseOption[] {
-    return cs.map((c) => ({ label: this.label(c), name: c.name, rupees: c.balancePaise / 100, id: c.cid, ...(c.tag ? { tag: c.tag } : {}), args: {} }))
+    return cs.map((c) => ({ label: this.label(c), name: c.name, rupees: c.balancePaise / 100, id: c.cid, ...(c.tag ? { tag: c.tag } : {}), ...(c.phone ? { phone: c.phone } : {}), args: {} }))
   }
 
   /** Walk drafts in order: save the sure ones, stop at the first that needs a question. */
@@ -684,13 +698,6 @@ export class LedgerCore {
       this.save(d, acc)
     }
     this.pending = null
-    // a second account with a name we already had: ask once how to tell them apart
-    if (this.twinBorn) {
-      const t = this.twinBorn
-      this.twinBorn = null
-      this.pending = { kind: 'nickname', cid: t.cid, name: t.name }
-      acc.parts.push(sayShop(this.lang).nicknameAsk(t.name))
-    }
     return acc
   }
 
@@ -719,15 +726,31 @@ export class LedgerCore {
     const R = say(this.lang)
     if (d.newName && !d.cid) {
       d.cid = this.newId()
-      const twin = this.snap.customers.some((c) => c.name.trim().toLowerCase() === d.newName!.trim().toLowerCase())
+      // a full name said with the line is the account's name ("Mahesh Gupta" rather than "Mahesh")
+      if (d.fullName && !d.supplier) d.newName = titleCase(d.fullName)
       const add: LedgerOp = { op: 'add_customer', cid: d.cid, name: d.newName, ...(d.supplier ? { kind: 'supplier' as const } : {}) }
-      if (twin) this.twinBorn = { cid: d.cid, name: d.newName }
       acc.ops.push(add)
       this.applyLocal(add) // so a second line about the same new name finds this customer
+      // a detail / mobile said in the same breath: set now, so they are not asked again
+      for (const op of [
+        ...(d.tag ? [{ op: 'set_tag' as const, cid: d.cid, tag: d.tag }] : []),
+        ...(d.phone ? [{ op: 'set_phone' as const, cid: d.cid, phone: d.phone }] : []),
+      ]) { acc.ops.push(op); this.applyLocal(op) }
       acc.parts.push(R.newCustomer(d.newName))
     }
     const name = this.customerName(d)
     this.focusCid = d.cid
+    // the same entry from the same sentence a moment ago: one sentence delivered twice, not a second sale
+    const same = (this.snap.entries ?? []).filter((x) => x.cid === d.cid && !x.promise && !d.promise && x.direction === d.direction && x.paise === d.paise)
+    // (only ever the entry written last: a re-delivery repeats the turn just before, nothing older)
+    const last = this.snap.last
+    if (last && same.some((x) => x.eid === last.eid) && this.wroteRecently(last.eid, REDELIVERY_MS) && this.writtenText.get(last.eid) === fold(d.transcript)) {
+      acc.parts.push(R.alreadyWritten(name, d.paise / 100))
+      return
+    }
+    // the same amount again for the same person, said anew (in any words or language): a second entry,
+    // said as "one more" so a slip is heard at once (and "hata do" takes it back)
+    const again = same.some((x) => this.wroteRecently(x.eid, WRITTEN_KEEP_MS))
     acc.ops.push({
       op: 'entry',
       eid: this.newId(),
@@ -744,14 +767,15 @@ export class LedgerCore {
       },
     })
     const supplier = this.snap.customers.find((c) => c.cid === d.cid)?.kind === 'supplier'
-    if (supplier && !d.promise) acc.parts.push(sayShop(this.lang).supplierSaved(name, d.paise / 100, d.direction!, this.balanceAfter(d.cid!, acc.ops) / 100))
+    if (again && !supplier) acc.parts.push(sayShop(this.lang).anotherOne(name, d.paise / 100), R.balance(name, this.balanceAfter(d.cid!, acc.ops) / 100))
+    else if (supplier && !d.promise) acc.parts.push(sayShop(this.lang).supplierSaved(name, d.paise / 100, d.direction!, this.balanceAfter(d.cid!, acc.ops) / 100))
     else if (d.promise) acc.parts.push(R.savedPromise(name, d.paise / 100, d.dayOffset))
     else if (this.sayBalance) acc.parts.push(R.savedWithBalance(name, d.paise / 100, d.direction!, this.balanceAfter(d.cid!, acc.ops) / 100))
     else acc.parts.push(R.saved(name, d.paise / 100, d.direction!))
     if (d.due && d.direction === 'credit' && !d.promise) acc.parts.push(sayShop(this.lang).dueNoted(Number(d.due.slice(8, 10))))
     acc.saved = (acc.saved ?? 0) + 1
     // the full sentence with the balance is the confirmation: never shortened to an ack
-    if (!this.sayBalance && !supplier && !d.due && this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
+    if (!again && !this.sayBalance && !supplier && !d.due && this.ackable(d)) acc.ackable = (acc.ackable ?? 0) + 1
   }
 
   /** The customer's balance (paise) once the not-yet-applied ops of this reply are written. */
@@ -809,7 +833,8 @@ export class LedgerCore {
     const full = intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)
     switch (p.kind) {
       case 'nickname':
-        return !full && words <= 4 && !mentionsMoney(text)
+        if (full) return false
+        return p.step === 'phone' ? !!phoneFrom(text) || words <= 4 : words <= 5 && !mentionsMoney(text)
       case 'soundalike':
         return full || (words <= 4 && this.soundAlikePick(p, text, intent) !== null)
       case 'choose':
@@ -859,6 +884,12 @@ export class LedgerCore {
     ]
     for (const [re, i] of ords) if (re.test(t) && i < options.length) return i
     const amts = parseAmounts(t).map((a) => a.value)
+    // the last 3-4 digits of a mobile ("3210 wala"), unless they are also an option's balance
+    const tail = t.replace(/\D/g, '')
+    if (tail.length >= 3 && tail.length <= 4 && !options.some((o) => o.rupees !== undefined && amts.includes(o.rupees))) {
+      const byPhone = options.map((o, i) => (o.phone?.endsWith(tail) ? i : -1)).filter((i) => i >= 0)
+      if (byPhone.length === 1) return byPhone[0]
+    }
     const byAmt = options.map((o, i) => (o.rupees !== undefined && amts.includes(o.rupees) ? i : -1)).filter((i) => i >= 0)
     if (byAmt.length === 1) return byAmt[0]
     const m = matchName(nameAnswer(t) ?? t, options.map((o, i) => ({ id: String(i), names: [o.name] })))
@@ -879,6 +910,99 @@ export class LedgerCore {
         if (m && m.score >= NAME_SURE) return true
       }
     return false
+  }
+
+  /**
+   * A new account was opened in this reply: ask what the ledger will need to tell this person apart
+   * and reach them. Taken name -> full name; full name taken too -> a detail (area, shop ...); then the
+   * mobile number. What the reply already set (the agent heard a full name, detail or phone) is skipped.
+   * The account and its entry are already written: these questions only add to it, and any fresh
+   * instruction ends them.
+   */
+  startProfile(reply: Reply): void {
+    if (this.pending) return
+    const add = reply.ops.find((o): o is Extract<LedgerOp, { op: 'add_customer' }> => o.op === 'add_customer' && o.kind !== 'supplier')
+    if (!add) return
+    const c = this.snap.customers.find((x) => x.cid === add.cid)
+    const name = reply.ops.reduce((n, o) => (o.op === 'rename_customer' && o.cid === add.cid ? o.name : n), c?.name ?? add.name)
+    const hasTag = reply.ops.some((o) => o.op === 'set_tag' && o.cid === add.cid) || !!c?.tag
+    const hasPhone = reply.ops.some((o) => o.op === 'set_phone' && o.cid === add.cid) || !!c?.phone
+    const step = this.profileStep(add.cid, name, hasTag, hasPhone, null)
+    if (!step) return
+    this.pending = { kind: 'nickname', cid: add.cid, name, step }
+    reply.parts.push(this.profileAsk(step, name))
+  }
+
+  /** the next question for a new account after `after` (null: the first), or null when nothing is missing */
+  private profileStep(cid: string, name: string, hasTag: boolean, hasPhone: boolean, after: 'fullname' | 'detail' | 'phone' | null): 'fullname' | 'detail' | 'phone' | null {
+    const taken = this.snap.customers.some((x) => x.cid !== cid && x.name.trim().toLowerCase() === name.trim().toLowerCase())
+    if (after === null && taken && !hasTag) return 'fullname'
+    if ((after === null || after === 'fullname') && taken && !hasTag) return 'detail'
+    if (after !== 'phone' && !hasPhone) return 'phone'
+    return null
+  }
+
+  private profileAsk(step: 'fullname' | 'detail' | 'phone', name: string): string {
+    const S = sayShop(this.lang)
+    return step === 'fullname' ? S.fullNameAsk(name) : step === 'detail' ? S.detailAsk(name) : S.mobileAsk(name)
+  }
+
+  private answerProfile(p: Extract<Pending, { kind: 'nickname' }>, text: string, intent: Intent, meta: TurnMeta): Reply | null {
+    const R = say(this.lang)
+    const c = this.snap.customers.find((x) => x.cid === p.cid)
+    if (!c) { this.pending = null; return null }
+    // a fresh complete instruction: the details can wait (the account keeps its automatic label)
+    if (intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)) {
+      this.pending = null
+      return this.dispatch(intent, text, meta)
+    }
+    const skip = intent.type === 'no' || intent.type === 'undo' || SKIP_WORD.test(text.trim())
+    const ops: LedgerOp[] = []
+    const parts: string[] = []
+    let name = p.name
+    let hasTag = !!c.tag
+    const next = (after: 'fullname' | 'detail' | 'phone'): Reply => {
+      const step = this.profileStep(p.cid, name, hasTag, !!c.phone || ops.some((o) => o.op === 'set_phone'), after)
+      this.pending = step ? { kind: 'nickname', cid: p.cid, name, step } : null
+      if (step) parts.push(this.profileAsk(step, name))
+      else if (!parts.length) parts.push(sayShop(this.lang).tagSkipped(this.label(c)))
+      this.focusCid = p.cid
+      return { parts, ops }
+    }
+    if (p.step === 'phone') {
+      const phone = skip ? null : phoneFrom(text)
+      if (phone) {
+        ops.push({ op: 'set_phone', cid: p.cid, phone })
+        parts.push(R.phoneSet(name))
+        return next('phone')
+      }
+      // not a number: asked once more, then left for later
+      if (!skip && !p.tried) {
+        this.pending = { ...p, tried: true }
+        return { parts: [sayShop(this.lang).mobileAsk(name)], ops: [] }
+      }
+      return next('phone')
+    }
+    if (skip) return next(p.step)
+    const said = cleanTag(text)
+    if (!said || intent.type === 'yes') {
+      if (p.tried) return next(p.step)
+      this.pending = { ...p, tried: true }
+      return { parts: [this.profileAsk(p.step, name)], ops: [] }
+    }
+    if (p.step === 'fullname') {
+      // the full name becomes the account's name ("Ramesh Kumar"); the same short name again tells nothing
+      if (said.trim().toLowerCase() !== p.name.trim().toLowerCase()) {
+        name = said
+        ops.push({ op: 'rename_customer', cid: p.cid, name })
+        parts.push(R.renamed(p.name, name))
+      }
+      return next('fullname')
+    }
+    ops.push({ op: 'set_tag', cid: p.cid, tag: said })
+    hasTag = true
+    parts.push(sayShop(this.lang).tagSet(name, said))
+    return next('detail')
   }
 
   /** The sound-alike question's answer: the known customer, a new account, or null when unclear. */
@@ -921,28 +1045,7 @@ export class LedgerCore {
       this.pending = null
       return this.choose(p.options[i].tool ?? p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
     }
-    if (p.kind === 'nickname') {
-      const c = this.snap.customers.find((x) => x.cid === p.cid)
-      const S = sayShop(this.lang)
-      if (!c) {
-        this.pending = null
-        return null
-      }
-      // a fresh complete instruction: the nickname can wait (the automatic label stays)
-      if (intent.type === 'entries' && intent.entries.every((e) => e.name && e.direction)) {
-        this.pending = null
-        return this.dispatch(intent, text, meta)
-      }
-      if (intent.type === 'no' || intent.type === 'undo' || SKIP_WORD.test(text.trim())) {
-        this.pending = null
-        return { parts: [S.tagSkipped(this.label(c))], ops: [] }
-      }
-      const tag = cleanTag(text)
-      if (intent.type === 'yes' || !tag) return { parts: [S.nicknameAsk(p.name)], ops: [] }
-      this.pending = null
-      this.focusCid = c.cid
-      return { parts: [S.tagSet(c.name, tag)], ops: [{ op: 'set_tag', cid: c.cid, tag }] }
-    }
+    if (p.kind === 'nickname') return this.answerProfile(p, text, intent, meta)
     if (p.kind === 'delete' && p.requireType) {
       // typed on the phone (answer / text), exactly the word: nothing spoken can do this
       const norm = (x: string) => x.normalize('NFC').trim().toLowerCase()
@@ -1336,7 +1439,7 @@ export class LedgerCore {
       const key = p.name.trim().toLowerCase()
       const twins = this.snap.customers.filter((c) => c.name.trim().toLowerCase() === key)
         .map((c) => ({ cid: c.cid, label: this.label(c), ...(c.tag ? { tag: c.tag } : {}) }))
-      return { kind: 'nickname', name: p.name, cid: p.cid, twins }
+      return { kind: 'nickname', name: p.name, cid: p.cid, twins, step: p.step }
     }
     if (p.kind === 'soundalike') {
       const d = p.draft
@@ -1379,8 +1482,9 @@ export class LedgerCore {
       case 'entry': {
         const day = istDay(op.dayOffset)
         s.last = { eid: op.eid, cid: op.cid, paise: op.paise, direction: op.direction, day, promise: op.promise || undefined }
-        for (const [eid, t] of this.writtenAt) if (this.now() - t > WRITTEN_KEEP_MS) this.writtenAt.delete(eid)
+        for (const [eid, t] of this.writtenAt) if (this.now() - t > WRITTEN_KEEP_MS) { this.writtenAt.delete(eid); this.writtenText.delete(eid) }
         this.writtenAt.set(op.eid, this.now())
+        this.writtenText.set(op.eid, fold(op.source.transcript))
         s.entries = [{ ...s.last, ...(op.due ? { due: op.due } : {}), ...(op.note ? { note: op.note } : {}) }, ...(s.entries ?? [])]
         if (op.promise) break // a promise is remembered, never posted to the balance
         const c = s.customers.find((x) => x.cid === op.cid)
@@ -1531,6 +1635,20 @@ function istDay(n: number): string {
 }
 
 /** A nickname as said: filler ("wale", "jo", "naam") trimmed, at most 30 characters. Empty when nothing is left. */
+/** A 10-digit Indian mobile from typed or spoken digits ("98765 43210", "nau aath saat ..."), or null. */
+export function phoneFrom(text: string): string | null {
+  let digits = text.replace(/\D/g, '')
+  if (digits.length < 10) {
+    // spoken digit by digit (any language the number parser reads): each word one or two digits
+    const spoken = tokenize(text).map((t) => parseAmounts(t)[0]?.value).filter((v): v is number => v !== undefined && v >= 0 && v < 100 && Number.isInteger(v))
+    const joined = spoken.map(String).join('')
+    if (joined.length > digits.length) digits = joined
+  }
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2)
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1)
+  return /^[6-9]\d{9}$/.test(digits) ? digits : null
+}
+
 export function cleanTag(text: string): string {
   const t = text.trim().replace(/[.!?।]+$/u, '').replace(/^(ye|yeh|inko|unko|inhe|this is|call (him|her|them)|bolo|kaho)\s+/i, '')
     .replace(/\s+(bolo|kaho|likho|naam se|naam|hai|hain)$/i, '').trim()

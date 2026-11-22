@@ -276,6 +276,26 @@ function NicknameCard({ p, t, onAnswer, onTag }: { p: PendingView; t: UiStrings;
   const others = (p.twins ?? []).filter((x) => x.cid !== p.cid && !x.tag).slice(0, 2)
   const [mine, setMine] = useState('')
   const [theirs, setTheirs] = useState<Record<string, string>>({})
+  // a new account's full name (its name is taken) or mobile number: one box, sent as the spoken answer would be
+  if (p.step === 'fullname' || p.step === 'phone') {
+    const phone = p.step === 'phone'
+    const label = phone ? t.nickPhone : t.nickFull
+    return (
+      <form key={p.step} className="rounded-3xl bg-card p-4 shadow-3 ring-1 ring-primary/15" onSubmit={(e) => { e.preventDefault(); onAnswer(mine.trim() || 'nahi') }}>
+        <div className="text-lg font-semibold">{p.name} · {label}</div>
+        {!phone && <div className="text-sm text-muted-foreground">{t.nickAlready}</div>}
+        <input autoFocus value={mine} onChange={(e) => setMine(e.target.value)} maxLength={phone ? 16 : 40} aria-label={label}
+          className={cn(inputCls, 'mt-3')} enterKeyHint="done" {...(phone ? { type: 'tel', inputMode: 'numeric' as const, autoComplete: 'tel' } : { autoCapitalize: 'words' })} />
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Answer className={TONE.no} onClick={() => onAnswer('nahi')}>{t.skip}</Answer>
+          <button type="submit" disabled={!mine.trim()}
+            className={cn('flex h-14 min-w-0 items-center justify-center gap-2 rounded-xl px-2 text-lg font-semibold active:scale-[.97] disabled:opacity-40', TONE.yes)}>
+            <Check className="size-5" />{t.nickSave}
+          </button>
+        </div>
+      </form>
+    )
+  }
   const save = () => {
     for (const o of others) { const v = theirs[o.cid]?.trim(); if (v) onTag?.(o.cid, v) }
     onAnswer(mine.trim() || 'nahi')

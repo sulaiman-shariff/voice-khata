@@ -27,8 +27,10 @@ function setup(customers: SnapCustomer[], entries: SnapEntry[] = []) {
   core.snap.entries = entries
   const meta = (transcript: string): TurnMeta & { transcript: string } => ({ snrDb: null, noisy: false, path: 'llm', transcript })
   // like the session: a reply's ops are applied to the local snapshot before the next turn
-  const applied = <T extends { ops: LedgerOp[] } | null>(r: T): T => {
+  const applied = <T extends { ops: LedgerOp[]; parts: string[] } | null>(r: T): T => {
     for (const o of r?.ops ?? []) core.applyLocal(o)
+    // like the session: a new account's details are asked once the reply is done
+    if (r) core.startProfile(r)
     return r
   }
   const run = (name: ToolCall['name'], args: Record<string, unknown>, transcript: string) => applied(runTool(core, { name, args }, meta(transcript)))
@@ -204,7 +206,7 @@ describe('customers with the same name', () => {
     expect(s.core.customerList()).toEqual(['Ramesh 1', 'Ramesh (doodhwala)', 'Ramesh 2', 'Ramesh · …3210'])
   })
 
-  it('"naya Ramesh" opens a second Ramesh, then asks once for a nickname', () => {
+  it('"naya Ramesh" opens a second Ramesh (the entry is written), then asks the full name, then the number', () => {
     const { core, run, answer } = setup([cust('a', 'Ramesh', 300)])
     const r = run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit', new_customer: true }] }, 'naya Ramesh ko 200 udhaar')
     expect(r.ops).toEqual([])
@@ -212,26 +214,85 @@ describe('customers with the same name', () => {
     const y = answer('haan')!
     expect(y.ops.map((o) => o.op)).toEqual(['add_customer', 'entry'])
     const cid = (y.ops[0] as { cid: string }).cid
-    expect(y.parts[y.parts.length - 1]).toBe(S.nicknameAsk('Ramesh'))
-    expect(core.pendingView()).toMatchObject({ kind: 'nickname', cid, twins: [{ cid: 'a', label: 'Ramesh 1' }, { cid, label: 'Ramesh 2' }] })
-    const t = answer('doodhwala')!
-    expect(t.ops).toEqual([{ op: 'set_tag', cid, tag: 'Doodhwala' }])
+    expect(y.parts[y.parts.length - 1]).toBe(S.fullNameAsk('Ramesh'))
+    expect(core.pendingView()).toMatchObject({ kind: 'nickname', cid, step: 'fullname' })
+    const f = answer('Ramesh Kumar')!
+    expect(f.ops).toEqual([{ op: 'rename_customer', cid, name: 'Ramesh Kumar' }])
+    expect(f.parts[f.parts.length - 1]).toBe(S.mobileAsk('Ramesh Kumar'))
+    const p = answer('98765 43210')!
+    expect(p.ops).toEqual([{ op: 'set_phone', cid, phone: '9876543210' }])
     expect(core.pending).toBeNull()
-    // without "naya" the same sentence goes to the existing Ramesh
+    // the model's "another person" is understood in any language (no word list): it is only ever read back first
     const s = setup([cust('a', 'Ramesh', 300)])
-    expect(s.run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit', new_customer: true }] }, 'Ramesh ko 200 udhaar').ops[0]).toMatchObject({ cid: 'a' })
+    expect(s.run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit', new_customer: true }] }, 'ಇನ್ನೊಬ್ಬ ರಮೇಶ್ 200 ಸಾಲ').ops).toEqual([])
+    expect(s.core.pendingView()).toMatchObject({ kind: 'confirm', newCustomer: true })
+    // without the flag the same sentence goes to the existing Ramesh
+    const t = setup([cust('a', 'Ramesh', 300)])
+    expect(t.run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit' }] }, 'Ramesh ko 200 udhaar').ops[0]).toMatchObject({ cid: 'a' })
   })
 
-  it('the nickname question can be skipped', () => {
-    const { core, run, answer } = setup([cust('a', 'Ramesh', 300)])
+  it('the full name taken too: asks where they live; every question can be skipped', () => {
+    const { core, run, answer } = setup([cust('a', 'Ramesh Kumar', 300), cust('b', 'Ramesh', 100)])
     run('add_customer', { name: 'Ramesh' }, 'doosra Ramesh ka khata kholo')
     const y = answer('haan')!
-    expect(y.parts).toEqual([R.customerAdded('Ramesh'), S.nicknameAsk('Ramesh')])
-    expect(core.pending?.kind).toBe('nickname')
-    expect(core.canAnswerFast('chhodo', parseFast('chhodo'))).toBe(true)
-    const n = answer('chhodo')!
+    expect(y.parts).toEqual([R.customerAdded('Ramesh'), S.fullNameAsk('Ramesh')])
+    const cid = (y.ops[0] as { cid: string }).cid
+    const f = answer('Ramesh Kumar')!
+    expect(f.parts[f.parts.length - 1]).toBe(S.detailAsk('Ramesh Kumar'))
+    const d = answer('Gandhi Nagar')!
+    expect(d.ops).toEqual([{ op: 'set_tag', cid, tag: 'Gandhi Nagar' }])
+    expect(d.parts[d.parts.length - 1]).toBe(S.mobileAsk('Ramesh Kumar'))
+    expect(core.canAnswerFast('baad mein', parseFast('baad mein'))).toBe(true)
+    const n = answer('baad mein')!
     expect(n.ops).toEqual([])
-    expect(n.parts).toEqual([S.tagSkipped('Ramesh 2')])
+    expect(core.pending).toBeNull()
+    // skipping the full name goes on to the detail
+    const s = setup([cust('a', 'Ramesh', 300)])
+    s.run('add_customer', { name: 'Ramesh' }, 'doosra Ramesh ka khata kholo')
+    s.answer('haan')
+    expect(s.answer('chhodo')!.parts).toEqual([S.detailAsk('Ramesh')])
+  })
+
+  it('full name, detail and number said in one go: applied, nothing asked', () => {
+    const { core, run, answer } = setup([cust('a', 'Ramesh', 300)])
+    run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit', new_customer: true, full_name: 'Ramesh Kumar', detail: 'Gandhi Nagar', phone: '9876543210' }] },
+      'doosra Ramesh, Ramesh Kumar, Gandhi Nagar wala, 9876543210, 200 udhaar')
+    const y = answer('haan')!
+    const cid = (y.ops[0] as { cid: string }).cid
+    expect(y.ops).toEqual([
+      expect.objectContaining({ op: 'add_customer', cid, name: 'Ramesh Kumar' }),
+      { op: 'set_tag', cid, tag: 'Gandhi Nagar' },
+      { op: 'set_phone', cid, phone: '9876543210' },
+      expect.objectContaining({ op: 'entry', cid, paise: 20000 }),
+    ])
+    expect(core.pending).toBeNull()
+    // a detail the words never said is dropped (then asked)
+    const s = setup([cust('a', 'Ramesh', 300)])
+    s.run('add_entries', { entries: [{ name: 'Ramesh', amount: 200, direction: 'credit', new_customer: true, detail: 'Gali 3' }] }, 'doosra Ramesh 200 udhaar')
+    expect(s.answer('haan')!.ops.some((o) => o.op === 'set_tag')).toBe(false)
+    expect(s.core.pendingView()).toMatchObject({ kind: 'nickname', step: 'fullname' })
+  })
+
+  it('"which Ramesh?" is answered with the last digits of a mobile', () => {
+    const opts = [
+      { label: 'Ramesh · …3210', name: 'Ramesh', rupees: 300, id: 'a', phone: '9876543210', args: {} },
+      { label: 'Ramesh · …1111', name: 'Ramesh', rupees: 100, id: 'b', phone: '9123451111', args: {} },
+    ]
+    expect(LedgerCore.chooseIndex(opts, '3210 wala')).toBe(0)
+    expect(LedgerCore.chooseIndex(opts, '1111 wale')).toBe(1)
+    // a balance still wins: "300 wala" is the one owing 300
+    expect(LedgerCore.chooseIndex(opts, '300 wala')).toBe(0)
+  })
+
+  it('a brand-new name asks only the mobile number; spoken digits count; a non-number is asked once more', () => {
+    const { core, run, answer } = setup([cust('a', 'Ramesh', 300)])
+    run('add_customer', { name: 'Mahesh' }, 'Mahesh ka khata kholo')
+    const y = answer('haan')!
+    expect(y.parts).toEqual([R.customerAdded('Mahesh'), S.mobileAsk('Mahesh')])
+    expect(answer('pata nahi kya')!.parts).toEqual([S.mobileAsk('Mahesh')])
+    const p = answer('nine eight seven six five four three two one zero')!
+    expect(p.ops).toEqual([expect.objectContaining({ op: 'set_phone', phone: '9876543210' })])
+    expect(core.pending).toBeNull()
   })
 
   it('set_tag names a customer; the nickname must have been said', () => {

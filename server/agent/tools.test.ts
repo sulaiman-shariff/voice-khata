@@ -359,11 +359,6 @@ describe('agent tools', () => {
     const u = run('undo_last', {}, 'hata do')
     expect(u.ops).toEqual([{ op: 'void', eid, reason: 'spoken undo' }])
     tick(61_000)
-    // stamps older than the undo window are dropped as new ones are made
-    core.applyLocal({ op: 'entry', eid: 'later', cid: 'c1', paise: 100, direction: 'credit', dayOffset: 0, promise: false,
-      source: { transcript: 't', confidence: 'high', reasons: [], lang: 'en', path: 'llm' } })
-    expect([...core.writtenAt.keys()]).toEqual(['later'])
-    core.applyLocal({ op: 'void', eid: 'later', reason: 'test' })
     const late = run('undo_last', {}, 'hata do')
     expect(late.ops).toEqual([])
     expect(core.pending?.kind).toBe('modify')

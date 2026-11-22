@@ -163,6 +163,8 @@ export interface PendingView {
   cid?: string
   /** nickname: every customer with this name (the new one included), so the card can tag the others too */
   twins?: { cid: string; label: string; tag?: string }[]
+  /** nickname: which detail of the new account is being asked (full name, a detail, the mobile number) */
+  step?: 'fullname' | 'detail' | 'phone'
   /** soundalike: the heard name, offered as a new account ("+ naya Rakesh") */
   newName?: string
 }

@@ -18,7 +18,7 @@ import { Attention } from './attention.js'
 import { type Logger, nullLogger } from './log.js'
 import { type AgentContext, type ToolCall } from './agent/agent.js'
 import { attachTools, runTool } from './agent/tools.js'
-import { LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta, WRITTEN_KEEP_MS } from './ledger/core.js'
+import { LedgerCore, PENDING_TTL_MS, type Pending, type Reply, type TurnMeta, UNDO_INSTANT_MS } from './ledger/core.js'
 
 export interface SttLike {
   send(pcm: Buffer): void
@@ -687,6 +687,8 @@ export class Session {
     // forced: the shopkeeper said this is for the app, so it is never answered with silence
     if (forced && (notForMe || !reply)) { notForMe = false; reply = { parts: [say(this.lang).didNotCatch()], ops: [] } }
     if (!this.pending) this.followDetectedLang(t?.lang, intent)
+    // a new account opened by this reply: its full name / detail / mobile number are asked next
+    if (reply && !notForMe) this.ledger.startProfile(reply)
     const parseMs = this.now() - t0
     // a turn lost to a dropped connection, handled again: say so, then the full read-back
     if (reply && _src === 'resend') reply.parts.unshift(say(this.lang).resent())
@@ -912,7 +914,7 @@ export class Session {
         if (!last) return { parts: [R.nothingToUndo()], ops: [] }
         // at once only when this session wrote that entry in the last minute (the tools' undo_last
         // rule); an older entry, or one from another session, is read back first
-        if (this.ledger.wroteRecently(last.eid, WRITTEN_KEEP_MS))
+        if (this.ledger.wroteRecently(last.eid, UNDO_INSTANT_MS))
           return { parts: [R.undone()], ops: [{ op: 'void', eid: last.eid, reason: 'spoken undo' }] }
         const ref = (this.snap.entries ?? []).findIndex((e) => e.eid === last.eid) + 1
         if (ref < 1) return { parts: [R.didNotCatch()], ops: [] }

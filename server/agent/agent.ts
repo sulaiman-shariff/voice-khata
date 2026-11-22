@@ -49,7 +49,9 @@ Rules:
 - Never invent amounts. An amount must be one that was actually said; if it is missing or doubtful, ask for it instead of guessing.
 - The reply language is the language the shopkeeper spoke.
 - If the words cannot be trusted (garbled, contradictory transcripts, too short to mean anything), call unclear.
-- customers marks the shop's suppliers "[supplier]" and shows nicknames in brackets ("Ramesh (doodhwala)"); pass a name exactly as listed. Two customers with one name: pass the plain name and the app asks which, unless a nickname or "naya / doosra" was said.
+- customers marks the shop's suppliers "[supplier]" and shows nicknames in brackets ("Ramesh (doodhwala)"); pass a name exactly as listed. Two customers with one name: pass the plain name and the app asks which, unless a nickname, an area or the last digits of a phone was said.
+- Another person with a name already in the ledger ("naya / doosra / ek aur Ramesh", "another Ramesh", "ಇನ್ನೊಬ್ಬ ರಮೇಶ್", any language): new_customer true. If their full name, a detail (area, shop, work) or their mobile was said, put it in full_name / detail / phone; never invent one. The app reads a new person back before writing and asks for what is missing.
+- The same amount again for the same person ("phir se", "again", "innondu sala", or just said again) is a new entry: add_entries as usual. The app tells a repeated sentence apart by itself.
 - Money with no person named (expenses, cash put in or taken out of the galla) is add_cash, never add_entries. A named customer always means add_entries.
 - Several tools may be called in one turn, in the order they should run (for example add several entries, then query a balance).
 - Pick tools only from the list given.

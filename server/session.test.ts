@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PendingView, ServerMsg } from '../shared/protocol.js'
 import { say, sayPay } from '../shared/replies.js'
+import { sayShop } from '../shared/replies-shop.js'
 import { addEntry, callsOf, cust, ent, harness } from './test-harness.js'
 
 const lastCard = (out: ServerMsg[]) => (out.filter((m) => m.type === 'pending').at(-1) as { pending: PendingView | null }).pending
@@ -219,7 +220,8 @@ describe('a heard name not in the ledger is never written without a yes', () => 
     await h.tap('yes')
     expect(h.accounts()).toEqual(['Zaid'])
     expect(h.entries()).toEqual([expect.objectContaining({ paise: 30000, direction: 'credit' })])
-    expect(h.asks).toBeNull()
+    // the new account's mobile number is asked next (the entry is already written)
+    expect(h.asks).toBe('nickname')
   })
 
   it('a spoken credit/paid answer is not the yes: the new name is still read back', async () => {
@@ -1184,27 +1186,28 @@ describe('fast answers need no model, and a dropped final leaves nothing behind'
   })
 })
 
-describe('the agent never writes the same entry twice in a minute', () => {
+describe('a repeat is a second entry; the same sentence delivered twice is not', () => {
   const again = () => callsOf({ name: 'add_entries', args: { entries: [{ name: 'Mahi', amount: 300, direction: 'payment' }] } })
   const people = () => [cust('m', 'Mahi', 0)]
 
-  it('an identical agent entry within 60 s is not written and says it is already written', async () => {
+  it('the same sentence again within 5 s (speech-to-text / the model repeating) is written once', async () => {
     const h = harness(people(), { lang: 'en', agent: again })
     await h.turn('woh Mahi wali baat 300 jama kar dena na')
     expect(h.written()).toEqual([['m', 300, 'payment']])
-    h.tick(30_000)
+    h.tick(2_000)
     await h.turn('woh Mahi wali baat 300 jama kar dena na')
     expect(h.written()).toHaveLength(1)
     expect(h.said).toEqual([say('en').alreadyWritten('Mahi', 300)])
     expect(h.asks).toBeNull()
   })
 
-  it('after 61 s it behaves as before', async () => {
+  it('the same amount said again later is a second entry, said as "one more"', async () => {
     const h = harness(people(), { lang: 'en', agent: again })
     await h.turn('woh Mahi wali baat 300 jama kar dena na')
-    h.tick(61_000)
-    await h.turn('woh Mahi wali baat 300 jama kar dena na')
-    expect(h.written().length + (h.asks ? 1 : 0)).toBeGreaterThan(1)
+    h.tick(30_000)
+    await h.turn('Mahi ne phir se 300 diye')
+    expect(h.written()).toEqual([['m', 300, 'payment'], ['m', 300, 'payment']])
+    expect(h.said[0].startsWith(sayShop('en').anotherOne('Mahi', 300))).toBe(true)
   })
 
   it('a plain instant-path repeat still writes', async () => {

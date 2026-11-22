@@ -58,6 +58,14 @@ export interface ShopReplies {
   nicknameAsk: (name: string) => string
   /** a name not in the ledger: offer to open their khata (a yes or a tap opens it) */
   notFoundOffer: (name: string) => string
+  /** a new account's name is already taken: their full name tells them apart */
+  fullNameAsk: (name: string) => string
+  /** the full name is taken too: where they live, or anything that tells them apart */
+  detailAsk: (name: string) => string
+  /** every new account: the mobile number (reminders and statements need it), or "later" */
+  mobileAsk: (name: string) => string
+  /** the same amount again for the same person, said as a new entry: "one more" */
+  anotherOne: (name: string, amt: number) => string
   /** a spoken "no" to a read-back: not written, and a fix can follow */
   fixAsk: () => string
   /** the nickname question was skipped: the automatic label stays */
@@ -124,6 +132,10 @@ const HI: ShopReplies = {
   instalmentLine: (a) => `इस किस्त के लिए: *${a}*`,
   nicknameAsk: (n) => `एक ${n} पहले से हैं। इनको कैसे पहचानें, जैसे दूधवाला या गली 3?`,
   notFoundOffer: (n) => `${n} का खाता अभी नहीं है। नया खाता खोलूँ?`,
+  fullNameAsk: (n) => `${n} नाम पहले से है। इनका पूरा नाम बताइए?`,
+  detailAsk: (n) => `${n} भी पहले से हैं। ये कहाँ रहते हैं, या कोई पहचान?`,
+  mobileAsk: (n) => `${n} का मोबाइल नंबर बोलिए, या बोलिए बाद में।`,
+  anotherOne: (n, a) => `${n} का एक और ${r(a)} रुपये।`,
   fixAsk: () => 'ठीक है, नहीं लिखा। कुछ बदलना हो तो सही नाम या रकम बोलिए।',
   tagSet: (n, t) => `ठीक है, ये ${t} वाले ${n} हैं।`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}: ${k} या नए ग्राहक ${h}?`,
@@ -164,6 +176,10 @@ const EN: ShopReplies = {
   instalmentLine: (a) => `This instalment: *${a}*`,
   nicknameAsk: (n) => `There is already a ${n}. How should I tell them apart, like milkman or lane 3?`,
   notFoundOffer: (n) => `There is no account for ${n} yet. Shall I open a new one?`,
+  fullNameAsk: (n) => `There is already a ${n}. What is their full name?`,
+  detailAsk: (n) => `There is a ${n} too. Where do they live, or how do you know them?`,
+  mobileAsk: (n) => `What is ${n}'s mobile number? Or say later.`,
+  anotherOne: (n, a) => `One more ${r(a)} rupees for ${n}.`,
   fixAsk: () => 'OK, not written. If something was wrong, say the right name or amount.',
   tagSet: (n, t) => `Okay, this is ${n}, ${t}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}: ${k}, or a new customer ${h}?`,
@@ -204,6 +220,10 @@ const KN: ShopReplies = {
   instalmentLine: (a) => `ಈ ಕಂತಿಗೆ: *${a}*`,
   nicknameAsk: (n) => `ಈಗಾಗಲೇ ಒಬ್ಬ ${n} ಇದ್ದಾರೆ. ಇವರನ್ನು ಹೇಗೆ ಗುರುತಿಸಲಿ, ಹಾಲಿನವರು ಅಥವಾ ಗಲ್ಲಿ 3 ಹಾಗೆ?`,
   notFoundOffer: (n) => `${n} ಅವರ ಖಾತೆ ಇನ್ನೂ ಇಲ್ಲ. ಹೊಸ ಖಾತೆ ತೆರೆಯಲೇ?`,
+  fullNameAsk: (n) => `${n} ಹೆಸರು ಈಗಾಗಲೇ ಇದೆ. ಇವರ ಪೂರ್ಣ ಹೆಸರು ಏನು?`,
+  detailAsk: (n) => `${n} ಕೂಡ ಇದ್ದಾರೆ. ಇವರು ಎಲ್ಲಿ ಇರುತ್ತಾರೆ, ಅಥವಾ ಏನಾದರೂ ಗುರುತು?`,
+  mobileAsk: (n) => `${n} ಅವರ ಮೊಬೈಲ್ ನಂಬರ್ ಹೇಳಿ, ಅಥವಾ ಆಮೇಲೆ ಎನ್ನಿ.`,
+  anotherOne: (n, a) => `${n} ಅವರಿಗೆ ಇನ್ನೊಂದು ${r(a)} ರೂಪಾಯಿ.`,
   fixAsk: () => 'ಸರಿ, ಬರೆಯಲಿಲ್ಲ. ತಪ್ಪಿದ್ದರೆ ಸರಿಯಾದ ಹೆಸರು ಅಥವಾ ಮೊತ್ತ ಹೇಳಿ.',
   tagSet: (n, t) => `ಸರಿ, ಇವರು ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}: ${k} ಅವರಾ, ಅಥವಾ ಹೊಸ ಗ್ರಾಹಕ ${h}?`,
@@ -244,6 +264,10 @@ const TA: ShopReplies = {
   instalmentLine: (a) => `இந்தத் தவணைக்கு: *${a}*`,
   nicknameAsk: (n) => `ஏற்கனவே ஒரு ${n} இருக்கிறார். இவரை எப்படி அடையாளம் காண்பது, பால்காரர் அல்லது தெரு 3 போல?`,
   notFoundOffer: (n) => `${n} கணக்கு இன்னும் இல்லை. புதிய கணக்கு திறக்கட்டுமா?`,
+  fullNameAsk: (n) => `${n} என்ற பெயர் ஏற்கனவே உள்ளது. இவரின் முழு பெயர் என்ன?`,
+  detailAsk: (n) => `${n} என்பவரும் இருக்கிறார். இவர் எங்கே இருக்கிறார், அல்லது ஏதாவது அடையாளம்?`,
+  mobileAsk: (n) => `${n} அவர்களின் மொபைல் எண் சொல்லுங்கள், அல்லது பிறகு என்று சொல்லுங்கள்.`,
+  anotherOne: (n, a) => `${n} அவர்களுக்கு இன்னொரு ${r(a)} ரூபாய்.`,
   fixAsk: () => 'சரி, எழுதவில்லை. தவறு இருந்தால் சரியான பெயர் அல்லது தொகையைச் சொல்லுங்கள்.',
   tagSet: (n, t) => `சரி, இவர் ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'}: ${k} அவர்களா, அல்லது புதிய வாடிக்கையாளர் ${h}?`,
@@ -284,6 +308,10 @@ const TE: ShopReplies = {
   instalmentLine: (a) => `ఈ వాయిదాకు: *${a}*`,
   nicknameAsk: (n) => `ఇప్పటికే ఒక ${n} ఉన్నారు. వీరిని ఎలా గుర్తించాలి, పాలవాళ్ళు లేదా వీధి 3 లాగా?`,
   notFoundOffer: (n) => `${n} ఖాతా ఇంకా లేదు. కొత్త ఖాతా తెరవనా?`,
+  fullNameAsk: (n) => `${n} పేరు ఇప్పటికే ఉంది. వీరి పూర్తి పేరు ఏమిటి?`,
+  detailAsk: (n) => `${n} కూడా ఉన్నారు. వీరు ఎక్కడ ఉంటారు, లేదా ఏదైనా గుర్తు?`,
+  mobileAsk: (n) => `${n} గారి మొబైల్ నంబర్ చెప్పండి, లేదా తర్వాత అనండి.`,
+  anotherOne: (n, a) => `${n} గారికి మరో ${r(a)} రూపాయలు.`,
   fixAsk: () => 'సరే, రాయలేదు. తప్పు ఉంటే సరైన పేరు లేదా మొత్తం చెప్పండి.',
   tagSet: (n, t) => `సరే, వీరు ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'}: ${k} గారా, లేక కొత్త కస్టమర్ ${h}?`,
@@ -324,6 +352,10 @@ const ML: ShopReplies = {
   instalmentLine: (a) => `ഈ ഗഡുവിന്: *${a}*`,
   nicknameAsk: (n) => `ഒരു ${n} ഇപ്പോൾ തന്നെ ഉണ്ട്. ഇവരെ എങ്ങനെ തിരിച്ചറിയാം, പാൽക്കാരൻ അല്ലെങ്കിൽ ഗലി 3 പോലെ?`,
   notFoundOffer: (n) => `${n} എന്ന കണക്ക് ഇതുവരെ ഇല്ല. പുതിയ കണക്ക് തുറക്കട്ടെ?`,
+  fullNameAsk: (n) => `${n} എന്ന പേര് ഇപ്പോൾ തന്നെ ഉണ്ട്. ഇവരുടെ മുഴുവൻ പേര് എന്താണ്?`,
+  detailAsk: (n) => `${n} എന്നയാളും ഉണ്ട്. ഇവർ എവിടെയാണ് താമസം, അല്ലെങ്കിൽ എന്തെങ്കിലും അടയാളം?`,
+  mobileAsk: (n) => `${n} യുടെ മൊബൈൽ നമ്പർ പറയൂ, അല്ലെങ്കിൽ പിന്നെ എന്ന് പറയൂ.`,
+  anotherOne: (n, a) => `${n} ന് ഒരു ${r(a)} രൂപ കൂടി.`,
   fixAsk: () => 'ശരി, എഴുതിയില്ല. തെറ്റുണ്ടെങ്കിൽ ശരിയായ പേരോ തുകയോ പറയൂ.',
   tagSet: (n, t) => `ശരി, ഇത് ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'}: ${k} ആണോ, അതോ പുതിയ ഉപഭോക്താവ് ${h}?`,
@@ -364,6 +396,10 @@ const MR: ShopReplies = {
   instalmentLine: (a) => `या हप्त्यासाठी: *${a}*`,
   nicknameAsk: (n) => `एक ${n} आधीच आहेत. यांना कसे ओळखायचे, जसे दूधवाले किंवा गल्ली 3?`,
   notFoundOffer: (n) => `${n} यांचे खाते अजून नाही. नवीन खाते उघडू का?`,
+  fullNameAsk: (n) => `${n} नाव आधीच आहे. यांचे पूर्ण नाव सांगा?`,
+  detailAsk: (n) => `${n} सुद्धा आहेत. हे कुठे राहतात, किंवा काही ओळख?`,
+  mobileAsk: (n) => `${n} यांचा मोबाइल नंबर सांगा, किंवा नंतर म्हणा.`,
+  anotherOne: (n, a) => `${n} यांचे आणखी ${r(a)} रुपये.`,
   fixAsk: () => 'ठीक आहे, लिहिले नाही. काही चुकले असेल तर बरोबर नाव किंवा रक्कम सांगा.',
   tagSet: (n, t) => `ठीक आहे, हे ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}: ${k}, की नवीन ग्राहक ${h}?`,
@@ -404,6 +440,10 @@ const BN: ShopReplies = {
   instalmentLine: (a) => `এই কিস্তির জন্য: *${a}*`,
   nicknameAsk: (n) => `একজন ${n} আগে থেকেই আছেন। এঁকে কীভাবে চিনব, যেমন দুধওয়ালা বা গলি 3?`,
   notFoundOffer: (n) => `${n}-এর খাতা এখনও নেই। নতুন খাতা খুলব?`,
+  fullNameAsk: (n) => `${n} নামটা আগে থেকেই আছে। এঁর পুরো নাম কী?`,
+  detailAsk: (n) => `${n}-ও আছেন। ইনি কোথায় থাকেন, বা কোনো পরিচয়?`,
+  mobileAsk: (n) => `${n}-এর মোবাইল নম্বর বলুন, বা বলুন পরে।`,
+  anotherOne: (n, a) => `${n}-এর আরও ${r(a)} টাকা।`,
   fixAsk: () => 'ঠিক আছে, লিখিনি। ভুল হলে সঠিক নাম বা টাকার অঙ্ক বলুন।',
   tagSet: (n, t) => `ঠিক আছে, ইনি ${t} ${n}।`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'}: ${k}, নাকি নতুন গ্রাহক ${h}?`,
@@ -444,6 +484,10 @@ const GU: ShopReplies = {
   instalmentLine: (a) => `આ હપ્તા માટે: *${a}*`,
   nicknameAsk: (n) => `એક ${n} પહેલેથી છે. એમને કેવી રીતે ઓળખીએ, જેમ કે દૂધવાળા કે ગલી 3?`,
   notFoundOffer: (n) => `${n}નું ખાતું હજી નથી. નવું ખાતું ખોલું?`,
+  fullNameAsk: (n) => `${n} નામ પહેલેથી છે. એમનું પૂરું નામ શું છે?`,
+  detailAsk: (n) => `${n} પણ છે. એ ક્યાં રહે છે, કે કોઈ ઓળખ?`,
+  mobileAsk: (n) => `${n}નો મોબાઇલ નંબર બોલો, કે પછી બોલો.`,
+  anotherOne: (n, a) => `${n}ના બીજા ${r(a)} રૂપિયા.`,
   fixAsk: () => 'સારું, લખ્યું નથી. કંઈ ખોટું હોય તો સાચું નામ કે રકમ બોલો.',
   tagSet: (n, t) => `બરાબર, આ ${t} ${n} છે.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'}: ${k}, કે નવા ગ્રાહક ${h}?`,
@@ -484,6 +528,10 @@ const PA: ShopReplies = {
   instalmentLine: (a) => `ਇਸ ਕਿਸ਼ਤ ਲਈ: *${a}*`,
   nicknameAsk: (n) => `ਇੱਕ ${n} ਪਹਿਲਾਂ ਤੋਂ ਹਨ। ਇਨ੍ਹਾਂ ਨੂੰ ਕਿਵੇਂ ਪਛਾਣੀਏ, ਜਿਵੇਂ ਦੁੱਧਵਾਲੇ ਜਾਂ ਗਲੀ 3?`,
   notFoundOffer: (n) => `${n} ਦਾ ਖਾਤਾ ਹਾਲੇ ਨਹੀਂ ਹੈ। ਨਵਾਂ ਖਾਤਾ ਖੋਲ੍ਹਾਂ?`,
+  fullNameAsk: (n) => `${n} ਨਾਮ ਪਹਿਲਾਂ ਤੋਂ ਹੈ। ਇਨ੍ਹਾਂ ਦਾ ਪੂਰਾ ਨਾਮ ਕੀ ਹੈ?`,
+  detailAsk: (n) => `${n} ਵੀ ਹਨ। ਇਹ ਕਿੱਥੇ ਰਹਿੰਦੇ ਹਨ, ਜਾਂ ਕੋਈ ਪਛਾਣ?`,
+  mobileAsk: (n) => `${n} ਦਾ ਮੋਬਾਈਲ ਨੰਬਰ ਦੱਸੋ, ਜਾਂ ਕਹੋ ਬਾਅਦ ਵਿੱਚ।`,
+  anotherOne: (n, a) => `${n} ਦੇ ਹੋਰ ${r(a)} ਰੁਪਏ।`,
   fixAsk: () => 'ਠੀਕ ਹੈ, ਨਹੀਂ ਲਿਖਿਆ। ਕੁਝ ਗਲਤ ਹੋਵੇ ਤਾਂ ਸਹੀ ਨਾਮ ਜਾਂ ਰਕਮ ਦੱਸੋ।',
   tagSet: (n, t) => `ਠੀਕ ਹੈ, ਇਹ ${t} ਵਾਲੇ ${n} ਹਨ।`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}: ${k}, ਜਾਂ ਨਵੇਂ ਗਾਹਕ ${h}?`,

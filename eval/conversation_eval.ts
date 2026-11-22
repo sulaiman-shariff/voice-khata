@@ -55,6 +55,15 @@ const CASES: Case[] = [
   C('two people: fix the first one by name', ['Ramesh ka 300 udhaar', 'Geeta ka 100 udhaar', 'Ramesh wala galat tha, 250 tha'], [['Ramesh', 250, 'credit'], ['Geeta', 100, 'credit']]),
   C('a plain new entry right after is not a correction', ['Ramesh ka 300 udhaar', 'Geeta ka 400 udhaar'], [['Ramesh', 300, 'credit'], ['Geeta', 400, 'credit']]),
   C('"nahi" to a question, not to the entry', ['Ramesh ka 300 udhaar', 'Ramesh ka total kitna hai?', 'nahi rehne do'], [['Ramesh', 300, 'credit']]),
+  // the same amount again is a second entry, in any words
+  C('repeat: "phir se 300"', ['Ramesh ka 300 udhaar', 'Ramesh ne phir se 300 liya'], [['Ramesh', 300, 'credit'], ['Ramesh', 300, 'credit']]),
+  C('repeat: the same sentence said again', ['Ramesh ka 300 udhaar', 'Geeta ka 100 udhaar', 'Ramesh ka 300 udhaar'], [['Ramesh', 300, 'credit'], ['Geeta', 100, 'credit'], ['Ramesh', 300, 'credit']]),
+  L('en', 'repeat: "took 300 again"', ['Ramesh 300 credit', 'Ramesh took 300 again'], [['Ramesh', 300, 'credit'], ['Ramesh', 300, 'credit']]),
+  L('kn', 'repeat: ಇನ್ನೊಂದು ಸಲ (one more time)', ['ರಮೇಶ್ 300 ಸಾಲ', 'ರಮೇಶ್ ಇನ್ನೊಂದು ಸಲ 300 ತಗೊಂಡ'], [['Ramesh', 300, 'credit'], ['Ramesh', 300, 'credit']]),
+  // another person with a name we have: a new account, then the full name and the number
+  C('another Ramesh: full name, number later', ['ek aur Ramesh hai, uska 200 udhaar likho', 'haan', 'Ramesh Verma', 'baad mein'], [['Ramesh Verma', 200, 'credit']]),
+  C('another Ramesh said in one go', ['doosra Ramesh, Ramesh Verma, Gandhi Nagar wala, 200 udhaar', 'haan', 'baad mein'], [['Ramesh Verma', 200, 'credit']]),
+  L('kn', 'another Ramesh: ಇನ್ನೊಬ್ಬ ರಮೇಶ್', ['ಇನ್ನೊಬ್ಬ ರಮೇಶ್ ಗೆ 200 ಸಾಲ', 'ಹೌದು', 'ರಮೇಶ್ ಗೌಡ', 'ಆಮೇಲೆ'], [['ರಮೇಶ್ ಗೌಡ', 200, 'credit']]),
 ]
 
 const people = () => [cust('r', 'Ramesh', 400), cust('u', 'Umesh'), cust('g', 'Geeta', 100)]
@@ -62,7 +71,7 @@ const people = () => [cust('r', 'Ramesh', 400), cust('u', 'Umesh'), cust('g', 'G
 function live(ops: LedgerOp[], names: Map<string, string>): Live[] {
   const m = new Map<string, { cid: string; paise: number; dir: 'credit' | 'payment'; void?: boolean; promise?: boolean }>()
   for (const o of ops) {
-    if (o.op === 'add_customer') names.set(o.cid, o.name)
+    if (o.op === 'add_customer' || o.op === 'rename_customer') names.set(o.cid, o.name)
     else if (o.op === 'entry') m.set(o.eid, { cid: o.cid, paise: o.paise, dir: o.direction, promise: o.promise })
     else if (o.op === 'amend') {
       const e = m.get(o.eid)
@@ -95,6 +104,7 @@ async function main() {
       before = live(h.ops(), new Map([['r', 'Ramesh'], ['u', 'Umesh'], ['g', 'Geeta']]))
       const n = h.agentCalls.length
       lastCalls.length = 0
+      h.tick(6_000) // a reply is spoken between turns
       await h.turn(t)
       const calls = h.agentCalls.slice(n).length ? ` [agent: ${lastCalls.join(' ; ')}]` : ''
       trace.push(`    > ${t}${calls}\n      ${h.said.join(' | ') || '(silent)'}${h.asks ? `  ?${h.asks}` : ''}`)
