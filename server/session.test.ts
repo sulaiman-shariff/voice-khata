@@ -199,7 +199,8 @@ describe('a heard name not in the ledger is never written without a yes', () => 
   })
 
   it('"no" (spoken) or the Wrong button writes nothing and opens nothing', async () => {
-    for (const reject of [(h: ReturnType<typeof harness>) => h.turn('nahi'), (h: ReturnType<typeof harness>) => h.tap('no')]) {
+    // a spoken "nahi" waits for one fix ("say the right name or amount"); a second "nahi" closes it
+    for (const reject of [async (h: ReturnType<typeof harness>) => { await h.turn('nahi'); await h.turn('nahi') }, (h: ReturnType<typeof harness>) => h.tap('no')]) {
       const h = harness([cust('r', 'Ramesh')])
       await h.turn('Pinky ka 200 udhaar')
       await reject(h)

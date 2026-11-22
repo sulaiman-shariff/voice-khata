@@ -679,6 +679,8 @@ export class Session {
       // "Suresh wali entry hata do" names an older entry: only the agent can pick it
       else if (intent.type === 'undo' && !this.ledger.candidates(text).length) reply = this.dispatch(intent, text, meta)
       else if (intent.type === 'yes' || intent.type === 'no') reply = null // nothing pending: a stray haan/nahi
+      // "aur 50" right after Ramesh's entry: Ramesh, no model needed
+      else if (intent.type !== 'entries' && this.ledger.followUp(text)) reply = this.dispatch(this.ledger.followUp(text)!, text, meta)
       else ({ reply, notForMe, ms: llmMs, extra } = await this.askAgent(text, heard, t, meta))
       if (llmMs !== undefined) { path = 'llm'; applied = true }
     } finally {

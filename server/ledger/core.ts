@@ -82,7 +82,7 @@ export interface Draft {
 export type EntryExtras = { due?: string; note?: string; supplier?: boolean; forceNew?: boolean }
 
 export type Pending =
-  | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[] }
+  | { kind: 'confirm' | 'name' | 'amount' | 'direction' | 'confusable'; draft: Draft; queue: Draft[]; /** a spoken "no" was heard: waiting for one fix */ fixing?: boolean }
   | { kind: 'which'; draft: Draft; queue: Draft[]; options: SnapCustomer[] }
   /**
    * Erase everything. With requireType (the agent's erase_all) only the typed word erases;
@@ -357,6 +357,39 @@ export class LedgerCore {
    * A fresh list of entries: drafts in order, the same line twice is one, "uska 100 aur" is the
    * customer just talked about, and one direction word for a whole list is asked once.
    */
+  /**
+   * "aur 50", "100 aur likho" right after an entry: one amount, a word pointing back, no other name.
+   * The person is the one just talked about; the direction is the one said, else that of their last entry.
+   */
+  followUp(text: string): Extract<Intent, { type: 'entries' }> | null {
+    if (!this.focusCid || this.pending || !refersBack(text)) return null
+    const c = this.snap.customers.find((x) => x.cid === this.focusCid)
+    if (!c || this.candidates(text).some((x) => x.c.cid !== c.cid)) return null
+    const amts = parseAmounts(text).filter((a) => a.value > 0)
+    if (!amts.length || amts.some((a) => a.value !== amts[0].value)) return null
+    const last = (this.snap.entries ?? []).find((e) => e.cid === c.cid && !e.promise)
+    const said = directionAnswer(text)
+    const direction = said ?? last?.direction ?? null
+    return { type: 'entries', entries: [{ name: c.name, amount: amts[0], direction, dayOffset: 0, promise: false, confidence: 'high', reasons: said ? [] : ['from-context'] }] }
+  }
+
+  /** A pay-by day heard in a short answer ("kal tak", "Somvaar tak", "3 din mein"), as YYYY-MM-DD. */
+  dueFromText(text: string): string | undefined {
+    const t = text.toLowerCase()
+    if (!/(tak|तक|till|until|by|mein|में|ವರೆಗೆ|வரை|వరకు)/.test(t)) return undefined
+    const ist = new Date(this.deps.now() + 5.5 * 3600_000)
+    const at = (n: number) => new Date(ist.getTime() + n * 86_400_000).toISOString().slice(0, 10)
+    const days = t.match(/(\d+)\s*(din|दिन|days?)/)
+    if (days) return at(Number(days[1]))
+    if (/parson|परसों/.test(t)) return at(2)
+    if (/\bkal\b|कल|tomorrow|ನಾಳೆ|நாளை|రేపు/.test(t)) return at(1)
+    const WD: [RegExp, number][] = [[/ravi|itvaar|इतवार|रविवार|sunday/, 0], [/som|सोम|monday/, 1], [/mangal|मंगल|tuesday/, 2], [/budh|बुध|wednesday/, 3],
+      [/guru|brihaspati|गुरु|thursday/, 4], [/shukra|शुक्र|friday/, 5], [/shani|शनि|saturday/, 6]]
+    const wd = WD.find(([re]) => re.test(t))
+    if (wd) return at(((wd[1] - ist.getUTCDay() + 7) % 7) || 7)
+    return undefined
+  }
+
   /**
    * A name that is not in the ledger is never a dead end. With an amount in the sentence the entry is
    * read back as a new customer's ("Ramesh ka 300 ka khata"); without one, opening their khata is
@@ -692,6 +725,8 @@ export class LedgerCore {
 
   private needsConfirm(d: Draft): boolean {
     if (this.opensAccount(d)) return true
+    // "open a khata" for a name that already has one may mean a different person: never written blindly
+    if (d.cid && !d.newName && !d.confirmed && !d.readBack && OPEN_KHATA.test(d.transcript)) return true
     if (d.confirmed && d.nameSure) return false
     if (d.noisy || !d.nameSure) return true
     const hard = d.reasons.filter((r) => r !== 'name-inherited' && r !== 'llm' && r !== 'confusable-resolved' && r !== 'from-context' && r !== 'dir-all')
@@ -929,6 +964,49 @@ export class LedgerCore {
       // a yes (spoken or tapped) is not enough: keep waiting for the word
       if (intent.type === 'yes') return { parts: [R.eraseType(p.requireType)], ops: [] }
     }
+    // "haan, 400" / "haan, kal tak" / "haan, 300 udhaar": the yes, plus what was added to it
+    const rest = this.turnSrc === 'tap' ? null : yesRest(text)
+    if (rest && p.kind === 'confirm') {
+      const d = p.draft
+      const amts = parseAmounts(rest).filter((a) => a.value > 0)
+      if (amts.length === 1) d.paise = Math.round(amts[0].value * 100)
+      const dir = directionAnswer(rest)
+      if (dir) d.direction = dir
+      const due = this.dueFromText(rest)
+      if (due && d.direction === 'credit' && !d.promise) d.due = due
+      if (amts.length === 1 || dir || due) {
+        this.pending = null
+        d.readBack = true
+        this.save(d, acc)
+        return this.processDrafts(p.queue, acc)
+      }
+    }
+    if (rest && p.kind === 'modify' && p.ops.length === 1 && p.ops[0].op === 'add_customer') {
+      // "open a khata for Mahesh?" "haan, 300 udhaar": open it with that entry, no second question
+      const name = p.ops[0].name
+      const amts = parseAmounts(rest).filter((a) => a.value > 0)
+      if (amts.length === 1) {
+        this.pending = null
+        const dir = directionAnswer(rest) ?? 'credit'
+        const d = this.draftFrom({ name, amount: amts[0], direction: dir, dayOffset: 0, promise: false, confidence: 'high', reasons: [] }, text, meta)
+        d.cid = null
+        d.newName = name
+        d.heardName = name
+        d.nameSure = true
+        d.readBack = true
+        d.confirmed = true
+        const due = this.dueFromText(rest)
+        if (due && dir === 'credit') d.due = due
+        this.save(d, acc)
+        return this.processDrafts([], acc)
+      }
+    }
+    // a spoken plain "nahi" to a read-back: keep the line for one fix ("430", "Ramesh", "jama");
+    // a tap on ✗, a second "nahi" or anything else drops it
+    if (intent.type === 'no' && p.kind === 'confirm' && this.turnSrc !== 'tap' && !p.fixing && text.trim().split(/\s+/).length <= 2) {
+      p.fixing = true
+      return { parts: [sayShop(this.lang).fixAsk()], ops: [] }
+    }
     if (intent.type === 'undo' || (intent.type === 'no' && p.kind !== 'confusable')) {
       this.pending = null
       if (p.kind === 'delete') return { parts: [R.notSaved()], ops: [] }
@@ -1006,12 +1084,39 @@ export class LedgerCore {
           this.save(d, acc) // the user just said the right value: no second confirmation
           return this.processDrafts(p.queue, acc)
         }
+        if (p.fixing) {
+          // after "what should I change?": a bare amount or a credit/paid word fixes it, anything else drops it
+          const amts = parseAmounts(text).filter((a) => a.value > 0)
+          const dir = directionAnswer(text)
+          if (amts.length === 1 || dir) {
+            if (amts.length === 1) d.paise = Math.round(amts[0].value * 100)
+            if (dir) d.direction = dir
+            this.save(d, acc)
+            return this.processDrafts(p.queue, acc)
+          }
+          const n = nameAnswer(text)
+          if (n && n.split(' ').length <= 2) {
+            d.heardName = n
+            d.cid = null
+            d.newName = null
+            d.single = false
+            d.transcript = text
+            return this.processDrafts([d, ...p.queue], acc)
+          }
+          this.pending = null
+          return { parts: [R.notSaved()], ops: [] }
+        }
         return { parts: [R.didNotCatch()], ops: [] }
       case 'name': {
         const n = nameAnswer(text)
         if (!n || n.split(' ').length > 2) return { parts: [R.askName(d.paise / 100)], ops: [] }
         d.heardName = n
         this.fillDirection(d, text)
+        // the answer is exactly a known customer's name and the amount and direction were said: that answer
+        // is the confirmation (the reply names who it went to, and undo is one word)
+        const known = this.lookup(n)
+        if (known && known.name.toLowerCase() === n.toLowerCase() && d.direction && !d.noisy
+          && this.snap.customers.filter((c) => c.name.toLowerCase() === known.name.toLowerCase()).length === 1) d.confirmed = true
         return this.processDrafts([d, ...p.queue], acc)
       }
       case 'amount': {
@@ -1421,6 +1526,16 @@ export class LedgerCore {
  * "Suresh's") is dropped, so the account is "ಸುರೇಶ್". Names that end in ದು by themselves
  * ("ಬಿಂದು") are kept: there the ದು follows a vowel sign or anusvara, not a virama.
  */
+/** "khata kholo", "naya khata", "open an account": opening words, not just "write it in the khata" */
+const OPEN_KHATA = /(khata|khaata|khaate|खाता|account)\s*(kholo|kholna|khol\s*do|khol\s*de|खोलो|खोल\s*दो|खोलना|open)|naya\s+khata|नया\s+खाता|open\s+(an?\s+|new\s+)?(account|khata)|new\s+account/i
+
+/** What follows a leading yes ("haan, 400" -> "400"), or null when the turn is not a yes with more. */
+export function yesRest(text: string): string | null {
+  const m = text.trim().match(/^(haan|haa|han|ha|haanji|haan ji|ji haan|ji|yes|yeah|ok|okay|theek hai|thik hai|sahi hai|sahi|हाँ|हां|जी हाँ|जी|ठीक है|सही है|ಹೌದು|ஆமா|ஆம்|అవును)(?=[\s,।.!]|$)[\s,।.!-]*(.*)$/i)
+  const rest = m?.[2]?.trim()
+  return rest ? rest : null
+}
+
 export function newCustomerName(heard: string): string {
   return heard
     .split(' ')

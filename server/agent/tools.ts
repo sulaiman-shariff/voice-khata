@@ -473,9 +473,19 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       const said = parseFast(text)
       if (said.type === 'entries' && said.entries.length === 1 && said.entries[0].amount) {
         const e = said.entries[0]
-        e.name = same && !a._new && !heard.some((t) => NEW_HEARD.test(t)) ? same.name : newName
-        if (!e.direction && !e.promise) e.direction = 'credit'
-        if (same && e.name === newName && (a._new === true || heard.some((t) => NEW_HEARD.test(t)))) Object.assign(e, { forceNew: true })
+        const wantsNew = a._new === true || heard.some((t) => NEW_HEARD.test(t))
+        if (same && !wantsNew) {
+          // "open a khata" for a name that already has one: the existing customer is the likely one, but
+          // never written blindly (it may be a different person): read back first, direction as said
+          e.name = same.name
+          e.confidence = 'low'
+          e.reasons = [...e.reasons, 'khata-exists']
+        } else {
+          e.name = newName
+          // a new khata opened with an amount: credit unless said otherwise (it is read back as a new customer anyway)
+          if (!e.direction && !e.promise) e.direction = 'credit'
+          if (same) Object.assign(e, { forceNew: true })
+        }
         return core.addEntries(said, text, tm)
       }
       // "naya / doosra Ramesh": a second Ramesh, read back, then asked for a nickname
