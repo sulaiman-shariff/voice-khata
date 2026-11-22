@@ -4,7 +4,7 @@
  * name resolution, and applying ops to the local snapshot. Nothing here touches audio, STT,
  * the model or the network, so a voice agent's tools can call it as well as the turn loop.
  */
-import { type Direction, type EntryIntent, type Intent, directionAnswer, mentionsMoney, mentionsSettle, nameAnswer, refersBack } from '../../shared/intent.js'
+import { type Direction, type EntryIntent, type Intent, directionAnswer, mentionsMoney, mentionsSettle, nameAnswer, parseFast, refersBack } from '../../shared/intent.js'
 import { uniqueLabels } from '../../shared/ledger.js'
 import { NAME_NEAR, NAME_SURE, matchName, phoneticKey } from '../../shared/names.js'
 import { parseAmounts } from '../../shared/numbers.js'
@@ -119,6 +119,8 @@ export interface ChooseOption {
   tag?: string
   /** the tool's args with this option filled in */
   args: Record<string, unknown>
+  /** run this tool instead of the question's own ("+ new Rakesh" opens a customer) */
+  tool?: string
 }
 
 interface SavedState {
@@ -355,6 +357,23 @@ export class LedgerCore {
    * A fresh list of entries: drafts in order, the same line twice is one, "uska 100 aur" is the
    * customer just talked about, and one direction word for a whole list is asked once.
    */
+  /**
+   * A name that is not in the ledger is never a dead end. With an amount in the sentence the entry is
+   * read back as a new customer's ("Ramesh ka 300 ka khata"); without one, opening their khata is
+   * offered. Either way nothing is written without a yes (a tap counts).
+   */
+  offerNewCustomer(name: string, text: string, meta: TurnMeta): Reply {
+    const intent = parseFast(text)
+    if (intent.type === 'entries' && intent.entries.length && intent.entries.every((e) => e.name)) return this.addEntries(intent, text, meta)
+    const newName = titleCase(newCustomerName(name))
+    const cid = this.freshId()
+    this.pending = {
+      kind: 'modify', ops: [{ op: 'add_customer', cid, name: newName }], done: say(this.lang).customerAdded(newName), focus: cid,
+      view: { kind: 'modify', name: newName, newCustomer: true },
+    }
+    return { parts: [sayShop(this.lang).notFoundOffer(newName)], ops: [] }
+  }
+
   addEntries(intent: Extract<Intent, { type: 'entries' }>, text: string, meta: TurnMeta): Reply {
     // the same line twice in a row (said twice, or returned twice by the model) is one entry
     const drafts = intent.entries.map((e) => this.draftFrom(e, text, meta))
@@ -872,7 +891,7 @@ export class LedgerCore {
         return p.reasked > 1 ? null : { parts: [p.ask], ops: [] }
       }
       this.pending = null
-      return this.choose(p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
+      return this.choose(p.options[i].tool ?? p.tool, p.options[i].args, p.transcript, meta) ?? { parts: [R.didNotCatch()], ops: [] }
     }
     if (p.kind === 'nickname') {
       const c = this.snap.customers.find((x) => x.cid === p.cid)

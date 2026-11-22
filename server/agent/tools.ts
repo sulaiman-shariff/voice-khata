@@ -308,12 +308,19 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     return speak(ask)
   }
   /** resolve, or the reply to give instead: not found / which one */
-  const need = (slot: string, exact = false): SnapCustomer | Reply => {
+  // `offer`: a name not in the ledger offers to open their khata (and a near miss gets a "+ new" choice);
+  // rename / merge keep a plain "not found"
+  const need = (slot: string, exact = false, offer = true): SnapCustomer | Reply => {
     const r = resolve(slot, exact)
-    if (Array.isArray(r)) return askWhich(slot, r)
-    if (r) return r
     const name = str(a[slot])
-    return name ? speak(R.notFound(name)) : notCaught()
+    if (Array.isArray(r)) {
+      const fresh = offer && name && !str(a[`${slot}__cid`]) && !r.some((c) => c.name.toLowerCase() === name.toLowerCase())
+      const newName = name ? titleCase(name) : ''
+      return askWhich(slot, r, fresh ? [{ label: `+ ${newName}`, name: newName, tool: 'add_customer', args: { name: newName, _new: true } }] : [])
+    }
+    if (r) return r
+    if (!name) return notCaught()
+    return offer ? core.offerNewCustomer(name, text, tm) : speak(R.notFound(name))
   }
   /** the entry the model pointed at: its number in snap.entries (1 = newest), else the newest that fits name / amount / day */
   const findRef = (): number | Reply => {
@@ -487,16 +494,16 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
     }
     case 'rename_customer': {
       // the account to rename must be named surely; a near name is asked about first
-      const c = need('name', true)
+      const c = need('name', true, false)
       if (isReply(c)) return c
       const to = str(a.new_name)
       if (!to || to.length > 40 || to === c.name) return notCaught()
       return { parts: [R.renamed(c.name, titleCase(to))], ops: [{ op: 'rename_customer', cid: c.cid, name: titleCase(to) }] }
     }
     case 'merge_customers': {
-      const from = need('name')
+      const from = need('name', false, false)
       if (isReply(from)) return from
-      const into = need('into')
+      const into = need('into', false, false)
       if (isReply(into)) return into
       if (from.cid === into.cid) return notCaught()
       core.pending = {

@@ -929,7 +929,7 @@ export class Session {
         }
         if (intent.scope === 'customer' && intent.name) {
           const c = this.ledger.lookup(intent.name)
-          if (!c) return { parts: [R.notFound(intent.name)], ops: [] }
+          if (!c) return this.ledger.offerNewCustomer(intent.name, text, meta)
           this.ledger.focusCid = c.cid
           this.deps.send({ type: 'show', view: 'customer', cid: c.cid })
           return { parts: [R.balance(c.name, c.balancePaise / 100)], ops: [] }
@@ -949,7 +949,7 @@ export class Session {
       case 'remind': {
         if (!intent.name) return this.duesReply()
         const c = this.ledger.lookup(intent.name)
-        if (!c) return { parts: [R.notFound(intent.name)], ops: [] }
+        if (!c) return this.ledger.offerNewCustomer(intent.name, text, meta)
         if (c.balancePaise <= 0) return { parts: [R.balance(c.name, c.balancePaise / 100)], ops: [] }
         if (!c.remindersOptIn || !c.adult) return { parts: [R.remindNotAllowed(c.name)], ops: [] }
         const msg = guardReply(R.reminderText(c.name, c.balancePaise / 100, this.snap.shopName))

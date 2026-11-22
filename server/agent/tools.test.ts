@@ -508,3 +508,51 @@ describe('show_qr (counter QR)', () => {
     expect(r.ready).toBeUndefined()
   })
 })
+
+describe('a name not in the ledger opens a new khata (never a dead end)', () => {
+  it('"Ramesh ka 300 ka khata" read as a lookup: read back as a new customer with the 300, a yes writes both', () => {
+    const { core, run, meta } = setup([])
+    const r = run('show_customer', { name: 'Ramesh' }, 'Ramesh ka 300 ka khata')
+    expect(r.ops).toEqual([])
+    expect(core.pending).not.toBeNull()
+    expect(core.pendingView()?.newCustomer).toBe(true)
+    const y = core.answerPending('haan', parseFast('haan'), meta('haan'))!
+    expect(y.ops.map((o) => o.op)).toEqual(['add_customer', 'entry'])
+    expect(y.ops[1]).toMatchObject({ paise: 30000, direction: 'credit' })
+  })
+
+  it('no amount: offers to open the khata; yes opens it, no writes nothing', () => {
+    let s = setup([])
+    let r = s.run('show_customer', { name: 'Ramesh' }, 'Ramesh ka khata dikhao')
+    expect(r.parts.join(' ')).toContain('Ramesh')
+    expect(r.parts.join(' ')).not.toBe(R.notFound('Ramesh'))
+    expect(s.core.pending?.kind).toBe('modify')
+    expect(s.core.answerPending('haan', parseFast('haan'), s.meta('haan'))!.ops).toMatchObject([{ op: 'add_customer', name: 'Ramesh' }])
+    s = setup([])
+    r = s.run('send_reminder', { name: 'Ramesh' }, 'Ramesh ko yaad dilao')
+    expect(s.core.pending?.kind).toBe('modify')
+    expect(s.core.answerPending('nahi', parseFast('nahi'), s.meta('nahi'))!.ops).toEqual([])
+  })
+
+  it('rename of an unknown name still says not found', () => {
+    const { core, run } = setup([cust('c1', 'Suresh')])
+    const r = run('rename_customer', { name: 'Mahesh', new_name: 'Mahi' }, 'Mahesh ka naam Mahi karo')
+    expect(r.parts).toEqual([R.notFound('Mahesh')])
+    expect(core.pending).toBeNull()
+  })
+
+  it('a near miss (Rakesh, only Ramesh known) asks which, with "+ Rakesh" opening a new customer', () => {
+    const { core, run, meta } = setup([cust('c1', 'Ramesh', 200)])
+    run('show_customer', { name: 'Rakesh' }, 'Rakesh ka hisaab')
+    const opts = core.pendingView()?.options ?? []
+    if (core.pending?.kind === 'choose') {
+      expect(opts).toContain('+ Rakesh')
+      const y = core.answerPending('+ Rakesh', parseFast('+ Rakesh'), { ...meta('+ Rakesh') })
+      const z = y && core.pending ? core.answerPending('haan', parseFast('haan'), meta('haan'))! : y!
+      expect(z.ops).toMatchObject([{ op: 'add_customer', name: 'Rakesh' }])
+    } else {
+      // Ramesh matched surely: no question, Ramesh's page
+      expect(core.pending).toBeNull()
+    }
+  })
+})

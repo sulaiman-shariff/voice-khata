@@ -56,6 +56,8 @@ export interface ShopReplies {
   instalmentLine: (amount: string) => string
   /** a second customer with this name was just opened: ask once how to tell them apart (skipping is fine) */
   nicknameAsk: (name: string) => string
+  /** a name not in the ledger: offer to open their khata (a yes or a tap opens it) */
+  notFoundOffer: (name: string) => string
   /** the nickname question was skipped: the automatic label stays */
   tagSkipped: (label: string) => string
   /** a nickname (tag) saved */
@@ -119,6 +121,7 @@ const HI: ShopReplies = {
   dueNoted: (d) => `${d} तारीख तक देने हैं।`,
   instalmentLine: (a) => `इस किस्त के लिए: *${a}*`,
   nicknameAsk: (n) => `एक ${n} पहले से हैं। इनको कैसे पहचानें, जैसे दूधवाला या गली 3?`,
+  notFoundOffer: (n) => `${n} का खाता अभी नहीं है। नया खाता खोलूँ?`,
   tagSet: (n, t) => `ठीक है, ये ${t} वाले ${n} हैं।`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}: ${k} या नए ग्राहक ${h}?`,
   category: (c) => CAT.hi[c],
@@ -157,6 +160,7 @@ const EN: ShopReplies = {
   dueNoted: (d) => `To be paid by the ${ord(d)}.`,
   instalmentLine: (a) => `This instalment: *${a}*`,
   nicknameAsk: (n) => `There is already a ${n}. How should I tell them apart, like milkman or lane 3?`,
+  notFoundOffer: (n) => `There is no account for ${n} yet. Shall I open a new one?`,
   tagSet: (n, t) => `Okay, this is ${n}, ${t}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} rupees ${d === 'credit' ? 'on credit' : 'paid'}: ${k}, or a new customer ${h}?`,
   category: (c) => CAT.en[c],
@@ -195,6 +199,7 @@ const KN: ShopReplies = {
   dueNoted: (d) => `${d} ನೇ ತಾರೀಖಿನೊಳಗೆ ಕೊಡಬೇಕು.`,
   instalmentLine: (a) => `ಈ ಕಂತಿಗೆ: *${a}*`,
   nicknameAsk: (n) => `ಈಗಾಗಲೇ ಒಬ್ಬ ${n} ಇದ್ದಾರೆ. ಇವರನ್ನು ಹೇಗೆ ಗುರುತಿಸಲಿ, ಹಾಲಿನವರು ಅಥವಾ ಗಲ್ಲಿ 3 ಹಾಗೆ?`,
+  notFoundOffer: (n) => `${n} ಅವರ ಖಾತೆ ಇನ್ನೂ ಇಲ್ಲ. ಹೊಸ ಖಾತೆ ತೆರೆಯಲೇ?`,
   tagSet: (n, t) => `ಸರಿ, ಇವರು ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} ರೂಪಾಯಿ ${d === 'credit' ? 'ಸಾಲ' : 'ಜಮಾ'}: ${k} ಅವರಾ, ಅಥವಾ ಹೊಸ ಗ್ರಾಹಕ ${h}?`,
   category: (c) => CAT.kn[c],
@@ -233,6 +238,7 @@ const TA: ShopReplies = {
   dueNoted: (d) => `${d} ஆம் தேதிக்குள் தர வேண்டும்.`,
   instalmentLine: (a) => `இந்தத் தவணைக்கு: *${a}*`,
   nicknameAsk: (n) => `ஏற்கனவே ஒரு ${n} இருக்கிறார். இவரை எப்படி அடையாளம் காண்பது, பால்காரர் அல்லது தெரு 3 போல?`,
+  notFoundOffer: (n) => `${n} கணக்கு இன்னும் இல்லை. புதிய கணக்கு திறக்கட்டுமா?`,
   tagSet: (n, t) => `சரி, இவர் ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} ரூபாய் ${d === 'credit' ? 'கடன்' : 'வரவு'}: ${k} அவர்களா, அல்லது புதிய வாடிக்கையாளர் ${h}?`,
   category: (c) => CAT.ta[c],
@@ -271,6 +277,7 @@ const TE: ShopReplies = {
   dueNoted: (d) => `${d} వ తేదీ లోపు ఇవ్వాలి.`,
   instalmentLine: (a) => `ఈ వాయిదాకు: *${a}*`,
   nicknameAsk: (n) => `ఇప్పటికే ఒక ${n} ఉన్నారు. వీరిని ఎలా గుర్తించాలి, పాలవాళ్ళు లేదా వీధి 3 లాగా?`,
+  notFoundOffer: (n) => `${n} ఖాతా ఇంకా లేదు. కొత్త ఖాతా తెరవనా?`,
   tagSet: (n, t) => `సరే, వీరు ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} రూపాయలు ${d === 'credit' ? 'అప్పు' : 'జమ'}: ${k} గారా, లేక కొత్త కస్టమర్ ${h}?`,
   category: (c) => CAT.te[c],
@@ -309,6 +316,7 @@ const ML: ShopReplies = {
   dueNoted: (d) => `${d} ആം തീയതിക്കകം തരണം.`,
   instalmentLine: (a) => `ഈ ഗഡുവിന്: *${a}*`,
   nicknameAsk: (n) => `ഒരു ${n} ഇപ്പോൾ തന്നെ ഉണ്ട്. ഇവരെ എങ്ങനെ തിരിച്ചറിയാം, പാൽക്കാരൻ അല്ലെങ്കിൽ ഗലി 3 പോലെ?`,
+  notFoundOffer: (n) => `${n} എന്ന കണക്ക് ഇതുവരെ ഇല്ല. പുതിയ കണക്ക് തുറക്കട്ടെ?`,
   tagSet: (n, t) => `ശരി, ഇത് ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} രൂപ ${d === 'credit' ? 'കടം' : 'വരവ്'}: ${k} ആണോ, അതോ പുതിയ ഉപഭോക്താവ് ${h}?`,
   category: (c) => CAT.ml[c],
@@ -347,6 +355,7 @@ const MR: ShopReplies = {
   dueNoted: (d) => `${d} तारखेपर्यंत द्यायचे.`,
   instalmentLine: (a) => `या हप्त्यासाठी: *${a}*`,
   nicknameAsk: (n) => `एक ${n} आधीच आहेत. यांना कसे ओळखायचे, जसे दूधवाले किंवा गल्ली 3?`,
+  notFoundOffer: (n) => `${n} यांचे खाते अजून नाही. नवीन खाते उघडू का?`,
   tagSet: (n, t) => `ठीक आहे, हे ${t} ${n}.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} रुपये ${d === 'credit' ? 'उधार' : 'जमा'}: ${k}, की नवीन ग्राहक ${h}?`,
   category: (c) => CAT.mr[c],
@@ -385,6 +394,7 @@ const BN: ShopReplies = {
   dueNoted: (d) => `${d} তারিখের মধ্যে দিতে হবে।`,
   instalmentLine: (a) => `এই কিস্তির জন্য: *${a}*`,
   nicknameAsk: (n) => `একজন ${n} আগে থেকেই আছেন। এঁকে কীভাবে চিনব, যেমন দুধওয়ালা বা গলি 3?`,
+  notFoundOffer: (n) => `${n}-এর খাতা এখনও নেই। নতুন খাতা খুলব?`,
   tagSet: (n, t) => `ঠিক আছে, ইনি ${t} ${n}।`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} টাকা ${d === 'credit' ? 'বাকি' : 'জমা'}: ${k}, নাকি নতুন গ্রাহক ${h}?`,
   category: (c) => CAT.bn[c],
@@ -423,6 +433,7 @@ const GU: ShopReplies = {
   dueNoted: (d) => `${d} તારીખ સુધીમાં આપવાના.`,
   instalmentLine: (a) => `આ હપ્તા માટે: *${a}*`,
   nicknameAsk: (n) => `એક ${n} પહેલેથી છે. એમને કેવી રીતે ઓળખીએ, જેમ કે દૂધવાળા કે ગલી 3?`,
+  notFoundOffer: (n) => `${n}નું ખાતું હજી નથી. નવું ખાતું ખોલું?`,
   tagSet: (n, t) => `બરાબર, આ ${t} ${n} છે.`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} રૂપિયા ${d === 'credit' ? 'ઉધાર' : 'જમા'}: ${k}, કે નવા ગ્રાહક ${h}?`,
   category: (c) => CAT.gu[c],
@@ -461,6 +472,7 @@ const PA: ShopReplies = {
   dueNoted: (d) => `${d} ਤਾਰੀਖ ਤੱਕ ਦੇਣੇ ਹਨ।`,
   instalmentLine: (a) => `ਇਸ ਕਿਸ਼ਤ ਲਈ: *${a}*`,
   nicknameAsk: (n) => `ਇੱਕ ${n} ਪਹਿਲਾਂ ਤੋਂ ਹਨ। ਇਨ੍ਹਾਂ ਨੂੰ ਕਿਵੇਂ ਪਛਾਣੀਏ, ਜਿਵੇਂ ਦੁੱਧਵਾਲੇ ਜਾਂ ਗਲੀ 3?`,
+  notFoundOffer: (n) => `${n} ਦਾ ਖਾਤਾ ਹਾਲੇ ਨਹੀਂ ਹੈ। ਨਵਾਂ ਖਾਤਾ ਖੋਲ੍ਹਾਂ?`,
   tagSet: (n, t) => `ਠੀਕ ਹੈ, ਇਹ ${t} ਵਾਲੇ ${n} ਹਨ।`,
   soundAlikeAsk: (k, h, a, d) => `${r(a)} ਰੁਪਏ ${d === 'credit' ? 'ਉਧਾਰ' : 'ਜਮ੍ਹਾ'}: ${k}, ਜਾਂ ਨਵੇਂ ਗਾਹਕ ${h}?`,
   category: (c) => CAT.pa[c],

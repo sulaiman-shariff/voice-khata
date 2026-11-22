@@ -405,7 +405,8 @@ function Home({ store }: { store: KhataStore }) {
       />
       <CashSheet store={store} mode={cash} t={t} onClose={() => setCash(null)} onChanged={snapshot} />
       <EntrySheet store={store} t={t} mode={entry} onClose={closeEntry} onChanged={snapshot} onSaved={onSaved}
-        onCustomer={(c) => { setEntry(null); setEntryFrom(null); setCid(c) }} />
+        onCustomer={(c) => { setEntry(null); setEntryFrom(null); setCid(c) }}
+        onImport={() => { setEntry(null); setEntryFrom(null); setSheet('import') }} />
       <TypeSheet open={typing} t={t} onClose={() => setTyping(false)} onSend={sendTyped} />
       <RemindSheet store={store} open={sheet === 'remind'} t={t} onClose={() => setSheet(null)} onChanged={snapshot} />
       <ImportSheet store={store} open={sheet === 'import'} t={t} sink={importSink} onReading={importReading} onClose={() => setSheet(null)} onChanged={snapshot} />

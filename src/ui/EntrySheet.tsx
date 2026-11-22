@@ -1,4 +1,4 @@
-import { CalendarDays, Check, Keyboard, MessageCircle, Plus, Search, Send, Trash2, User } from 'lucide-react'
+import { BookOpen, CalendarDays, Check, Keyboard, MessageCircle, Plus, Search, Send, Trash2, User } from 'lucide-react'
 import { NAME_NEAR, NAME_SURE, matchName } from '../../shared/names.js'
 import { useMemo, useState } from 'react'
 import { type Direction, displayName } from '../../shared/ledger.js'
@@ -13,8 +13,10 @@ import type { UiStrings } from './strings'
 export type EntryMode = { kind: 'edit'; eid: string } | { kind: 'new' } | null
 type How = 'new' | 'edit' | 'removed'
 
-export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: {
+export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved, onCustomer, onImport }: {
   store: KhataStore; t: UiStrings; mode: EntryMode; onClose: () => void; onChanged: () => void
+  /** open the paper-khata import (shown on a new entry only) */
+  onImport?: () => void
   /** open the customer (phone number, WhatsApp reminder, full history) */
   onCustomer?: (cid: string) => void
   /** after a save: eid + what happened, so the app can chime / toast */
@@ -24,15 +26,16 @@ export function EntrySheet({ store, t, mode, onClose, onChanged, onSaved, onCust
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent closeLabel={t.dismiss}>
-        <EntryForm key={mode.kind === 'edit' ? mode.eid : 'new'} store={store} t={t} mode={mode} onClose={onClose} onChanged={onChanged} onSaved={onSaved} onCustomer={onCustomer} />
+        <EntryForm key={mode.kind === 'edit' ? mode.eid : 'new'} store={store} t={t} mode={mode} onClose={onClose} onChanged={onChanged} onSaved={onSaved} onCustomer={onCustomer} onImport={onImport} />
       </SheetContent>
     </Sheet>
   )
 }
 
-function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: {
+function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer, onImport }: {
   store: KhataStore; t: UiStrings; mode: NonNullable<EntryMode>; onClose: () => void; onChanged: () => void; onSaved: (eid: string, how: How) => void
   onCustomer?: (cid: string) => void
+  onImport?: () => void
 }) {
   const s = store.state
   const e = mode.kind === 'edit' ? s.entries.get(mode.eid) : undefined
@@ -244,6 +247,12 @@ function EntryForm({ store, t, mode, onClose, onChanged, onSaved, onCustomer }: 
         >
           <Check className="size-5" />{e ? t.saveChanges : t.saveEntry}{valid && <span className="num">· {rs(paise)}</span>}
         </button>
+
+        {!e && onImport && (
+          <button onClick={onImport} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-primary active:scale-[.98]">
+            <BookOpen className="size-4" />{t.importCta}
+          </button>
+        )}
 
         {e && !removed && (
           <div className="flex flex-col items-center gap-0.5 pt-1">
