@@ -468,6 +468,16 @@ function run(core: LedgerCore, call: ToolCall, meta: ToolMeta): Reply {
       if (!name) return notCaught()
       const same = core.snap.customers.find((c) => [c.name, ...c.aliases].some((n) => n.toLowerCase() === name.toLowerCase()))
       const newName = titleCase(name)
+      // "Ramesh 300 ka khata (kholo)": the amount belongs to this khata. Read back with the entry (credit
+      // when no direction was said), so a yes opens the khata and writes the 300 together
+      const said = parseFast(text)
+      if (said.type === 'entries' && said.entries.length === 1 && said.entries[0].amount) {
+        const e = said.entries[0]
+        e.name = same && !a._new && !heard.some((t) => NEW_HEARD.test(t)) ? same.name : newName
+        if (!e.direction && !e.promise) e.direction = 'credit'
+        if (same && e.name === newName && (a._new === true || heard.some((t) => NEW_HEARD.test(t)))) Object.assign(e, { forceNew: true })
+        return core.addEntries(said, text, tm)
+      }
       // "naya / doosra Ramesh": a second Ramesh, read back, then asked for a nickname
       if (same && heard.some((t) => NEW_HEARD.test(t))) {
         const cid = core.freshId()

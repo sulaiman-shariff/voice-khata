@@ -556,3 +556,23 @@ describe('a name not in the ledger opens a new khata (never a dead end)', () => 
     }
   })
 })
+
+describe('opening a khata with an amount keeps the amount', () => {
+  for (const [tool, text] of [['add_customer', 'Ramesh 300 ka khata'], ['add_customer', 'Ramesh ka 300 ka khata kholo'], ['show_customer', 'Ramesh 300'], ['add_customer', 'naya customer Ramesh 300']] as const) {
+    it(`${tool} "${text}": one yes opens Ramesh's khata and writes 300 credit`, () => {
+      const { core, run, meta } = setup([])
+      const r = run(tool, { name: 'Ramesh' }, text)
+      expect(r.ops).toEqual([])
+      expect(core.pendingView()?.newCustomer).toBe(true)
+      const y = core.answerPending('haan', parseFast('haan'), meta('haan'))!
+      expect(y.ops.map((o) => o.op)).toEqual(['add_customer', 'entry'])
+      expect(y.ops[1]).toMatchObject({ paise: 30000, direction: 'credit' })
+    })
+  }
+
+  it('add_customer with no amount still just opens the khata', () => {
+    const { core, run, meta } = setup([])
+    run('add_customer', { name: 'Ramesh' }, 'Ramesh ka naya khata kholo')
+    expect(core.answerPending('haan', parseFast('haan'), meta('haan'))!.ops.map((o) => o.op)).toEqual(['add_customer'])
+  })
+})

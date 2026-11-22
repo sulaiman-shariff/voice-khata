@@ -364,7 +364,11 @@ export class LedgerCore {
    */
   offerNewCustomer(name: string, text: string, meta: TurnMeta): Reply {
     const intent = parseFast(text)
-    if (intent.type === 'entries' && intent.entries.length && intent.entries.every((e) => e.name)) return this.addEntries(intent, text, meta)
+    if (intent.type === 'entries' && intent.entries.length && intent.entries.every((e) => e.name)) {
+      // "Ramesh 300 ka khata": opening a khata with an amount is credit when no direction was said (read back before any write)
+      for (const e of intent.entries) if (!e.direction && !e.promise) e.direction = 'credit'
+      return this.addEntries(intent, text, meta)
+    }
     const newName = titleCase(newCustomerName(name))
     const cid = this.freshId()
     this.pending = {
